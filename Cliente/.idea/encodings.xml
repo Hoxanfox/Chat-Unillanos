@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Encoding">
+    <file url="file://$PROJECT_DIR$/Infraestructura/DTO/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Infraestructura/DTO/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Infraestructura/Logger/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Infraestructura/Logger/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/Fachada/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/Fachada/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/GestionUsuario/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/GestionUsuario/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/Servicio/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/Servicio/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Persistencia/Conexion/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Persistencia/Conexion/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Persistencia/Dominio/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Persistencia/Dominio/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Persistencia/Repositorio/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Persistencia/Repositorio/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Persistencia/Transporte/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Persistencia/Transporte/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Presentacion/Controlador/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Presentacion/Controlador/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Presentacion/InterfazEscritorio/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Presentacion/InterfazEscritorio/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Presentacion/Main/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Presentacion/Main/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
+  </component>
+</project>
