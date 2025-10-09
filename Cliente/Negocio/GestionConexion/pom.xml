@@ -10,7 +10,7 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>Fachada</artifactId>
+    <artifactId>GestionConexion</artifactId>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -20,37 +20,13 @@
     <dependencies>
         <dependency>
             <groupId>appMain</groupId>
-            <artifactId>DTO</artifactId>
+            <artifactId>Conexion</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>appMain</groupId>
-            <artifactId>Observador</artifactId>
-            <version>1.0-SNAPSHOT</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>appMain</groupId>
-            <artifactId>GestionContactos</artifactId>
-            <version>1.0-SNAPSHOT</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>appMain</groupId>
-            <artifactId>GestionConexion</artifactId>
-            <version>1.0-SNAPSHOT</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>appMain</groupId>
-            <artifactId>GestionArchivos</artifactId>
-            <version>1.0-SNAPSHOT</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>appMain</groupId>
-            <artifactId>GestionUsuario</artifactId>
+            <artifactId>Transporte</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
