@@ -1,14 +1,17 @@
 package servicio.conexion;
 
+import java.util.concurrent.CompletableFuture;
+
 /**
- * Interfaz (contrato) que define las operaciones para la conexión con el servidor.
- * Desacopla la lógica de negocio de la interfaz de usuario.
+ * Contrato para el servicio que gestiona la conexión automática.
  */
 public interface IServicioConexion {
+
     /**
-     * Intenta establecer una conexión con el servidor en la dirección IP proporcionada.
-     * @param ip La dirección IP del servidor.
-     * @return true si la conexión fue exitosa, false en caso contrario.
+     * Inicia el proceso de conexión automática con el servidor,
+     * utilizando la configuración definida en la capa de negocio.
+     * @return Una promesa que se resolverá con 'true' si la conexión es exitosa.
      */
-    boolean conectar(String ip);
+    CompletableFuture<Boolean> conectar();
 }
+

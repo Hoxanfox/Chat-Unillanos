@@ -26,7 +26,6 @@ public class GestorRespuesta implements IGestorRespuesta {
         this.gestorConexion = GestorConexion.getInstancia();
         this.manejadores = new ConcurrentHashMap<>();
         this.gson = new Gson();
-        // NOTA: Para que esto funcione, necesitas añadir la librería Gson a tu proyecto.
     }
 
     @Override
@@ -37,8 +36,9 @@ public class GestorRespuesta implements IGestorRespuesta {
         }
 
         hiloEscucha = new Thread(() -> {
-            DTOSesion sesion = gestorConexion.getSesionActiva();
-            if (sesion == null) {
+            // CORRECCIÓN: Se utiliza el nombre de método correcto 'getSesion()'.
+            DTOSesion sesion = gestorConexion.getSesion();
+            if (sesion == null || !sesion.estaActiva()) {
                 System.err.println("No se puede iniciar la escucha, no hay sesión activa.");
                 return;
             }
@@ -65,10 +65,8 @@ public class GestorRespuesta implements IGestorRespuesta {
         try {
             DTOResponse response = gson.fromJson(jsonResponse, DTOResponse.class);
             if (response != null && response.getAction() != null) {
-                // Buscar un manejador para la acción de esta respuesta
                 Consumer<DTOResponse> manejador = manejadores.get(response.getAction());
                 if (manejador != null) {
-                    // si se encuentra, ejecutarlo
                     manejador.accept(response);
                 } else {
                     System.out.println("No se encontró un manejador para la acción: " + response.getAction());
@@ -91,3 +89,4 @@ public class GestorRespuesta implements IGestorRespuesta {
         manejadores.put(tipoOperacion, manejador);
     }
 }
+

@@ -1,11 +1,11 @@
-package controlador.conexion;
-
+package fachada.gestionConexion;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Contrato para el controlador que gestiona la conexión automática con el servidor.
+ * Contrato para la Fachada que gestiona la conexión con el servidor.
+ * Es el punto de entrada desde el Servicio a esta lógica de negocio.
  */
-public interface IControladorConexion {
+public interface IFachadaConexion {
 
     /**
      * Inicia el proceso de conexión automática.
@@ -13,4 +13,3 @@ public interface IControladorConexion {
      */
     CompletableFuture<Boolean> conectar();
 }
-

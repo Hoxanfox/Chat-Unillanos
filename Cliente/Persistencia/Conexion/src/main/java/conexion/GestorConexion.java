@@ -21,32 +21,34 @@ public class GestorConexion {
         return instancia;
     }
 
-    public void setSesionActiva(DTOSesion sesion) {
-        // Si ya había una sesión, la cerramos antes de establecer la nueva.
+    public void setSesion(DTOSesion sesion) {
         if (this.sesionActiva != null && this.sesionActiva.estaActiva()) {
             cerrarSesion();
         }
         this.sesionActiva = sesion;
     }
 
-    public DTOSesion getSesionActiva() {
+    /**
+     * Devuelve la sesión de conexión activa.
+     * @return la DTOSesion activa, o null si no hay ninguna.
+     */
+    public DTOSesion getSesion() {
         return sesionActiva;
     }
 
     /**
-     * Cierra todos los recursos de la sesión activa (socket, streams, etc.).
+     * Cierra la sesión activa y todos sus recursos asociados de forma segura.
      */
     public void cerrarSesion() {
         if (sesionActiva != null && sesionActiva.estaActiva()) {
             try {
-                System.out.println("Cerrando recursos de la sesión...");
-                // Es importante cerrar los recursos en el orden correcto.
-                sesionActiva.getIn().close();
-                sesionActiva.getOut().close();
-                sesionActiva.getSocket().close();
-                System.out.println("Recursos cerrados.");
+                System.out.println("Cerrando recursos de la sesión activa...");
+                if (sesionActiva.getIn() != null) sesionActiva.getIn().close();
+                if (sesionActiva.getOut() != null) sesionActiva.getOut().close();
+                if (sesionActiva.getSocket() != null) sesionActiva.getSocket().close();
+                System.out.println("Recursos de la sesión cerrados correctamente.");
             } catch (IOException e) {
-                System.err.println("Error al cerrar la sesión: " + e.getMessage());
+                System.err.println("Error al cerrar los recursos de la sesión: " + e.getMessage());
             } finally {
                 this.sesionActiva = null;
             }
