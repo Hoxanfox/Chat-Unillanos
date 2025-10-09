@@ -1,16 +1,17 @@
 package controlador.autenticacion;
 
 import dto.vistaLogin.DTOAutenticacion;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Contrato para el controlador de autenticación.
- * Define las operaciones que la vista puede solicitar.
  */
 public interface IControladorAutenticacion {
     /**
-     * Procesa la solicitud de autenticación.
-     * @param datos DTO con el usuario y la contraseña.
-     * @return true si la autenticación es exitosa, false en caso contrario.
+     * Inicia el proceso de autenticación de forma asíncrona.
+     * @param datos Los datos de autenticación del usuario.
+     * @return Un Future que se completará con 'true' si la autenticación es exitosa, o 'false' si falla.
      */
-    boolean autenticar(DTOAutenticacion datos);
+    CompletableFuture<Boolean> autenticar(DTOAutenticacion datos);
 }
+

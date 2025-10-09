@@ -2,6 +2,7 @@ package interfazEscritorio.autenticacion.login;
 
 import controlador.autenticacion.IControladorAutenticacion;
 import dto.vistaLogin.DTOAutenticacion;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -10,8 +11,10 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
+import java.util.concurrent.CompletableFuture;
+
 /**
- * Vista para el inicio de sesión que se comunica con un controlador.
+ * Vista para el inicio de sesión que se comunica con un controlador de forma asíncrona.
  */
 public class VistaLogin extends VBox {
 
@@ -28,7 +31,7 @@ public class VistaLogin extends VBox {
         titulo.setFont(Font.font("Arial", FontWeight.BOLD, 28));
 
         TextField campoEmail = new TextField();
-        campoEmail.setPromptText("Email"); // Actualizado para pedir el email
+        campoEmail.setPromptText("Email");
         campoEmail.setMaxWidth(250);
 
         PasswordField campoPassword = new PasswordField();
@@ -44,21 +47,34 @@ public class VistaLogin extends VBox {
         Label etiquetaError = new Label();
         etiquetaError.setTextFill(Color.RED);
 
+        // --- LÓGICA ASÍNCRONA ---
         btnLogin.setOnAction(e -> {
             etiquetaError.setText("");
+            btnLogin.setDisable(true); // Deshabilitar el botón para evitar múltiples clics
             String email = campoEmail.getText();
             String password = campoPassword.getText();
 
-            // Se empaquetan los datos en el DTO usando el constructor actualizado.
             DTOAutenticacion datosAuth = new DTOAutenticacion(email, password);
 
-            if (controlador.autenticar(datosAuth)) {
-                System.out.println("Login exitoso para el usuario: " + email);
-                onLoginExitoso.run();
-            } else {
-                System.out.println("Intento de login fallido.");
-                etiquetaError.setText("Email o contraseña incorrectos."); // Mensaje de error actualizado
-            }
+            // 1. Llamamos al método asíncrono, que nos devuelve una "promesa".
+            CompletableFuture<Boolean> futuroLogin = controlador.autenticar(datosAuth);
+
+            // 2. Le decimos qué hacer CUANDO la promesa se complete.
+            futuroLogin.thenAccept(fueExitoso -> {
+                // Este código se ejecutará cuando llegue la respuesta del servidor.
+
+                // 3. ¡IMPORTANTE! Las actualizaciones de la UI deben hacerse en el hilo de JavaFX.
+                Platform.runLater(() -> {
+                    if (fueExitoso) {
+                        System.out.println("Login exitoso para el usuario: " + email);
+                        onLoginExitoso.run(); // Navegar al Lobby
+                    } else {
+                        System.out.println("Intento de login fallido.");
+                        etiquetaError.setText("Email o contraseña incorrectos.");
+                    }
+                    btnLogin.setDisable(false); // Volver a habilitar el botón
+                });
+            });
         });
 
         this.getChildren().addAll(titulo, campoEmail, campoPassword, btnLogin, linkRegistro, etiquetaError);

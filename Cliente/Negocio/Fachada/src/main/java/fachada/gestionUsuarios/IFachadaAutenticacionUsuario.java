@@ -1,6 +1,7 @@
 package fachada.gestionUsuarios;
 
 import dto.vistaLogin.DTOAutenticacion;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Contrato para la Fachada que gestiona la autenticación de usuarios.
@@ -9,11 +10,10 @@ import dto.vistaLogin.DTOAutenticacion;
 public interface IFachadaAutenticacionUsuario {
 
     /**
-     * Procesa la lógica de autenticación de un usuario.
+     * Procesa la lógica de autenticación de un usuario de forma asíncrona.
      * @param dto Contiene el email y la contraseña del usuario.
-     * @return true si la autenticación es exitosa, false en caso contrario.
+     * @return Un Future que se completará con el resultado de la autenticación.
      */
-    boolean autenticarUsuario(DTOAutenticacion dto);
-
-    // Aquí se añadirían más métodos relacionados con la gestión de usuarios si fuera necesario.
+    CompletableFuture<Boolean> autenticarUsuario(DTOAutenticacion dto);
 }
+
