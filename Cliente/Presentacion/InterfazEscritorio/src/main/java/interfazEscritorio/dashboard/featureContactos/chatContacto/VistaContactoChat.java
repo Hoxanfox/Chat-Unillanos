@@ -1,4 +1,4 @@
-package interfazEscritorio.dashboard.featureContactos;
+package interfazEscritorio.dashboard.featureContactos.chatContacto;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;

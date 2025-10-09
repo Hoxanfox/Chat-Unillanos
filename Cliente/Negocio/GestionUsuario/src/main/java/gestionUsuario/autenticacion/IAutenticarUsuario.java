@@ -1,18 +1,18 @@
 package gestionUsuario.autenticacion;
 
 import dto.vistaLogin.DTOAutenticacion;
+import java.util.concurrent.CompletableFuture;
 
 /**
- * Contrato para el componente que maneja la lógica de negocio específica
- * para la autenticación de usuarios. Es utilizado por la Fachada.
+ * Contrato para el componente que maneja la lógica de negocio de autenticación.
+ * La operación es asíncrona para no bloquear el hilo principal.
  */
 public interface IAutenticarUsuario {
-
     /**
-     * Valida las credenciales de un usuario.
-     * En una implementación real, aquí se interactuaría con el servidor o la base de datos.
+     * Valida las credenciales de un usuario de forma asíncrona.
      * @param dto Los datos de autenticación (email y contraseña).
-     * @return true si las credenciales son válidas, false en caso contrario.
+     * @return Un Future que se completará con el resultado de la validación.
      */
-    boolean autenticar(DTOAutenticacion dto);
+    CompletableFuture<Boolean> autenticar(DTOAutenticacion dto);
 }
+

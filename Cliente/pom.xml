@@ -21,6 +21,9 @@
         <module>Persistencia/Conexion</module>
         <module>Negocio/GestionUsuario</module>
         <module>Negocio/Fachada</module>
+        <module>Negocio/Comunicacion</module>
+        <module>Infraestructura/Observador</module>
+        <module>Negocio/GestionContactos</module>
     </modules>
 
     <properties>

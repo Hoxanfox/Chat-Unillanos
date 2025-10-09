@@ -10,7 +10,7 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>Servicio</artifactId>
+    <artifactId>GestionContactos</artifactId>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -20,25 +20,19 @@
     <dependencies>
         <dependency>
             <groupId>appMain</groupId>
-            <artifactId>DTO</artifactId>
-            <version>1.0-SNAPSHOT</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>appMain</groupId>
-            <artifactId>GestionUsuario</artifactId>
-            <version>1.0-SNAPSHOT</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>appMain</groupId>
             <artifactId>Observador</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.13.1</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
             <groupId>appMain</groupId>
-            <artifactId>Fachada</artifactId>
+            <artifactId>Comunicacion</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
