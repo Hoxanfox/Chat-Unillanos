@@ -1,32 +1,37 @@
 package servicio.autenticacion;
 
 import dto.vistaLogin.DTOAutenticacion;
-import gestionUsuario.autenticacion.AutenticarUsuario;
-import gestionUsuario.autenticacion.IAutenticarUsuario;
+import dto.vistaRegistro.DTORegistro;
+import fachada.gestionUsuarios.FachadaAutenticacionUsuario;
+import fachada.gestionUsuarios.IFachadaAutenticacionUsuario;
 
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Implementación del servicio de autenticación.
- * Este componente es el punto de entrada a la capa de negocio y delega
- * las tareas a los componentes de gestión específicos.
+ * Implementación del servicio de autenticación y registro.
+ * Delega toda la lógica a la Fachada, respetando la arquitectura.
  */
 public class ServicioAutenticacion implements IServicioAutenticacion {
 
-    // El servicio depende del componente de gestión de usuarios.
-    // En una aplicación real, esto se inyectaría con un framework de dependencias.
-    private final IAutenticarUsuario gestionUsuario = new AutenticarUsuario();
+    // El servicio depende de la fachada, que es su único punto de entrada a la lógica de negocio.
+    private final IFachadaAutenticacionUsuario fachada;
 
-    /**
-     * Procesa la solicitud de autenticación llamando al componente de gestión apropiado.
-     * @param datos Los datos de autenticación del usuario.
-     * @return el resultado de la operación de autenticación.
-     */
+    public ServicioAutenticacion() {
+        // En una aplicación real, esta dependencia se inyectaría.
+        this.fachada = new FachadaAutenticacionUsuario();
+    }
+
     @Override
     public CompletableFuture<Boolean> autenticar(DTOAutenticacion datos) {
-        // La lógica del servicio es simple: delega la llamada al componente de gestión de usuarios.
-        System.out.println("ServicioAutenticacion: Delegando autenticación a GestionUsuario...");
-        return gestionUsuario.autenticar(datos);
+        System.out.println("ServicioAutenticacion: Delegando autenticación a la Fachada...");
+        return fachada.autenticarUsuario(datos);
+    }
+
+    @Override
+    public CompletableFuture<Boolean> registrar(DTORegistro datos, byte[] fotoBytes) {
+        System.out.println("ServicioAutenticacion: Delegando registro a la Fachada...");
+        // Pasa ambos argumentos a la fachada.
+        return fachada.registrarUsuario(datos, fotoBytes);
     }
 }
 

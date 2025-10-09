@@ -1,23 +1,21 @@
 package dto.vistaRegistro;
 
-import java.io.File;
-
 /**
- * DTO para capturar los datos directamente del formulario de registro en la capa de Presentación.
- * Este DTO es utilizado por la Vista y el Controlador.
+ * DTO para encapsular los datos necesarios para registrar un nuevo usuario.
+ * Este DTO es utilizado por las capas de Negocio y Persistencia.
  */
-public final class DTOFormularioRegistro {
+public final class DTORegistro {
     private final String name;
     private final String email;
     private final String password;
-    private final File photoFile; // Capturamos el archivo de la foto, no el Base64
+    private final String photoId; // ANTES: photo_base64, AHORA: photoId
     private final String ip;
 
-    public DTOFormularioRegistro(String name, String email, String password, File photoFile, String ip) {
+    public DTORegistro(String name, String email, String password, String photoId, String ip) {
         this.name = name;
         this.email = email;
         this.password = password;
-        this.photoFile = photoFile;
+        this.photoId = photoId;
         this.ip = ip;
     }
 
@@ -35,11 +33,12 @@ public final class DTOFormularioRegistro {
         return password;
     }
 
-    public File getPhotoFile() {
-        return photoFile;
+    public String getPhotoId() {
+        return photoId;
     }
 
     public String getIp() {
         return ip;
     }
 }
+
