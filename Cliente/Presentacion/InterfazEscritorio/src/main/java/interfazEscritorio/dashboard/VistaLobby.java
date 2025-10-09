@@ -1,5 +1,7 @@
 package interfazEscritorio.dashboard;
 
+import controlador.contactos.ControladorContactos;
+import controlador.contactos.IControladorContactos;
 import interfazEscritorio.dashboard.featureCanales.FeatureCanales;
 import interfazEscritorio.dashboard.featureCanales.canal.VistaCanal;
 import interfazEscritorio.dashboard.featureCanales.canal.miembrosCanal.VistaInvitarMiembro;
@@ -7,7 +9,7 @@ import interfazEscritorio.dashboard.featureCanales.canal.miembrosCanal.VistaMiem
 import interfazEscritorio.dashboard.featureCanales.crearCanal.VistaCrearCanal;
 import interfazEscritorio.dashboard.featureConexion.FeatureConexion;
 import interfazEscritorio.dashboard.featureContactos.FeatureContactos;
-import interfazEscritorio.dashboard.featureContactos.VistaContactoChat;
+import interfazEscritorio.dashboard.featureContactos.chatContacto.VistaContactoChat;
 import interfazEscritorio.dashboard.featureHeader.FeatureHeader;
 import interfazEscritorio.dashboard.featureNotificaciones.FeatureNotificaciones;
 import javafx.scene.layout.BorderPane;
@@ -22,7 +24,12 @@ public class VistaLobby extends BorderPane {
 
     public VistaLobby() {
         FeatureHeader header = new FeatureHeader();
-        FeatureContactos contactos = new FeatureContactos(this::mostrarChatPrivado);
+        // 1. La Vista ahora crea el Controlador, que es su punto de contacto correcto.
+        IControladorContactos controladorContactos = new ControladorContactos();
+
+        // 2. Pasar la instancia del Controlador al constructor de FeatureContactos.
+        FeatureContactos contactos = new FeatureContactos(this::mostrarChatPrivado, controladorContactos);
+
         FeatureCanales canales = new FeatureCanales(this::mostrarVistaCanal, this::mostrarVistaCrearCanal);
         this.panelNotificaciones = new FeatureNotificaciones();
         FeatureConexion barraEstado = new FeatureConexion();

@@ -5,8 +5,14 @@
     <file url="file://$PROJECT_DIR$/Infraestructura/DTO/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Infraestructura/Logger/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Infraestructura/Logger/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Infraestructura/Observador/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Infraestructura/Observador/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/Comunicacion/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/Comunicacion/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Negocio/Fachada/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Negocio/Fachada/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/GestionContactos/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/GestionContactos/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Negocio/GestionUsuario/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Negocio/GestionUsuario/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Negocio/Servicio/src/main/java" charset="UTF-8" />

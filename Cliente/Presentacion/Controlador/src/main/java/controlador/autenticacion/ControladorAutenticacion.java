@@ -2,27 +2,23 @@ package controlador.autenticacion;
 
 import dto.vistaLogin.DTOAutenticacion;
 import servicio.autenticacion.IServicioAutenticacion;
-import servicio.autenticacion.ServicioAutenticacionImpl;
+import servicio.autenticacion.ServicioAutenticacion;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
- * Implementación del controlador que gestiona la autenticación.
- * Delega la lógica de negocio al servicio correspondiente.
+ * Implementación del controlador de autenticación.
  */
 public class ControladorAutenticacion implements IControladorAutenticacion {
 
-    private final IServicioAutenticacion servicioAutenticacion;
-
-    public ControladorAutenticacion() {
-        this.servicioAutenticacion = new ServicioAutenticacionImpl();
-    }
+    // El controlador solo depende de la capa de servicio, manteniendo la arquitectura limpia.
+    private final IServicioAutenticacion servicioAutenticacion = new ServicioAutenticacion();
 
     @Override
-    public boolean autenticar(DTOAutenticacion datos) {
-        // Podríamos añadir validaciones de formato aquí antes de pasar al servicio.
-        if (datos.getEmailUsuario() == null || datos.getEmailUsuario().trim().isEmpty() ||
-                datos.getPasswordUsuario() == null || datos.getPasswordUsuario().isEmpty()) {
-            return false;
-        }
+    public CompletableFuture<Boolean> autenticar(DTOAutenticacion datos) {
+        // Simplemente delega la llamada al servicio y devuelve el Future que este le proporciona.
+        // La vista se encargará de reaccionar cuando este Future se complete.
         return servicioAutenticacion.autenticar(datos);
     }
 }
+
