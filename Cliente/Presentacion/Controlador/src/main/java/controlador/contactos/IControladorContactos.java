@@ -17,8 +17,14 @@ public interface IControladorContactos {
     void registrarObservador(IObservador observador);
 
     /**
-     * Obtiene la lista inicial de contactos.
+     * Obtiene la lista inicial de contactos desde la caché del servicio.
      * @return Una lista con la información de los contactos.
      */
     List<DTOContacto> getContactos();
+
+    /**
+     * Inicia una petición para solicitar la lista actualizada de contactos al servidor.
+     */
+    void solicitarActualizacionContactos();
 }
+

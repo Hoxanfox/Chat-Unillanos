@@ -1,28 +1,27 @@
 package servicio.archivos;
 
-import fachada.gestionArchivos.FachadaArchivosImpl;
+import fachada.FachadaGeneralImpl;
 import fachada.gestionArchivos.IFachadaArchivos;
 
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Implementación del servicio que expone la lógica de gestión de archivos
- * a la capa de Presentación.
+ * Implementación del servicio que AHORA obtiene la fachada específica
+ * que necesita desde la Fachada General.
  */
 public class ServicioArchivosImpl implements IServicioArchivos {
 
-    // El servicio depende de la fachada.
     private final IFachadaArchivos fachadaArchivos;
 
     public ServicioArchivosImpl() {
-        // En una aplicación real, esto se inyectaría.
-        this.fachadaArchivos = new FachadaArchivosImpl();
+        // Pide a la central la fachada que necesita.
+        this.fachadaArchivos = FachadaGeneralImpl.getInstancia().getFachadaArchivos();
     }
 
     @Override
     public CompletableFuture<String> subirArchivo(File archivo) {
-        // Simplemente delega la llamada.
         return fachadaArchivos.subirArchivo(archivo);
     }
 }
+

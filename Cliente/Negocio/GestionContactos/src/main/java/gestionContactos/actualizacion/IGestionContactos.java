@@ -1,14 +1,15 @@
 package gestionContactos.actualizacion;
-import observador.ISujeto;
+
+import dto.featureContactos.DTOContacto;
+import observador.ISujeto; // Se corrige la importación
+import java.util.List;
 
 /**
- * Contrato para el componente de negocio que gestiona la lógica de los contactos.
- * Es utilizado por la Fachada y se comunica con la capa de Persistencia.
+ * Contrato para el componente de negocio que AHORA gestiona únicamente
+ * la lista de contactos.
  */
 public interface IGestionContactos extends ISujeto {
 
-    /**
-     * Inicia una petición al servidor para obtener la lista de contactos.
-     */
     void solicitarActualizacionContactos();
+    List<DTOContacto> getContactos();
 }

@@ -9,7 +9,7 @@ import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
 import dto.repositorio.DTOUsuarioRepositorio;
 import dto.vistaRegistro.DTORegistro;
-// CORRECCIÓN: Se utiliza el paquete correcto para la capa de persistencia.
+// CORRECCIÓN 1: Se utiliza el paquete correcto para la capa de persistencia.
 import repositorio.usuario.IRepositorioUsuario;
 import repositorio.usuario.RepositorioUsuarioImpl;
 
@@ -24,10 +24,18 @@ import java.util.concurrent.CompletableFuture;
  */
 public class RegistroUsuarioImpl implements IRegistroUsuario {
 
-    private final IEnviadorPeticiones enviadorPeticiones = new EnviadorPeticiones();
-    private final IGestorRespuesta gestorRespuesta = new GestorRespuesta();
-    private final IRepositorioUsuario repositorioUsuario = new RepositorioUsuarioImpl();
-    private final Gson gson = new Gson();
+    private final IEnviadorPeticiones enviadorPeticiones;
+    private final IGestorRespuesta gestorRespuesta;
+    private final IRepositorioUsuario repositorioUsuario;
+    private final Gson gson;
+
+    public RegistroUsuarioImpl() {
+        this.enviadorPeticiones = new EnviadorPeticiones();
+        // CORRECCIÓN 2: Se obtiene la instancia única del Singleton.
+        this.gestorRespuesta = GestorRespuesta.getInstancia();
+        this.repositorioUsuario = new RepositorioUsuarioImpl();
+        this.gson = new Gson();
+    }
 
     @Override
     public CompletableFuture<Boolean> registrar(DTORegistro dto, byte[] fotoBytes) {
@@ -41,7 +49,8 @@ public class RegistroUsuarioImpl implements IRegistroUsuario {
                     UUID userId = UUID.fromString(datosServidor.get("userId"));
                     String fechaRegistroStr = datosServidor.get("fechaRegistro");
                     Date fechaRegistro = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").parse(fechaRegistroStr);
-                    String photoId = datosServidor.get("photoId"); // Se asume que el servidor también devuelve el photoId
+                    // Asumimos que la respuesta del servidor también contiene el photoId del archivo ya guardado.
+                    String photoId = datosServidor.get("photoId");
 
                     DTOUsuarioRepositorio datosParaGuardar = new DTOUsuarioRepositorio(
                             userId,
@@ -49,7 +58,7 @@ public class RegistroUsuarioImpl implements IRegistroUsuario {
                             dto.getEmail(),
                             dto.getPassword(),
                             fotoBytes,
-                            photoId, // Se pasa el photoId al DTO del repositorio
+                            photoId,
                             dto.getIp(),
                             fechaRegistro
                     );

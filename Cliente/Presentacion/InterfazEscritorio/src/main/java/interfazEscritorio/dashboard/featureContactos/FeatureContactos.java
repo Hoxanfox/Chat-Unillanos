@@ -1,7 +1,7 @@
 package interfazEscritorio.dashboard.featureContactos;
 
 import controlador.contactos.IControladorContactos;
-import observador.IObservador;
+import observador.IObservador; // CORRECCIÓN: Paquete correcto
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -21,21 +21,21 @@ import java.util.function.Consumer;
 
 /**
  * Representa el feature que muestra la lista de usuarios en línea.
- * Implementa IObservador para actualizarse dinámicamente a través del Controlador.
+ * AHORA trabaja con el objeto DTOContacto completo.
  */
 public class FeatureContactos extends VBox implements IObservador {
 
-    private final Consumer<String> onContactoSeleccionado;
+    // CORRECCIÓN: El consumidor ahora espera el objeto DTOContacto completo.
+    private final Consumer<DTOContacto> onContactoSeleccionado;
     private final Label tituloUsuarios;
     private final VBox listaContactosContainer;
 
-    // Ahora depende del Controlador, no del Servicio.
-    public FeatureContactos(Consumer<String> onContactoSeleccionado, IControladorContactos controladorContactos) {
+    public FeatureContactos(Consumer<DTOContacto> onContactoSeleccionado, IControladorContactos controladorContactos) {
         super(10);
         this.onContactoSeleccionado = onContactoSeleccionado;
         this.setPadding(new Insets(15, 15, 10, 15));
 
-        // 1. Suscribirse a los cambios a través del Controlador.
+        System.out.println("✅ [FeatureContactos]: Creado. Registrándose como observador en el Controlador.");
         controladorContactos.registrarObservador(this);
 
         tituloUsuarios = new Label("ONLINE USERS (0)");
@@ -43,17 +43,18 @@ public class FeatureContactos extends VBox implements IObservador {
         tituloUsuarios.setTextFill(Color.WHITE);
 
         listaContactosContainer = new VBox(10);
-
         this.getChildren().addAll(tituloUsuarios, listaContactosContainer);
 
-        // 2. Obtener la lista inicial a través del Controlador.
-        redibujarContactos(controladorContactos.getContactos());
+        System.out.println("➡️ [FeatureContactos]: Solicitando lista de contactos inicial al servidor...");
+        controladorContactos.solicitarActualizacionContactos();
     }
 
     @Override
     public void actualizar(String tipoDeDato, Object datos) {
+        System.out.println("🔔 [FeatureContactos]: ¡Notificación recibida! Tipo: " + tipoDeDato);
         if ("ACTUALIZAR_CONTACTOS".equals(tipoDeDato) && datos instanceof List) {
             Platform.runLater(() -> {
+                System.out.println("  -> [UI Thread]: Ejecutando actualización de la lista de contactos en la vista.");
                 redibujarContactos((List<DTOContacto>) datos);
             });
         }
@@ -62,6 +63,7 @@ public class FeatureContactos extends VBox implements IObservador {
     private void redibujarContactos(List<DTOContacto> contactos) {
         if (contactos == null) return;
 
+        System.out.println("  -> [UI Thread]: Limpiando y redibujando la lista con " + contactos.size() + " contactos.");
         listaContactosContainer.getChildren().clear();
         tituloUsuarios.setText("ONLINE USERS (" + contactos.size() + ")");
 
@@ -84,7 +86,9 @@ public class FeatureContactos extends VBox implements IObservador {
         if (isOnline) {
             userEntry.setCursor(Cursor.HAND);
             userEntry.setOnMouseClicked(event -> {
-                onContactoSeleccionado.accept(contacto.getNombre());
+                System.out.println("🖱️ [FeatureContactos]: Clic en el contacto: " + contacto.getNombre() + " (ID: " + contacto.getId() + ")");
+                // CORRECCIÓN: Se pasa el objeto DTOContacto completo al hacer clic.
+                onContactoSeleccionado.accept(contacto);
             });
         }
 
