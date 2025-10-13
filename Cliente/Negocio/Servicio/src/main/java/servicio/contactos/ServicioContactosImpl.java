@@ -1,16 +1,16 @@
 package servicio.contactos;
 
 import dto.featureContactos.DTOContacto;
+import fachada.FachadaGeneralImpl;
+
 import observador.IObservador;
-import fachada.gestionContactos.FachadaContactosImpl;
 import fachada.gestionContactos.IFachadaContactos;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Implementación del servicio de contactos.
- * Ahora delega toda la lógica a la Fachada.
+ * Implementación del servicio de contactos con logging detallado.
  */
 public class ServicioContactosImpl implements IServicioContactos, IObservador {
 
@@ -19,46 +19,53 @@ public class ServicioContactosImpl implements IServicioContactos, IObservador {
     private List<DTOContacto> contactosCache = new ArrayList<>();
 
     public ServicioContactosImpl() {
-        this.fachadaContactos = new FachadaContactosImpl();
-        // El servicio se suscribe como observador de la fachada.
+        this.fachadaContactos = FachadaGeneralImpl.getInstancia().getFachadaContactos();
+        System.out.println("✅ [ServicioContactos]: Creado. Registrándose como observador en la FachadaContactos.");
         this.fachadaContactos.registrarObservador(this);
     }
 
     @Override
     public List<DTOContacto> getContactos() {
+        System.out.println("ℹ️ [ServicioContactos]: getContactos() llamado. Devolviendo " + contactosCache.size() + " contactos desde la caché.");
         return new ArrayList<>(contactosCache);
     }
 
     @Override
     public void solicitarActualizacionContactos() {
+        System.out.println("➡️ [ServicioContactos]: Delegando solicitud de actualización de contactos a la Fachada.");
         fachadaContactos.solicitarActualizacionContactos();
     }
 
-    /**
-     * Este método es llamado por la Fachada cuando hay datos nuevos.
-     */
     @Override
     public void actualizar(String tipoDeDato, Object datos) {
+        System.out.println("🔔 [ServicioContactos]: ¡Notificación recibida de la Fachada! Tipo: " + tipoDeDato);
         if ("ACTUALIZAR_CONTACTOS".equals(tipoDeDato) && datos instanceof List) {
-            // El servicio actualiza su cache y notifica a sus observadores (la Vista).
             this.contactosCache = (List<DTOContacto>) datos;
+            System.out.println("  -> Caché de contactos actualizada con " + this.contactosCache.size() + " contactos.");
             notificarObservadores(tipoDeDato, this.contactosCache);
+        } else {
+            System.out.println("  -> La notificación no es para actualizar contactos o los datos son inválidos.");
         }
     }
 
-    // --- Métodos del Patrón Sujeto ---
     @Override
     public void registrarObservador(IObservador observador) {
-        if (!observadores.contains(observador)) observadores.add(observador);
+        if (!observadores.contains(observador)) {
+            observadores.add(observador);
+            System.out.println("➕ [ServicioContactos]: Nuevo observador (Controlador/Vista) registrado. Total: " + observadores.size());
+        }
     }
 
     @Override
     public void removerObservador(IObservador observador) {
-        observadores.remove(observador);
+        if(observadores.remove(observador)) {
+            System.out.println("➖ [ServicioContactos]: Observador (Controlador/Vista) removido. Total: " + observadores.size());
+        }
     }
 
     @Override
     public void notificarObservadores(String tipoDeDato, Object datos) {
+        System.out.println("📣 [ServicioContactos]: Notificando a " + observadores.size() + " observador(es) (Controlador/Vista)...");
         for (IObservador observador : observadores) {
             observador.actualizar(tipoDeDato, datos);
         }

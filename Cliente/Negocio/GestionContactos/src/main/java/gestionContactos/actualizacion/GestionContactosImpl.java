@@ -16,22 +16,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Implementación del gestor de contactos. Contiene la lógica de negocio real
- * y se comunica con la capa de persistencia (comunicación).
+ * Implementación del gestor de contactos, ahora enfocado solo en la actualización de la lista.
  */
 public class GestionContactosImpl implements IGestionContactos {
 
     private final List<IObservador> observadores = new ArrayList<>();
     private List<DTOContacto> contactosCache = new ArrayList<>();
-
-    // Dependencias con la capa de comunicación
     private final IEnviadorPeticiones enviadorPeticiones;
     private final IGestorRespuesta gestorRespuesta;
     private final Gson gson;
 
     public GestionContactosImpl() {
         this.enviadorPeticiones = new EnviadorPeticiones();
-        this.gestorRespuesta = new GestorRespuesta();
+        this.gestorRespuesta = GestorRespuesta.getInstancia();
         this.gson = new Gson();
         this.gestorRespuesta.registrarManejador("actualizarListaContactos", this::manejarActualizacion);
     }
@@ -40,7 +37,6 @@ public class GestionContactosImpl implements IGestionContactos {
         if (respuesta.fueExitoso()) {
             Type tipoLista = new TypeToken<ArrayList<DTOContacto>>() {}.getType();
             this.contactosCache = gson.fromJson(gson.toJson(respuesta.getData()), tipoLista);
-            // Notifica a sus observadores (la Fachada) que los datos han cambiado.
             notificarObservadores("ACTUALIZAR_CONTACTOS", this.contactosCache);
         }
     }
@@ -51,17 +47,20 @@ public class GestionContactosImpl implements IGestionContactos {
         enviadorPeticiones.enviar(peticion);
     }
 
+    @Override
+    public List<DTOContacto> getContactos() {
+        return new ArrayList<>(contactosCache);
+    }
+
     // --- Métodos del Patrón Observador ---
     @Override
     public void registrarObservador(IObservador observador) {
         if (!observadores.contains(observador)) observadores.add(observador);
     }
-
     @Override
     public void removerObservador(IObservador observador) {
         observadores.remove(observador);
     }
-
     @Override
     public void notificarObservadores(String tipoDeDato, Object datos) {
         for (IObservador observador : observadores) {

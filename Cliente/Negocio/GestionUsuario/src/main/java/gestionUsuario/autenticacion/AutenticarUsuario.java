@@ -8,55 +8,58 @@ import comunicacion.IGestorRespuesta;
 import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
 import dto.vistaLogin.DTOAutenticacion;
+import gestionUsuario.sesion.GestorSesionUsuario; // Se importa el nuevo gestor
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Implementación del componente de negocio para la autenticación de usuarios.
- * Esta clase se comunica con la capa de persistencia (comunicación) y
- * maneja la respuesta del servidor de forma asíncrona.
+ * AHORA guarda los datos del usuario en el GestorSesionUsuario tras una autenticación exitosa.
  */
 public class AutenticarUsuario implements IAutenticarUsuario {
 
-    // Dependencias con la capa de comunicación. En una app real, serían inyectadas.
-    private final IEnviadorPeticiones enviadorPeticiones = new EnviadorPeticiones();
-    private final IGestorRespuesta gestorRespuesta = new GestorRespuesta();
-    private final Gson gson = new Gson(); // Para manejar el campo 'data' si es necesario.
+    private final IEnviadorPeticiones enviadorPeticiones;
+    private final IGestorRespuesta gestorRespuesta;
+    private final Gson gson;
+
+    public AutenticarUsuario() {
+        this.enviadorPeticiones = new EnviadorPeticiones();
+        this.gestorRespuesta = GestorRespuesta.getInstancia();
+        this.gson = new Gson();
+    }
 
     @Override
     public CompletableFuture<Boolean> autenticar(DTOAutenticacion dto) {
-        // 1. Crear la "promesa". Este objeto será devuelto inmediatamente,
-        // y lo "completaremos" cuando llegue la respuesta del servidor.
         CompletableFuture<Boolean> resultadoFuturo = new CompletableFuture<>();
-
         final String ACCION = "authenticateUser";
 
-        // 2. Construir y registrar el MANEJADOR para esta petición específica.
-        // Le decimos al GestorRespuesta: "Cuando llegue una respuesta para la acción 'authenticateUser',
-        // ejecuta este código".
         gestorRespuesta.registrarManejador(ACCION, (DTOResponse respuesta) -> {
-
-            // Este código se ejecutará en el hilo del GestorRespuesta cuando llegue la respuesta.
             if (respuesta.fueExitoso()) {
-                System.out.println("GestionUsuario (Manejador): La autenticación fue exitosa.");
-                // Cumplimos la promesa con un valor de 'true'.
-                resultadoFuturo.complete(true);
+                try {
+                    // 1. Extraer el userId de la respuesta del servidor.
+                    Map<String, String> datosUsuario = gson.fromJson(gson.toJson(respuesta.getData()), Map.class);
+                    String userId = datosUsuario.get("userId");
+
+                    if (userId == null || userId.isEmpty()) {
+                        throw new Exception("La respuesta del servidor no contenía un 'userId'.");
+                    }
+
+                    // 2. Guardar el ID del usuario en el gestor de sesión global.
+                    GestorSesionUsuario.getInstancia().setUserId(userId);
+                    System.out.println("✅ [AutenticarUsuario]: Sesión iniciada para el usuario con ID: " + userId);
+
+                    resultadoFuturo.complete(true);
+                } catch (Exception e) {
+                    System.err.println("❌ [AutenticarUsuario]: Error al procesar la respuesta de autenticación: " + e.getMessage());
+                    resultadoFuturo.complete(false);
+                }
             } else {
-                System.out.println("GestionUsuario (Manejador): " + respuesta.getMessage());
-                // Cumplimos la promesa con un valor de 'false'.
                 resultadoFuturo.complete(false);
             }
         });
 
-        // 3. Crear el DTO de la petición con la acción y los datos (payload).
         DTORequest peticion = new DTORequest(ACCION, dto);
-
-        // 4. Enviar la petición. Esto no bloquea la aplicación.
-        System.out.println("GestionUsuario: Enviando petición de autenticación...");
         enviadorPeticiones.enviar(peticion);
-
-        // 5. Devolver la promesa inmediatamente. La vista se quedará "esperando"
-        // a que el manejador la complete en el futuro.
         return resultadoFuturo;
     }
 }

@@ -12,7 +12,6 @@ import dto.gestionArchivos.DTOStartUpload;
 import dto.gestionArchivos.DTOUploadChunk;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.security.MessageDigest;
@@ -31,7 +30,8 @@ public class GestionArchivosImpl implements IGestionArchivos {
 
     public GestionArchivosImpl() {
         this.enviadorPeticiones = new EnviadorPeticiones();
-        this.gestorRespuesta = new GestorRespuesta();
+        // CORRECCIÓN: Se obtiene la instancia única del Singleton.
+        this.gestorRespuesta = GestorRespuesta.getInstancia();
         this.gson = new Gson();
     }
 
@@ -40,24 +40,16 @@ public class GestionArchivosImpl implements IGestionArchivos {
         CompletableFuture<String> futuroSubida = new CompletableFuture<>();
 
         try {
-            // FASE 0: PREPARACIÓN
             byte[] fileBytes = Files.readAllBytes(archivo.toPath());
             String fileHash = calcularHashSHA256(fileBytes);
             int totalChunks = (int) Math.ceil((double) fileBytes.length / CHUNK_SIZE);
 
-            // FASE 1: INICIO DE LA SUBIDA
             iniciarSubida(archivo, totalChunks)
-                    .thenCompose(uploadId -> {
-                        // FASE 2: TRANSFERENCIA DE CHUNKS
-                        return transferirChunks(uploadId, fileBytes, totalChunks);
-                    })
-                    .thenCompose(uploadId -> {
-                        // FASE 3: FINALIZACIÓN DE LA SUBIDA
-                        return finalizarSubida(uploadId, fileHash);
-                    })
-                    .thenAccept(fileName -> futuroSubida.complete(fileName)) // Éxito
+                    .thenCompose(uploadId -> transferirChunks(uploadId, fileBytes, totalChunks))
+                    .thenCompose(uploadId -> finalizarSubida(uploadId, fileHash))
+                    .thenAccept(futuroSubida::complete)
                     .exceptionally(ex -> {
-                        futuroSubida.completeExceptionally(ex); // Falla
+                        futuroSubida.completeExceptionally(ex);
                         return null;
                     });
 
@@ -74,7 +66,6 @@ public class GestionArchivosImpl implements IGestionArchivos {
 
         gestorRespuesta.registrarManejador(ACCION, (DTOResponse res) -> {
             if (res.fueExitoso()) {
-                // El campo 'data' debería contener un objeto con el 'uploadId'
                 String uploadId = gson.fromJson(gson.toJson(res.getData()), UploadIdResponse.class).uploadId;
                 futuroUploadId.complete(uploadId);
             } else {
@@ -113,9 +104,10 @@ public class GestionArchivosImpl implements IGestionArchivos {
 
     private CompletableFuture<Void> enviarChunk(String uploadId, int chunkNumber, String chunkBase64) {
         CompletableFuture<Void> futuroChunk = new CompletableFuture<>();
-        final String ACCION = "uploadFileChunk" + "_" + chunkNumber; // Acción única para cada chunk
+        // Acción única para cada respuesta de chunk, para evitar que un manejador sobreescriba a otro.
+        final String ACCION_RESPUESTA = "uploadFileChunk_" + uploadId + "_" + chunkNumber;
 
-        gestorRespuesta.registrarManejador(ACCION, (DTOResponse res) -> {
+        gestorRespuesta.registrarManejador(ACCION_RESPUESTA, (DTOResponse res) -> {
             if (res.fueExitoso()) {
                 futuroChunk.complete(null);
             } else {
@@ -124,7 +116,7 @@ public class GestionArchivosImpl implements IGestionArchivos {
         });
 
         DTOUploadChunk payload = new DTOUploadChunk(uploadId, chunkNumber, chunkBase64);
-        // Usamos una acción diferente en la petición para evitar colisiones
+        // La acción en la petición sigue siendo la misma, el servidor la diferenciará por el payload.
         enviadorPeticiones.enviar(new DTORequest("uploadFileChunk", payload));
         return futuroChunk;
     }
@@ -135,7 +127,6 @@ public class GestionArchivosImpl implements IGestionArchivos {
 
         gestorRespuesta.registrarManejador(ACCION, (DTOResponse res) -> {
             if (res.fueExitoso()) {
-                // Suponemos que la respuesta devuelve el nombre final del archivo
                 String fileName = gson.fromJson(gson.toJson(res.getData()), FileNameResponse.class).fileName;
                 futuroFinal.complete(fileName);
             } else {
@@ -178,3 +169,4 @@ public class GestionArchivosImpl implements IGestionArchivos {
     private static class UploadIdResponse { String uploadId; }
     private static class FileNameResponse { String fileName; }
 }
+

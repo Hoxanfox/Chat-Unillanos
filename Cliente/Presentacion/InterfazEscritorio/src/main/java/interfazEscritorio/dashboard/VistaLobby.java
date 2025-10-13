@@ -1,7 +1,10 @@
 package interfazEscritorio.dashboard;
 
+import controlador.chat.ControladorChat;
+import controlador.chat.IControladorChat;
 import controlador.contactos.ControladorContactos;
 import controlador.contactos.IControladorContactos;
+import dto.featureContactos.DTOContacto;
 import interfazEscritorio.dashboard.featureCanales.FeatureCanales;
 import interfazEscritorio.dashboard.featureCanales.canal.VistaCanal;
 import interfazEscritorio.dashboard.featureCanales.canal.miembrosCanal.VistaInvitarMiembro;
@@ -21,15 +24,18 @@ import javafx.scene.layout.VBox;
 public class VistaLobby extends BorderPane {
 
     private final FeatureNotificaciones panelNotificaciones;
+    // CORRECCIÓN 1: Los controladores ahora son campos de la clase.
+    private final IControladorContactos controladorContactos;
+    private final IControladorChat controladorChat;
 
     public VistaLobby() {
+        // Se instancian los controladores en el constructor.
+        this.controladorContactos = new ControladorContactos();
+        this.controladorChat = new ControladorChat();
+
         FeatureHeader header = new FeatureHeader();
-        // 1. La Vista ahora crea el Controlador, que es su punto de contacto correcto.
-        IControladorContactos controladorContactos = new ControladorContactos();
-
-        // 2. Pasar la instancia del Controlador al constructor de FeatureContactos.
-        FeatureContactos contactos = new FeatureContactos(this::mostrarChatPrivado, controladorContactos);
-
+        // Se pasa la instancia del controlador correcta al constructor de FeatureContactos.
+        FeatureContactos contactos = new FeatureContactos(this::mostrarChatPrivado, this.controladorContactos);
         FeatureCanales canales = new FeatureCanales(this::mostrarVistaCanal, this::mostrarVistaCrearCanal);
         this.panelNotificaciones = new FeatureNotificaciones();
         FeatureConexion barraEstado = new FeatureConexion();
@@ -45,28 +51,28 @@ public class VistaLobby extends BorderPane {
         this.setBottom(barraEstado);
     }
 
-    private void mostrarChatPrivado(String nombreUsuario) {
-        VistaContactoChat chatView = new VistaContactoChat(nombreUsuario, this::mostrarNotificaciones);
+    /**
+     * CORRECCIÓN 2: El método ahora recibe el objeto DTOContacto completo
+     * y llama al constructor correcto de VistaContactoChat.
+     * @param contacto El DTO del contacto seleccionado.
+     */
+    private void mostrarChatPrivado(DTOContacto contacto) {
+        VistaContactoChat chatView = new VistaContactoChat(contacto, this.controladorChat, this::mostrarNotificaciones);
         this.setCenter(chatView);
     }
 
+    // ... el resto de los métodos de navegación no necesitan cambios ...
     private void mostrarVistaCanal(String nombreCanal) {
         VistaCanal vistaCanal = new VistaCanal(nombreCanal, this::mostrarNotificaciones, this::mostrarVistaMiembros);
         this.setCenter(vistaCanal);
     }
 
     private void mostrarVistaMiembros(String nombreCanal) {
-        // Ahora se le pasa la acción para invitar miembros.
         VistaMiembrosCanal vistaMiembros = new VistaMiembrosCanal(nombreCanal, () -> this.mostrarVistaCanal(nombreCanal), this::mostrarVistaInvitar);
         this.setCenter(vistaMiembros);
     }
 
-    /**
-     * Muestra la vista para invitar miembros a un canal.
-     * @param nombreCanal El canal al que se invitará.
-     */
     private void mostrarVistaInvitar(String nombreCanal) {
-        // La acción 'onVolver' regresa a la vista de miembros.
         VistaInvitarMiembro vistaInvitar = new VistaInvitarMiembro(nombreCanal, () -> this.mostrarVistaMiembros(nombreCanal));
         this.setCenter(vistaInvitar);
     }
@@ -75,6 +81,7 @@ public class VistaLobby extends BorderPane {
         VistaCrearCanal vistaCrearCanal = new VistaCrearCanal(this::mostrarNotificaciones);
         this.setCenter(vistaCrearCanal);
     }
+
     private void mostrarNotificaciones() {
         this.setCenter(panelNotificaciones);
     }

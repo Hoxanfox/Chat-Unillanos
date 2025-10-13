@@ -14,20 +14,36 @@ import java.util.function.Consumer;
 
 /**
  * Implementación del componente que escucha y gestiona las respuestas del servidor.
+ * AHORA implementado como un Singleton.
  */
 public class GestorRespuesta implements IGestorRespuesta {
 
+    private static GestorRespuesta instancia; // Instancia única del Singleton
     private final GestorConexion gestorConexion;
     private final Map<String, Consumer<DTOResponse>> manejadores;
     private final Gson gson;
     private Thread hiloEscucha;
 
-    public GestorRespuesta() {
+    // El constructor ahora es privado.
+    private GestorRespuesta() {
         this.gestorConexion = GestorConexion.getInstancia();
         this.manejadores = new ConcurrentHashMap<>();
         this.gson = new Gson();
     }
 
+    /**
+     * Método estático para obtener la única instancia de la clase.
+     * @return la instancia del GestorRespuesta.
+     */
+    public static synchronized GestorRespuesta getInstancia() {
+        if (instancia == null) {
+            instancia = new GestorRespuesta();
+        }
+        return instancia;
+    }
+
+    // ... El resto de los métodos permanecen igual, pero ahora se accede a ellos
+    // a través de GestorRespuesta.getInstancia().metodo()
     @Override
     public void iniciarEscucha() {
         if (hiloEscucha != null && hiloEscucha.isAlive()) {
@@ -36,7 +52,6 @@ public class GestorRespuesta implements IGestorRespuesta {
         }
 
         hiloEscucha = new Thread(() -> {
-            // CORRECCIÓN: Se utiliza el nombre de método correcto 'getSesion()'.
             DTOSesion sesion = gestorConexion.getSesion();
             if (sesion == null || !sesion.estaActiva()) {
                 System.err.println("No se puede iniciar la escucha, no hay sesión activa.");
