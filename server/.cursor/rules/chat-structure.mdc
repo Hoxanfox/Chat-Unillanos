@@ -1,0 +1,156 @@
+---
+alwaysApply: true
+---
+
+# Project Structure
+
+## Maven Multi-Module Organization
+
+Monorepo Maven con 4 capas, cada una compuesta por módulos (.jar) independientes con dependencias unidireccionales.
+
+```
+ChatServer/ (Proyecto Padre - pom.xml)
+│
+├── Presentacion/
+│   ├── Main/ (.jar) - Punto de entrada, ServerApplication.java
+│   └── GUI/ (.jar) - Interfaz JavaFX (controller/, view/)
+│
+├── LogicaNegocio/
+│   ├── Servicios/ (.jar) - Lógica de negocio y orquestación
+│   │   ├── interfaces/ (IActionDispatcher, IAutenticacionService, etc.)
+│   │   ├── impl/ (ActionDispatcherImpl, AutenticacionServiceImpl, etc.)
+│   │   └── factories/ (MessageFactory)
+│   └── Validadores/ (.jar) - Reglas de validación
+│
+├── Datos/
+│   └── Repositorios/ (.jar) - Acceso a datos con JDBC
+│       ├── interfaces/ (IUsuarioRepository, etc.)
+│       ├── impl/ (UsuarioRepositoryImpl, etc.)
+│       ├── models/ (UsuarioEntity, etc.)
+│       └── mappers/ (UsuarioMapper, etc.)
+│
+└── Infraestructura/
+    ├── DTOs/ (.jar) - Contratos de datos (DTORequest, DTOResponse, etc.)
+    ├── Netty/ (.jar) - Servidor TCP/IP (handler/ClientRequestHandler)
+    ├── Configuracion/ (.jar) - application.properties y beans de config
+    └── Logs/ (.jar) - Sistema de logging y auditoría
+```
+
+## Key Locations
+
+- **Entry Point**: `Presentacion/Main/src/main/java/com/unillanos/server/ServerApplication.java`
+- **Business Logic**: `LogicaNegocio/Servicios/src/main/java/com/unillanos/server/service/`
+- **Data Access**: `Datos/Repositorios/src/main/java/com/unillanos/server/repository/impl/`
+- **Network Layer**: `Infraestructura/Netty/src/main/java/com/unillanos/server/netty/`
+- **DTOs**: `Infraestructura/DTOs/src/main/java/com/unillanos/server/dto/`
+- **Configuration**: `Infraestructura/Configuracion/src/main/resources/application.properties`
+
+## Dependency Flow
+
+```
+Presentación → Lógica de Negocio → Datos → Infraestructura
+                      ↑                        ↓
+                      └────── Netty (interfaz) ┘
+```
+
+## Module Dependencies
+
+- **Main.jar** → GUI.jar, Servicios.jar, Netty.jar
+- **GUI.jar** → Servicios.jar
+- **Servicios.jar** → Validadores.jar, Repositorios.jar, DTOs.jar, Logs.jar
+- **Repositorios.jar** → DTOs.jar, Logs.jar
+- **Netty.jar** → Config.jar, Logs.jar, DTOs.jar, Servicios.jar (solo interfaz IActionDispatcher)
+
+## Architecture Rules
+
+1. **No Circular Dependencies** - Las capas superiores NO pueden importar clases de capas inferiores
+2. **Interface Segregation** - Netty depende de IActionDispatcher (interfaz), no de la implementación
+3. **Single Responsibility** - Cada módulo tiene una responsabilidad clara y única
+4. **Dependency Injection** - Spring gestiona todas las dependencias entre módulos
+
+## Request Flow
+
+1. Cliente → TCP/IP
+2. **Netty.jar** (ClientRequestHandler) → deserializa DTORequest
+3. **Servicios.jar** (ActionDispatcher) → enruta a servicio específico
+4. **Validadores.jar** → valida datos de entrada
+5. **Repositorios.jar** → ejecuta operaciones JDBC
+6. MySQL → persiste/recupera datos
+7. **Servicios.jar** → construye DTOResponse
+8. **Netty.jar** → serializa y envía respuesta al cliente
+# Project Structure
+
+## Maven Multi-Module Organization
+
+Monorepo Maven con 4 capas, cada una compuesta por módulos (.jar) independientes con dependencias unidireccionales.
+
+```
+ChatServer/ (Proyecto Padre - pom.xml)
+│
+├── Presentacion/
+│   ├── Main/ (.jar) - Punto de entrada, ServerApplication.java
+│   └── GUI/ (.jar) - Interfaz JavaFX (controller/, view/)
+│
+├── LogicaNegocio/
+│   ├── Servicios/ (.jar) - Lógica de negocio y orquestación
+│   │   ├── interfaces/ (IActionDispatcher, IAutenticacionService, etc.)
+│   │   ├── impl/ (ActionDispatcherImpl, AutenticacionServiceImpl, etc.)
+│   │   └── factories/ (MessageFactory)
+│   └── Validadores/ (.jar) - Reglas de validación
+│
+├── Datos/
+│   └── Repositorios/ (.jar) - Acceso a datos con JDBC
+│       ├── interfaces/ (IUsuarioRepository, etc.)
+│       ├── impl/ (UsuarioRepositoryImpl, etc.)
+│       ├── models/ (UsuarioEntity, etc.)
+│       └── mappers/ (UsuarioMapper, etc.)
+│
+└── Infraestructura/
+    ├── DTOs/ (.jar) - Contratos de datos (DTORequest, DTOResponse, etc.)
+    ├── Netty/ (.jar) - Servidor TCP/IP (handler/ClientRequestHandler)
+    ├── Configuracion/ (.jar) - application.properties y beans de config
+    └── Logs/ (.jar) - Sistema de logging y auditoría
+```
+
+## Key Locations
+
+- **Entry Point**: `Presentacion/Main/src/main/java/com/unillanos/server/ServerApplication.java`
+- **Business Logic**: `LogicaNegocio/Servicios/src/main/java/com/unillanos/server/service/`
+- **Data Access**: `Datos/Repositorios/src/main/java/com/unillanos/server/repository/impl/`
+- **Network Layer**: `Infraestructura/Netty/src/main/java/com/unillanos/server/netty/`
+- **DTOs**: `Infraestructura/DTOs/src/main/java/com/unillanos/server/dto/`
+- **Configuration**: `Infraestructura/Configuracion/src/main/resources/application.properties`
+
+## Dependency Flow
+
+```
+Presentación → Lógica de Negocio → Datos → Infraestructura
+                      ↑                        ↓
+                      └────── Netty (interfaz) ┘
+```
+
+## Module Dependencies
+
+- **Main.jar** → GUI.jar, Servicios.jar, Netty.jar
+- **GUI.jar** → Servicios.jar
+- **Servicios.jar** → Validadores.jar, Repositorios.jar, DTOs.jar, Logs.jar
+- **Repositorios.jar** → DTOs.jar, Logs.jar
+- **Netty.jar** → Config.jar, Logs.jar, DTOs.jar, Servicios.jar (solo interfaz IActionDispatcher)
+
+## Architecture Rules
+
+1. **No Circular Dependencies** - Las capas superiores NO pueden importar clases de capas inferiores
+2. **Interface Segregation** - Netty depende de IActionDispatcher (interfaz), no de la implementación
+3. **Single Responsibility** - Cada módulo tiene una responsabilidad clara y única
+4. **Dependency Injection** - Spring gestiona todas las dependencias entre módulos
+
+## Request Flow
+
+1. Cliente → TCP/IP
+2. **Netty.jar** (ClientRequestHandler) → deserializa DTORequest
+3. **Servicios.jar** (ActionDispatcher) → enruta a servicio específico
+4. **Validadores.jar** → valida datos de entrada
+5. **Repositorios.jar** → ejecuta operaciones JDBC
+6. MySQL → persiste/recupera datos
+7. **Servicios.jar** → construye DTOResponse
+8. **Netty.jar** → serializa y envía respuesta al cliente
