@@ -8,6 +8,7 @@ import com.unillanos.server.gui.styles.StyleUtils;
 import com.unillanos.server.service.impl.AdminMonitoringService;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -164,8 +165,15 @@ public class DashboardController {
         
         // Mantener solo últimos 20 puntos
         conexionesSeries.getData().addListener((ListChangeListener<XYChart.Data<String, Number>>) c -> {
-            if (conexionesSeries.getData().size() > 20) {
-                conexionesSeries.getData().remove(0);
+            while (c.next()) {
+                if (c.wasAdded() && conexionesSeries.getData().size() > 20) {
+                    // Remover elementos antiguos de forma segura
+                    Platform.runLater(() -> {
+                        while (conexionesSeries.getData().size() > 20) {
+                            conexionesSeries.getData().remove(0);
+                        }
+                    });
+                }
             }
         });
     }

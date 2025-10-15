@@ -8,8 +8,8 @@ echo ""
 # Ir al directorio del script
 cd "$(dirname "$0")"
 
-echo "Compilando el cliente..."
-mvn clean compile
+echo "Compilando e instalando el cliente..."
+mvn clean install -DskipTests
 
 if [ $? -ne 0 ]; then
     echo ""

@@ -58,9 +58,55 @@ public class GestionArchivosImpl implements IGestionArchivos {
         return futuroSubida;
     }
 
+    /**
+     * Sube un archivo durante el proceso de registro (sin autenticación).
+     * Usa una acción especial que permite subir archivos sin estar autenticado.
+     */
+    public CompletableFuture<String> subirArchivoParaRegistro(File archivo) {
+        CompletableFuture<String> futuroSubida = new CompletableFuture<>();
+
+        try {
+            byte[] fileBytes = Files.readAllBytes(archivo.toPath());
+            String fileHash = calcularHashSHA256(fileBytes);
+            int totalChunks = (int) Math.ceil((double) fileBytes.length / CHUNK_SIZE);
+
+            iniciarSubidaParaRegistro(archivo, totalChunks)
+                    .thenCompose(uploadId -> transferirChunks(uploadId, fileBytes, totalChunks))
+                    .thenCompose(uploadId -> finalizarSubida(uploadId, fileHash))
+                    .thenAccept(futuroSubida::complete)
+                    .exceptionally(ex -> {
+                        futuroSubida.completeExceptionally(ex);
+                        return null;
+                    });
+
+        } catch (Exception e) {
+            futuroSubida.completeExceptionally(e);
+        }
+
+        return futuroSubida;
+    }
+
     private CompletableFuture<String> iniciarSubida(File archivo, int totalChunks) {
         CompletableFuture<String> futuroUploadId = new CompletableFuture<>();
         final String ACCION = "startFileUpload";
+
+        gestorRespuesta.registrarManejador(ACCION, (DTOResponse res) -> {
+            if (res.fueExitoso()) {
+                String uploadId = gson.fromJson(gson.toJson(res.getData()), UploadIdResponse.class).uploadId;
+                futuroUploadId.complete(uploadId);
+            } else {
+                futuroUploadId.completeExceptionally(new RuntimeException(res.getMessage()));
+            }
+        });
+
+        DTOStartUpload payload = new DTOStartUpload(archivo.getName(), getMimeType(archivo), totalChunks);
+        enviadorPeticiones.enviar(new DTORequest(ACCION, payload));
+        return futuroUploadId;
+    }
+
+    private CompletableFuture<String> iniciarSubidaParaRegistro(File archivo, int totalChunks) {
+        CompletableFuture<String> futuroUploadId = new CompletableFuture<>();
+        final String ACCION = "uploadFileForRegistration";
 
         gestorRespuesta.registrarManejador(ACCION, (DTOResponse res) -> {
             if (res.fueExitoso()) {

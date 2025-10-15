@@ -50,7 +50,8 @@ public class NettyServer {
                             ChannelPipeline pipeline = ch.pipeline();
                             
                             // Decodificador de líneas (mensajes terminan en \n)
-                            pipeline.addLast(new LineBasedFrameDecoder(8192));
+                            // Límite aumentado para permitir chunks de archivos grandes (2MB + overhead)
+                            pipeline.addLast(new LineBasedFrameDecoder(2 * 1024 * 1024 + 1024)); // 2MB + 1KB overhead
                             
                             // Codificadores/Decodificadores de String
                             pipeline.addLast(new StringDecoder(CharsetUtil.UTF_8));

@@ -23,5 +23,10 @@ public class ServicioArchivosImpl implements IServicioArchivos {
     public CompletableFuture<String> subirArchivo(File archivo) {
         return fachadaArchivos.subirArchivo(archivo);
     }
+
+    @Override
+    public CompletableFuture<String> subirArchivoParaRegistro(File archivo) {
+        return fachadaArchivos.subirArchivoParaRegistro(archivo);
+    }
 }
 

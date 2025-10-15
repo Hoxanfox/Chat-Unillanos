@@ -83,6 +83,21 @@ public class ConnectionManager {
     }
 
     /**
+     * Obtiene el ID del usuario asociado a un contexto de canal sin remover la conexión.
+     *
+     * @param ctx Contexto del canal
+     * @return ID del usuario (null si no se encontró)
+     */
+    public String getUserIdByContext(ChannelHandlerContext ctx) {
+        for (Map.Entry<String, ChannelHandlerContext> entry : activeConnections.entrySet()) {
+            if (entry.getValue() == ctx) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    /**
      * Elimina una conexión dado su contexto de canal.
      * Útil cuando se detecta una desconexión desde el handler de Netty.
      *
