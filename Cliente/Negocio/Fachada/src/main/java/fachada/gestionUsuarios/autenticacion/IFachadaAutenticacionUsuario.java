@@ -1,4 +1,4 @@
-package fachada.gestionUsuarios;
+package fachada.gestionUsuarios.autenticacion;
 
 import dto.vistaLogin.DTOAutenticacion;
 import dto.vistaRegistro.DTORegistro;

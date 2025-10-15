@@ -1,6 +1,6 @@
 package dominio;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -10,45 +10,83 @@ import java.util.UUID;
  */
 public class MensajeEnviadoContacto {
 
-    private final UUID idMensaje;
-    private final byte[] contenido;
-    private final Date fechaEnvio;
-    private final String tipo;
-    private final UUID idRemitente;
-    private final UUID idDestinatario;
+    private UUID idMensajeEnviadoContacto;
+    private byte[] contenido;
+    private LocalDateTime fechaEnvio;
+    private String tipo;
+    private UUID idRemitente;
+    private UUID idDestinatarioUsuario;
 
-    public MensajeEnviadoContacto(UUID idMensaje, byte[] contenido, Date fechaEnvio, String tipo, UUID idRemitente, UUID idDestinatario) {
-        this.idMensaje = idMensaje;
+    public MensajeEnviadoContacto() {
+    }
+
+    public MensajeEnviadoContacto(UUID idMensajeEnviadoContacto, byte[] contenido, LocalDateTime fechaEnvio,
+                                  String tipo, UUID idRemitente, UUID idDestinatarioUsuario) {
+        this.idMensajeEnviadoContacto = idMensajeEnviadoContacto;
         this.contenido = contenido;
         this.fechaEnvio = fechaEnvio;
         this.tipo = tipo;
         this.idRemitente = idRemitente;
-        this.idDestinatario = idDestinatario;
+        this.idDestinatarioUsuario = idDestinatarioUsuario;
     }
 
-    // Getters para todos los campos
+    // Getters y Setters
+    public UUID getIdMensajeEnviadoContacto() {
+        return idMensajeEnviadoContacto;
+    }
 
-    public UUID getIdMensaje() {
-        return idMensaje;
+    public void setIdMensajeEnviadoContacto(UUID idMensajeEnviadoContacto) {
+        this.idMensajeEnviadoContacto = idMensajeEnviadoContacto;
     }
 
     public byte[] getContenido() {
         return contenido;
     }
 
-    public Date getFechaEnvio() {
+    public void setContenido(byte[] contenido) {
+        this.contenido = contenido;
+    }
+
+    public LocalDateTime getFechaEnvio() {
         return fechaEnvio;
+    }
+
+    public void setFechaEnvio(LocalDateTime fechaEnvio) {
+        this.fechaEnvio = fechaEnvio;
     }
 
     public String getTipo() {
         return tipo;
     }
 
+    public void setTipo(String tipo) {
+        this.tipo = tipo;
+    }
+
     public UUID getIdRemitente() {
         return idRemitente;
     }
 
-    public UUID getIdDestinatario() {
-        return idDestinatario;
+    public void setIdRemitente(UUID idRemitente) {
+        this.idRemitente = idRemitente;
+    }
+
+    public UUID getIdDestinatarioUsuario() {
+        return idDestinatarioUsuario;
+    }
+
+    public void setIdDestinatarioUsuario(UUID idDestinatarioUsuario) {
+        this.idDestinatarioUsuario = idDestinatarioUsuario;
+    }
+
+    @Override
+    public String toString() {
+        return "MensajeEnviadoContacto{" +
+                "idMensajeEnviadoContacto=" + idMensajeEnviadoContacto +
+                ", tipo='" + tipo + '\'' +
+                ", fechaEnvio=" + fechaEnvio +
+                ", idRemitente=" + idRemitente +
+                ", idDestinatarioUsuario=" + idDestinatarioUsuario +
+                '}';
     }
 }

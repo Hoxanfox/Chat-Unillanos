@@ -1,4 +1,4 @@
-package repositorio.usuario;
+package gestionUsuario.especialista;
 
 import dominio.Usuario;
 
@@ -6,60 +6,61 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Contrato para el Repositorio de Usuarios.
- * Define operaciones CRUD básicas.
+ * Contrato para el especialista de usuarios.
+ * Define la lógica de negocio para gestionar usuarios.
  */
-public interface IRepositorioUsuario {
+public interface IEspecialistaUsuarios {
 
     /**
      * Guarda un nuevo usuario en la base de datos.
      * @param usuario Entidad de dominio Usuario
      */
-    void guardar(Usuario usuario);
+    void guardarUsuario(Usuario usuario);
 
     /**
      * Obtiene un usuario por su ID.
      * @param idUsuario UUID del usuario
      * @return Usuario encontrado o null
      */
-    Usuario obtenerPorId(UUID idUsuario);
+    Usuario obtenerUsuarioPorId(UUID idUsuario);
 
     /**
      * Obtiene un usuario por su email.
      * @param email Email del usuario
      * @return Usuario encontrado o null
      */
-    Usuario obtenerPorEmail(String email);
+    Usuario obtenerUsuarioPorEmail(String email);
 
     /**
      * Actualiza un usuario existente.
      * @param usuario Usuario con datos actualizados
      */
-    void actualizar(Usuario usuario);
+    void actualizarUsuario(Usuario usuario);
 
     /**
      * Elimina un usuario por su ID.
      * @param idUsuario UUID del usuario
      */
-    void eliminar(UUID idUsuario);
+    void eliminarUsuario(UUID idUsuario);
 
     /**
      * Obtiene todos los usuarios.
      * @return Lista de usuarios
      */
-    List<Usuario> obtenerTodos();
+    List<Usuario> obtenerTodosUsuarios();
 
     /**
      * Verifica si existe un usuario con el email dado.
      * @param email Email a verificar
      * @return true si existe, false si no
      */
-    boolean existePorEmail(String email);
+    boolean existeUsuarioPorEmail(String email);
 
     /**
-     * Actualiza el estado de un usuario.
+     * Actualiza el estado de un usuario (activo, inactivo, baneado).
+     * Útil para marcar cuando un usuario se loguea o desloguea.
      * @param idUsuario UUID del usuario
      * @param nuevoEstado Nuevo estado ('activo', 'inactivo', 'baneado')
      */
-    void actualizarEstado(UUID idUsuario, String nuevoEstado);
+    void actualizarEstadoUsuario(UUID idUsuario, String nuevoEstado);
 }

@@ -1,0 +1,13 @@
+2025-10-15 07:35:47.739103Z jdbc[3]: exception
+org.h2.jdbc.JdbcSQLSyntaxErrorException: Syntax error in SQL statement "    CREATE TABLE IF NOT EXISTS usuarios (\000a        id_usuario UUID PRIMARY KEY [*]DEFAULT RANDOM_UUID(),\000a        nombre VARCHAR(255) NOT NULL,\000a        email VARCHAR(255) NOT NULL UNIQUE,\000a        estado VARCHAR(10) DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo', 'baneado')),\000a        foto BLOB,\000a        ip VARCHAR(45),\000a        fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\000a        photoIdServidor VARCHAR(255)\000a    )\000a"; expected "HASH, CONSTRAINT, COMMENT, UNIQUE, NOT NULL, CHECK, REFERENCES, ,, )"; SQL statement:
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id_usuario UUID PRIMARY KEY DEFAULT RANDOM_UUID(),
+        nombre VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        estado VARCHAR(10) DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo', 'baneado')),
+        foto BLOB,
+        ip VARCHAR(45),
+        fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        photoIdServidor VARCHAR(255)
+    )
+ [42001-224]

@@ -4,7 +4,7 @@ import dto.featureContactos.DTOContacto;
 import fachada.FachadaGeneralImpl;
 
 import observador.IObservador;
-import fachada.gestionContactos.IFachadaContactos;
+import fachada.gestionContactos.contactos.IFachadaContactos;
 
 import java.util.ArrayList;
 import java.util.List;

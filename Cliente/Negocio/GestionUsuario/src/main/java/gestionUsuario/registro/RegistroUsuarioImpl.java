@@ -5,15 +5,16 @@ import comunicacion.EnviadorPeticiones;
 import comunicacion.GestorRespuesta;
 import comunicacion.IEnviadorPeticiones;
 import comunicacion.IGestorRespuesta;
+import dominio.Usuario;
 import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
-import dto.repositorio.DTOUsuarioRepositorio;
 import dto.vistaRegistro.DTORegistro;
-// CORRECCIÓN 1: Se utiliza el paquete correcto para la capa de persistencia.
-import repositorio.usuario.IRepositorioUsuario;
-import repositorio.usuario.RepositorioUsuarioImpl;
+import gestionUsuario.especialista.EspecialistaUsuariosImpl;
+import gestionUsuario.especialista.IEspecialistaUsuarios;
 
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
@@ -26,14 +27,13 @@ public class RegistroUsuarioImpl implements IRegistroUsuario {
 
     private final IEnviadorPeticiones enviadorPeticiones;
     private final IGestorRespuesta gestorRespuesta;
-    private final IRepositorioUsuario repositorioUsuario;
+    private final IEspecialistaUsuarios especialistaUsuarios;
     private final Gson gson;
 
     public RegistroUsuarioImpl() {
         this.enviadorPeticiones = new EnviadorPeticiones();
-        // CORRECCIÓN 2: Se obtiene la instancia única del Singleton.
         this.gestorRespuesta = GestorRespuesta.getInstancia();
-        this.repositorioUsuario = new RepositorioUsuarioImpl();
+        this.especialistaUsuarios = new EspecialistaUsuariosImpl();
         this.gson = new Gson();
     }
 
@@ -49,28 +49,35 @@ public class RegistroUsuarioImpl implements IRegistroUsuario {
                     UUID userId = UUID.fromString(datosServidor.get("userId"));
                     String fechaRegistroStr = datosServidor.get("fechaRegistro");
                     Date fechaRegistro = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").parse(fechaRegistroStr);
-                    // Asumimos que la respuesta del servidor también contiene el photoId del archivo ya guardado.
                     String photoId = datosServidor.get("photoId");
 
-                    DTOUsuarioRepositorio datosParaGuardar = new DTOUsuarioRepositorio(
-                            userId,
-                            dto.getName(),
-                            dto.getEmail(),
-                            dto.getPassword(),
-                            fotoBytes,
-                            photoId,
-                            dto.getIp(),
-                            fechaRegistro
-                    );
+                    // Convertir Date a LocalDateTime
+                    LocalDateTime fechaRegistroLocal = fechaRegistro.toInstant()
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDateTime();
 
-                    repositorioUsuario.guardarUsuario(datosParaGuardar);
+                    // Crear entidad de dominio Usuario
+                    Usuario usuario = new Usuario();
+                    usuario.setIdUsuario(userId);
+                    usuario.setNombre(dto.getName());
+                    usuario.setEmail(dto.getEmail());
+                    usuario.setEstado("activo");
+                    usuario.setFoto(fotoBytes);
+                    usuario.setPhotoIdServidor(photoId);
+                    usuario.setIp(dto.getIp());
+                    usuario.setFechaRegistro(fechaRegistroLocal);
+
+                    // Guardar usando el especialista
+                    especialistaUsuarios.guardarUsuario(usuario);
                     resultadoFuturo.complete(true);
 
                 } catch (Exception e) {
-                    System.err.println("Error al procesar la respuesta de registro: " + e.getMessage());
+                    System.err.println("❌ [RegistroUsuario]: Error al procesar la respuesta de registro: " + e.getMessage());
+                    e.printStackTrace();
                     resultadoFuturo.complete(false);
                 }
             } else {
+                System.err.println("⚠️ [RegistroUsuario]: Registro no exitoso en el servidor");
                 resultadoFuturo.complete(false);
             }
         });
@@ -80,4 +87,3 @@ public class RegistroUsuarioImpl implements IRegistroUsuario {
         return resultadoFuturo;
     }
 }
-

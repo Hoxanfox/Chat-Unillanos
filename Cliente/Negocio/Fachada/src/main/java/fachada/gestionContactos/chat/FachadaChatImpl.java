@@ -1,4 +1,4 @@
-package fachada.gestionContactos;
+package fachada.gestionContactos.chat;
 
 import gestionArchivos.GestionArchivosImpl;
 import gestionArchivos.IGestionArchivos;

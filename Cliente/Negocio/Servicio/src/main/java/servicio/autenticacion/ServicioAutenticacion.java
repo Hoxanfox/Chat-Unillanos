@@ -3,7 +3,7 @@ package servicio.autenticacion;
 import dto.vistaLogin.DTOAutenticacion;
 import dto.vistaRegistro.DTORegistro;
 import fachada.FachadaGeneralImpl;
-import fachada.gestionUsuarios.IFachadaAutenticacionUsuario;
+import fachada.gestionUsuarios.autenticacion.IFachadaAutenticacionUsuario;
 
 import java.util.concurrent.CompletableFuture;
 

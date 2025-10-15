@@ -4,30 +4,28 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Clase de Dominio que representa la entidad 'MensajeRecibidoContacto'.
- * Corresponde directamente a la tabla de la base de datos para los mensajes
- * que el usuario local ha recibido.
+ * Entidad de Dominio: Mensaje Recibido de Canal
+ * Representa un mensaje recibido por un usuario desde un canal.
  */
-public class MensajeRecibidoContacto {
-
+public class MensajeRecibidoCanal {
     private UUID idMensaje;
     private byte[] contenido;
     private LocalDateTime fechaEnvio;
     private String tipo;
     private UUID idDestinatario;
-    private UUID idRemitenteUsuario;
+    private UUID idRemitenteCanal;
 
-    public MensajeRecibidoContacto() {
+    public MensajeRecibidoCanal() {
     }
 
-    public MensajeRecibidoContacto(UUID idMensaje, byte[] contenido, LocalDateTime fechaEnvio,
-                                   String tipo, UUID idDestinatario, UUID idRemitenteUsuario) {
+    public MensajeRecibidoCanal(UUID idMensaje, byte[] contenido, LocalDateTime fechaEnvio, 
+                                String tipo, UUID idDestinatario, UUID idRemitenteCanal) {
         this.idMensaje = idMensaje;
         this.contenido = contenido;
         this.fechaEnvio = fechaEnvio;
         this.tipo = tipo;
         this.idDestinatario = idDestinatario;
-        this.idRemitenteUsuario = idRemitenteUsuario;
+        this.idRemitenteCanal = idRemitenteCanal;
     }
 
     // Getters y Setters
@@ -71,22 +69,23 @@ public class MensajeRecibidoContacto {
         this.idDestinatario = idDestinatario;
     }
 
-    public UUID getIdRemitenteUsuario() {
-        return idRemitenteUsuario;
+    public UUID getIdRemitenteCanal() {
+        return idRemitenteCanal;
     }
 
-    public void setIdRemitenteUsuario(UUID idRemitenteUsuario) {
-        this.idRemitenteUsuario = idRemitenteUsuario;
+    public void setIdRemitenteCanal(UUID idRemitenteCanal) {
+        this.idRemitenteCanal = idRemitenteCanal;
     }
 
     @Override
     public String toString() {
-        return "MensajeRecibidoContacto{" +
+        return "MensajeRecibidoCanal{" +
                 "idMensaje=" + idMensaje +
                 ", tipo='" + tipo + '\'' +
                 ", fechaEnvio=" + fechaEnvio +
                 ", idDestinatario=" + idDestinatario +
-                ", idRemitenteUsuario=" + idRemitenteUsuario +
+                ", idRemitenteCanal=" + idRemitenteCanal +
                 '}';
     }
 }
+

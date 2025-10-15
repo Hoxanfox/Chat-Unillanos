@@ -1,7 +1,6 @@
-package fachada.gestionContactos;
+package fachada.gestionContactos.contactos;
 
 import dto.featureContactos.DTOContacto;
-import fachada.gestionContactos.IFachadaContactos;
 import observador.IObservador;
 import gestionContactos.actualizacion.GestionContactosImpl;
 import gestionContactos.actualizacion.IGestionContactos;

@@ -1,66 +1,113 @@
 package dominio;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
  * Clase de Dominio que representa la entidad 'Usuario'.
- * Contiene tanto los bytes de la foto para uso local como el ID del servidor.
+ * Coincide con la tabla 'usuarios' del esquema H2.
  */
 public class Usuario {
 
-    private final UUID idUsuario;
-    private final String nombre;
-    private final String email;
-    private final String password; // En una app real, esto sería un hash
-    private final byte[] foto;       // Para caché y visualización local rápida.
-    private final String photoId;    // El identificador del archivo en el servidor.
-    private final String ip;
-    private final Date fechaRegistro;
+    private UUID idUsuario;
+    private String nombre;
+    private String email;
+    private String estado; // 'activo', 'inactivo', 'baneado'
+    private byte[] foto;
+    private String ip;
+    private LocalDateTime fechaRegistro;
+    private String photoIdServidor;
 
-    public Usuario(UUID idUsuario, String nombre, String email, String password, byte[] foto, String photoId, String ip, Date fechaRegistro) {
+    public Usuario() {
+    }
+
+    public Usuario(UUID idUsuario, String nombre, String email, String estado,
+                   byte[] foto, String ip, LocalDateTime fechaRegistro, String photoIdServidor) {
         this.idUsuario = idUsuario;
         this.nombre = nombre;
         this.email = email;
-        this.password = password;
+        this.estado = estado;
         this.foto = foto;
-        this.photoId = photoId;
         this.ip = ip;
         this.fechaRegistro = fechaRegistro;
+        this.photoIdServidor = photoIdServidor;
     }
 
-    // Getters para todos los campos
-
+    // Getters y Setters
     public UUID getIdUsuario() {
         return idUsuario;
+    }
+
+    public void setIdUsuario(UUID idUsuario) {
+        this.idUsuario = idUsuario;
     }
 
     public String getNombre() {
         return nombre;
     }
 
+    public void setNombre(String nombre) {
+        this.nombre = nombre;
+    }
+
     public String getEmail() {
         return email;
     }
 
-    public String getPassword() {
-        return password;
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getEstado() {
+        return estado;
+    }
+
+    public void setEstado(String estado) {
+        this.estado = estado;
     }
 
     public byte[] getFoto() {
         return foto;
     }
 
-    public String getPhotoId() {
-        return photoId;
+    public void setFoto(byte[] foto) {
+        this.foto = foto;
     }
 
     public String getIp() {
         return ip;
     }
 
-    public Date getFechaRegistro() {
+    public void setIp(String ip) {
+        this.ip = ip;
+    }
+
+    public LocalDateTime getFechaRegistro() {
         return fechaRegistro;
     }
-}
 
+    public void setFechaRegistro(LocalDateTime fechaRegistro) {
+        this.fechaRegistro = fechaRegistro;
+    }
+
+    public String getPhotoIdServidor() {
+        return photoIdServidor;
+    }
+
+    public void setPhotoIdServidor(String photoIdServidor) {
+        this.photoIdServidor = photoIdServidor;
+    }
+
+    @Override
+    public String toString() {
+        return "Usuario{" +
+                "idUsuario=" + idUsuario +
+                ", nombre='" + nombre + '\'' +
+                ", email='" + email + '\'' +
+                ", estado='" + estado + '\'' +
+                ", ip='" + ip + '\'' +
+                ", fechaRegistro=" + fechaRegistro +
+                ", photoIdServidor='" + photoIdServidor + '\'' +
+                '}';
+    }
+}

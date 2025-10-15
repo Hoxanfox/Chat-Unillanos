@@ -1,9 +1,8 @@
 package servicio.chat;
 
 import fachada.FachadaGeneralImpl;
-import fachada.IFachadaGeneral;
 import observador.IObservador;
-import fachada.gestionContactos.IFachadaContactos;
+import fachada.gestionContactos.contactos.IFachadaContactos;
 
 import java.util.ArrayList;
 import java.util.List;

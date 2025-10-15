@@ -1,16 +1,18 @@
 package fachada;
 
-import fachada.gestionContactos.FachadaChatImpl;
-import fachada.gestionContactos.FachadaContactosImpl;
-import fachada.gestionContactos.IFachadaChat;
+import fachada.gestionContactos.chat.FachadaChatImpl;
+import fachada.gestionContactos.contactos.FachadaContactosImpl;
+import fachada.gestionContactos.chat.IFachadaChat;
 
 import fachada.gestionConexion.FachadaConexionImpl;
 import fachada.gestionConexion.IFachadaConexion;
 import fachada.gestionArchivos.FachadaArchivosImpl;
 import fachada.gestionArchivos.IFachadaArchivos;
-import fachada.gestionContactos.IFachadaContactos;
-import fachada.gestionUsuarios.FachadaAutenticacionUsuario;
-import fachada.gestionUsuarios.IFachadaAutenticacionUsuario;
+import fachada.gestionContactos.contactos.IFachadaContactos;
+import fachada.gestionUsuarios.autenticacion.FachadaAutenticacionUsuario;
+import fachada.gestionUsuarios.autenticacion.IFachadaAutenticacionUsuario;
+import fachada.gestionUsuarios.insercionDB.IFachadaUsuarios;
+import fachada.gestionUsuarios.insercionDB.FachadaUsuariosImpl;
 
 /**
  * Implementación del Singleton de la Fachada General.
@@ -24,7 +26,8 @@ public class FachadaGeneralImpl implements IFachadaGeneral {
     private final IFachadaArchivos fachadaArchivos;
     private final IFachadaConexion fachadaConexion;
     private final IFachadaChat fachadaChat;
-    private final IFachadaContactos fachadaContactos; // Se añade la fachada de contactos
+    private final IFachadaContactos fachadaContactos;
+    private final IFachadaUsuarios fachadaUsuarios;
 
     private FachadaGeneralImpl() {
         // Al crearse, se instancian todas las fachadas específicas.
@@ -32,7 +35,8 @@ public class FachadaGeneralImpl implements IFachadaGeneral {
         this.fachadaArchivos = new FachadaArchivosImpl();
         this.fachadaConexion = new FachadaConexionImpl();
         this.fachadaChat = new FachadaChatImpl();
-        this.fachadaContactos = new FachadaContactosImpl(); // Se instancia aquí
+        this.fachadaContactos = new FachadaContactosImpl();
+        this.fachadaUsuarios = new FachadaUsuariosImpl();
     }
 
     public static synchronized IFachadaGeneral getInstancia() {
@@ -66,5 +70,9 @@ public class FachadaGeneralImpl implements IFachadaGeneral {
     public IFachadaContactos getFachadaContactos() {
         return fachadaContactos;
     }
-}
 
+    @Override
+    public IFachadaUsuarios getFachadaUsuarios() {
+        return fachadaUsuarios;
+    }
+}

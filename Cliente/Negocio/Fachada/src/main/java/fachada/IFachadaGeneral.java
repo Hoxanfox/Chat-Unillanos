@@ -1,10 +1,11 @@
 package fachada;
 
-import fachada.gestionContactos.IFachadaChat;
+import fachada.gestionContactos.chat.IFachadaChat;
 import fachada.gestionConexion.IFachadaConexion;
 import fachada.gestionArchivos.IFachadaArchivos;
-import fachada.gestionUsuarios.IFachadaAutenticacionUsuario;
-import fachada.gestionContactos.IFachadaContactos; // Se importa la fachada de contactos
+import fachada.gestionUsuarios.autenticacion.IFachadaAutenticacionUsuario;
+import fachada.gestionUsuarios.insercionDB.IFachadaUsuarios;
+import fachada.gestionContactos.contactos.IFachadaContactos;
 
 /**
  * Contrato para la Fachada General que centraliza el acceso
@@ -21,5 +22,10 @@ public interface IFachadaGeneral {
      * @return una instancia de IFachadaContactos.
      */
     IFachadaContactos getFachadaContactos();
-}
 
+    /**
+     * Devuelve la instancia de la fachada que gestiona la lógica de usuarios.
+     * @return una instancia de IFachadaUsuarios.
+     */
+    IFachadaUsuarios getFachadaUsuarios();
+}

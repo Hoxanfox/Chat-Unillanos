@@ -1,5 +1,4 @@
 package gestionArchivos;
-
 import com.google.gson.Gson;
 import comunicacion.EnviadorPeticiones;
 import comunicacion.GestorRespuesta;
@@ -10,7 +9,6 @@ import dto.comunicacion.DTOResponse;
 import dto.gestionArchivos.DTOEndUpload;
 import dto.gestionArchivos.DTOStartUpload;
 import dto.gestionArchivos.DTOUploadChunk;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -26,7 +24,7 @@ public class GestionArchivosImpl implements IGestionArchivos {
     private final IEnviadorPeticiones enviadorPeticiones;
     private final IGestorRespuesta gestorRespuesta;
     private final Gson gson;
-    private static final int CHUNK_SIZE = 1024 * 512; // 512 KB por chunk
+    private static final int CHUNK_SIZE = 1024 * 16;  // 16 KB // 512 KB por chunk
 
     public GestionArchivosImpl() {
         this.enviadorPeticiones = new EnviadorPeticiones();

@@ -1,4 +1,4 @@
-package fachada.gestionContactos;
+package fachada.gestionContactos.contactos;
 
 import dto.featureContactos.DTOContacto;
 import observador.ISujeto;
