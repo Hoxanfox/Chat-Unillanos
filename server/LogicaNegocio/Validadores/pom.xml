@@ -25,6 +25,12 @@
             <artifactId>dtos</artifactId>
         </dependency>
 
+        <!-- Configuracion -->
+        <dependency>
+            <groupId>com.unillanos</groupId>
+            <artifactId>configuracion</artifactId>
+        </dependency>
+
         <!-- Spring Context -->
         <dependency>
             <groupId>org.springframework</groupId>

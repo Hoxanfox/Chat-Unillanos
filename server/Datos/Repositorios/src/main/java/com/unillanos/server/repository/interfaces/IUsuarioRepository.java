@@ -4,6 +4,7 @@ import com.unillanos.server.repository.models.EstadoUsuario;
 import com.unillanos.server.repository.models.UsuarioEntity;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -108,5 +109,13 @@ public interface IUsuarioRepository {
      * @param id ID del usuario
      */
     void deleteById(String id);
+    
+    /**
+     * Obtiene los usuarios más activos del día basado en cantidad de mensajes enviados.
+     *
+     * @param limit Número máximo de usuarios a retornar
+     * @return Lista de mapas con información del usuario (nombre, mensajes)
+     */
+    List<Map<String, Object>> getTopActivos(int limit);
 }
 

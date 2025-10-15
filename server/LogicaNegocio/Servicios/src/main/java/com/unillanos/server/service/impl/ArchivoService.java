@@ -1,5 +1,6 @@
 package com.unillanos.server.service.impl;
 
+import com.unillanos.server.config.ServerConfigProperties;
 import com.unillanos.server.dto.*;
 import com.unillanos.server.exception.AuthenticationException;
 import com.unillanos.server.exception.NotFoundException;
@@ -14,7 +15,6 @@ import com.unillanos.server.validation.TipoArchivoValidator;
 import com.unillanos.server.validation.TamanoArchivoValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -40,16 +40,16 @@ public class ArchivoService {
     private final IArchivoRepository archivoRepository;
     private final IUsuarioRepository usuarioRepository;
     private final LoggerService loggerService;
-    private final String directorioBase;
+    private final ServerConfigProperties config;
 
     public ArchivoService(IArchivoRepository archivoRepository,
                           IUsuarioRepository usuarioRepository,
                           LoggerService loggerService,
-                          @Value("${archivos.directorio.base:./uploads}") String directorioBase) {
+                          ServerConfigProperties config) {
         this.archivoRepository = archivoRepository;
         this.usuarioRepository = usuarioRepository;
         this.loggerService = loggerService;
-        this.directorioBase = directorioBase;
+        this.config = config;
         inicializarDirectorios();
     }
 
@@ -59,7 +59,7 @@ public class ArchivoService {
     public DTOResponse subirArchivo(DTOSubirArchivo dto) {
         try {
             // 1. Validar datos
-            SubirArchivoValidator.validate(dto);
+            SubirArchivoValidator.validate(dto, config);
 
             // 2. Verificar usuario
             Optional<UsuarioEntity> usuarioOpt = usuarioRepository.findById(dto.getUsuarioId());
@@ -91,7 +91,7 @@ public class ArchivoService {
             if (tipoLogico == null) {
                 throw new ValidationException("Tipo MIME no permitido", "tipoMime");
             }
-            TamanoArchivoValidator.validate(dto.getTamanoBytes(), tipoLogico);
+            TamanoArchivoValidator.validate(dto.getTamanoBytes(), tipoLogico, config);
 
             // 7. Generar IDs y ruta de almacenamiento
             String id = UUID.randomUUID().toString();
@@ -235,7 +235,7 @@ public class ArchivoService {
 
     private void inicializarDirectorios() {
         try {
-            Path baseDir = Paths.get(directorioBase);
+            Path baseDir = Paths.get(config.getArchivos().getDirectorioBase());
             Files.createDirectories(baseDir.resolve("imagenes"));
             Files.createDirectories(baseDir.resolve("audios"));
             Files.createDirectories(baseDir.resolve("documentos"));
@@ -246,13 +246,13 @@ public class ArchivoService {
     }
 
     private void guardarEnDisco(byte[] data, String rutaRelativa) throws IOException {
-        Path rutaCompleta = Paths.get(directorioBase, rutaRelativa);
+        Path rutaCompleta = Paths.get(config.getArchivos().getDirectorioBase(), rutaRelativa);
         Files.createDirectories(rutaCompleta.getParent());
         Files.write(rutaCompleta, data);
     }
 
     private byte[] leerDesdeDisco(String rutaRelativa) throws IOException {
-        Path rutaCompleta = Paths.get(directorioBase, rutaRelativa);
+        Path rutaCompleta = Paths.get(config.getArchivos().getDirectorioBase(), rutaRelativa);
         return Files.readAllBytes(rutaCompleta);
     }
 

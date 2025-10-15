@@ -6,6 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
+
 import java.time.LocalDateTime;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,12 +21,14 @@ import java.util.concurrent.Executors;
 public class LoggerService {
     
     private static final Logger logger = LoggerFactory.getLogger(LoggerService.class);
-        private final ILogRepository logRepository;
+    private final ILogRepository logRepository;
+    private final NotificationManager notificationManager;
     private final ExecutorService virtualThreadExecutor;
-        private final java.util.List<java.util.function.Consumer<String>> listeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final java.util.List<java.util.function.Consumer<String>> listeners = new java.util.concurrent.CopyOnWriteArrayList<>();
 
-    public LoggerService(ILogRepository logRepository) {
+    public LoggerService(ILogRepository logRepository, NotificationManager notificationManager) {
         this.logRepository = logRepository;
+        this.notificationManager = notificationManager;
         // Usar hilos virtuales de Java 21 para operaciones asíncronas
         this.virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
     }
@@ -38,6 +42,14 @@ public class LoggerService {
     public void logLogin(String usuarioId, String ipAddress) {
         logger.info("LOGIN - Usuario: {}, IP: {}", usuarioId, ipAddress);
         persistLogAsync("LOGIN", usuarioId, ipAddress, "login", "Usuario autenticado exitosamente");
+        
+        // Notificar a clientes GUI suscritos
+        notificationManager.notificar("LOG", Map.of(
+            "tipo", "LOGIN",
+            "usuarioId", usuarioId,
+            "ipAddress", ipAddress,
+            "mensaje", "Usuario autenticado exitosamente"
+        ));
     }
 
     /**
@@ -49,6 +61,14 @@ public class LoggerService {
     public void logLogout(String usuarioId, String ipAddress) {
         logger.info("LOGOUT - Usuario: {}, IP: {}", usuarioId, ipAddress);
         persistLogAsync("LOGOUT", usuarioId, ipAddress, "logout", "Usuario desconectado");
+        
+        // Notificar a clientes GUI suscritos
+        notificationManager.notificar("LOG", Map.of(
+            "tipo", "LOGOUT",
+            "usuarioId", usuarioId,
+            "ipAddress", ipAddress,
+            "mensaje", "Usuario desconectado"
+        ));
     }
 
     /**
@@ -82,6 +102,14 @@ public class LoggerService {
     public void logSystem(String accion, String detalles) {
         logger.info("SYSTEM - Acción: {}, Detalles: {}", accion, detalles);
         persistLogAsync("SYSTEM", null, null, accion, detalles);
+        
+        // Notificar a clientes GUI suscritos
+        notificationManager.notificar("LOG", Map.of(
+            "tipo", "SYSTEM",
+            "accion", accion,
+            "detalles", detalles,
+            "mensaje", "Evento del sistema"
+        ));
     }
 
     /**

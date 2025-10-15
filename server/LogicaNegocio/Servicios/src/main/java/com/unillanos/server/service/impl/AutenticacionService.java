@@ -1,5 +1,6 @@
 package com.unillanos.server.service.impl;
 
+import com.unillanos.server.config.ServerConfigProperties;
 import com.unillanos.server.dto.*;
 import com.unillanos.server.exception.AuthenticationException;
 import com.unillanos.server.exception.DuplicateResourceException;
@@ -32,13 +33,16 @@ public class AutenticacionService {
     private final IUsuarioRepository usuarioRepository;
     private final LoggerService loggerService;
     private final ConnectionManager connectionManager;
+    private final ServerConfigProperties config;
 
     public AutenticacionService(IUsuarioRepository usuarioRepository,
                                 LoggerService loggerService,
-                                ConnectionManager connectionManager) {
+                                ConnectionManager connectionManager,
+                                ServerConfigProperties config) {
         this.usuarioRepository = usuarioRepository;
         this.loggerService = loggerService;
         this.connectionManager = connectionManager;
+        this.config = config;
     }
 
     /**
@@ -51,7 +55,7 @@ public class AutenticacionService {
     public DTOResponse registrarUsuario(DTORegistro dto, String ipAddress) {
         try {
             // 1. Validar datos con RegistroValidator
-            RegistroValidator.validate(dto);
+            RegistroValidator.validate(dto, config);
             
             // 2. Verificar que el email no exista
             if (usuarioRepository.existsByEmail(dto.getEmail())) {
@@ -59,7 +63,7 @@ public class AutenticacionService {
             }
             
             // 3. Hashear la contraseña con BCrypt
-            String passwordHash = PasswordHasher.hash(dto.getPassword());
+            String passwordHash = PasswordHasher.hash(dto.getPassword(), config);
             
             // 4. Crear UsuarioEntity con ID UUID y estado OFFLINE
             UsuarioEntity usuario = new UsuarioEntity();
@@ -231,10 +235,10 @@ public class AutenticacionService {
                 }
                 
                 // Validar passwordNueva
-                PasswordValidator.validate(dto.getPasswordNueva());
+                PasswordValidator.validate(dto.getPasswordNueva(), config);
                 
                 // Hashear nueva contraseña
-                usuario.setPasswordHash(PasswordHasher.hash(dto.getPasswordNueva()));
+                usuario.setPasswordHash(PasswordHasher.hash(dto.getPasswordNueva(), config));
                 actualizado = true;
             }
             

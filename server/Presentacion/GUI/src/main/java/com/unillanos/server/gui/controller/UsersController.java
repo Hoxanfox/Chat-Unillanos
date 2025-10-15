@@ -1,6 +1,10 @@
 package com.unillanos.server.gui.controller;
 
 import com.unillanos.server.gui.SharedContext;
+import com.unillanos.server.gui.components.DebouncedSearchField;
+import com.unillanos.server.gui.components.ToastNotification;
+import com.unillanos.server.gui.styles.DesignSystem;
+import com.unillanos.server.gui.styles.StyleUtils;
 import com.unillanos.server.dto.DTOUsuario;
 import com.unillanos.server.service.impl.AdminUsersService;
 import javafx.collections.FXCollections;
@@ -22,7 +26,8 @@ import java.util.List;
 public class UsersController {
 
     private final BorderPane root;
-    private final TextField searchField;
+    private final DebouncedSearchField searchField;
+    private final ComboBox<String> estadoFilter;
     private final TableView<DTOUsuario> table;
     private final Pagination pagination;
     private final ObservableList<DTOUsuario> data;
@@ -38,18 +43,19 @@ public class UsersController {
         usersService = SharedContext.get().getBean(AdminUsersService.class);
 
         Label header = new Label("Usuarios");
-        header.setStyle("-fx-font-size: 20px; -fx-font-weight: bold;");
+        header.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; -fx-text-fill: #1F2937; -fx-padding: 16px 0px;");
 
-        searchField = new TextField();
-        searchField.setPromptText("Buscar por nombre o email...");
-        Button btnSearch = new Button("Buscar");
-        btnSearch.setOnAction(e -> debounceLoad());
+        searchField = new DebouncedSearchField(
+            "Buscar por nombre o email...",
+            searchTerm -> loadPage(0),
+            300 // 300ms delay
+        );
 
-        ComboBox<String> estadoFilter = new ComboBox<>();
+        estadoFilter = new ComboBox<>();
         estadoFilter.getItems().addAll("", "ONLINE", "OFFLINE", "AWAY");
         estadoFilter.setPromptText("Estado");
 
-        HBox topBar = new HBox(8, header, new Label(" "), searchField, estadoFilter, btnSearch);
+        HBox topBar = new HBox(8, header, new Label(" "), searchField, estadoFilter);
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setPadding(new Insets(0, 0, 12, 0));
 
@@ -62,6 +68,8 @@ public class UsersController {
         TableColumn<DTOUsuario, String> colEstado = new TableColumn<>("Estado");
         colEstado.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getEstado()));
         table.getColumns().addAll(colNombre, colEmail, colEstado);
+        
+        // Aplicar estilos a las columnas
 
         data = FXCollections.observableArrayList();
         table.setItems(data);
@@ -77,13 +85,35 @@ public class UsersController {
             {
                 btnLogout.setOnAction(e -> {
                     DTOUsuario u = getTableView().getItems().get(getIndex());
-                    usersService.forceLogout(u.getId());
-                    loadPage(pagination.getCurrentPageIndex());
+                    try {
+                        usersService.forceLogout(u.getId());
+                        ToastNotification.showSuccess(
+                            SharedContext.getPrimaryStage(),
+                            "Usuario " + u.getNombre() + " desconectado exitosamente"
+                        );
+                        loadPage(pagination.getCurrentPageIndex());
+                    } catch (Exception ex) {
+                        ToastNotification.showError(
+                            SharedContext.getPrimaryStage(),
+                            "Error al desconectar usuario: " + ex.getMessage()
+                        );
+                    }
                 });
                 btnOffline.setOnAction(e -> {
                     DTOUsuario u = getTableView().getItems().get(getIndex());
-                    usersService.changeEstado(u.getId(), "OFFLINE");
-                    loadPage(pagination.getCurrentPageIndex());
+                    try {
+                        usersService.changeEstado(u.getId(), "OFFLINE");
+                        ToastNotification.showInfo(
+                            SharedContext.getPrimaryStage(),
+                            "Estado del usuario " + u.getNombre() + " cambiado a OFFLINE"
+                        );
+                        loadPage(pagination.getCurrentPageIndex());
+                    } catch (Exception ex) {
+                        ToastNotification.showError(
+                            SharedContext.getPrimaryStage(),
+                            "Error al cambiar estado: " + ex.getMessage()
+                        );
+                    }
                 });
             }
             @Override
@@ -118,20 +148,32 @@ public class UsersController {
     }
 
     private Node loadPage(int pageIndex) {
-        int offset = pageIndex * PAGE_SIZE;
-        String q = searchField.getText();
-        String estado = null;
-        if (root.getTop() instanceof HBox top) {
-            for (var node : top.getChildren()) {
-                if (node instanceof ComboBox<?> cb) {
-                    Object v = ((ComboBox<?>) node).getValue();
-                    estado = v != null ? v.toString() : null;
-                }
+        try {
+            int offset = pageIndex * PAGE_SIZE;
+            String q = searchField.getText();
+            String estado = estadoFilter.getValue();
+            if ("TODOS".equals(estado)) {
+                estado = null;
             }
+            
+            List<DTOUsuario> list = usersService.listUsers(q, PAGE_SIZE, offset, estado);
+            data.setAll(list);
+            pagination.setPageCount(list.size() < PAGE_SIZE && pageIndex == 0 ? 1 : pageIndex + 2);
+            
+            // Mostrar información en la barra de estado si está disponible
+            if (list.isEmpty() && (q != null && !q.trim().isEmpty())) {
+                ToastNotification.showWarning(
+                    SharedContext.getPrimaryStage(),
+                    "No se encontraron usuarios con el criterio de búsqueda: " + q
+                );
+            }
+            
+        } catch (Exception e) {
+            ToastNotification.showError(
+                SharedContext.getPrimaryStage(),
+                "Error al cargar usuarios: " + e.getMessage()
+            );
         }
-        List<DTOUsuario> list = usersService.listUsers(q, PAGE_SIZE, offset, estado);
-        data.setAll(list);
-        pagination.setPageCount(list.size() < PAGE_SIZE && pageIndex == 0 ? 1 : pageIndex + 2);
         return table;
     }
 

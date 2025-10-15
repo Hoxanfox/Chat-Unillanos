@@ -1,7 +1,11 @@
 package com.unillanos.server.service.impl;
+
+import com.unillanos.server.config.ServerConfigProperties;
 import com.unillanos.server.repository.interfaces.ILogRepository;
+import com.unillanos.server.repository.interfaces.IMensajeRepository;
+import com.unillanos.server.repository.interfaces.IUsuarioRepository;
 import com.unillanos.server.repository.models.LogEntity;
-import org.springframework.beans.factory.annotation.Value;
+import com.unillanos.server.repository.models.TipoMensaje;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -19,17 +23,23 @@ import java.util.stream.Collectors;
 public class AdminMonitoringService {
 
     private final ConnectionManager connectionManager;
-    private final int nettyPort;
+    private final ServerConfigProperties config;
     private final ILogRepository logRepository;
+    private final IMensajeRepository mensajeRepository;
+    private final IUsuarioRepository usuarioRepository;
 
     private final LocalDateTime startTime;
 
     public AdminMonitoringService(ConnectionManager connectionManager,
+                                  ServerConfigProperties config,
                                   ILogRepository logRepository,
-                                  @Value("${server.netty.port:8080}") int nettyPort) {
+                                  IMensajeRepository mensajeRepository,
+                                  IUsuarioRepository usuarioRepository) {
         this.connectionManager = connectionManager;
+        this.config = config;
         this.logRepository = logRepository;
-        this.nettyPort = nettyPort;
+        this.mensajeRepository = mensajeRepository;
+        this.usuarioRepository = usuarioRepository;
         this.startTime = LocalDateTime.now();
     }
 
@@ -39,7 +49,7 @@ public class AdminMonitoringService {
     public Map<String, Object> getServerStatus() {
         Map<String, Object> status = new HashMap<>();
         status.put("active", true);
-        status.put("port", nettyPort);
+        status.put("port", config.getNetty().getPort());
         status.put("connections", connectionManager.getAllConnections().size());
         status.put("uptime", formatUptime(Duration.between(startTime, LocalDateTime.now())));
         return status;
@@ -69,6 +79,48 @@ public class AdminMonitoringService {
         long m = d.toMinutesPart();
         long s = d.toSecondsPart();
         return String.format("%02d:%02d:%02d", h, m, s);
+    }
+
+    /**
+     * Retorna estadísticas detalladas para los gráficos del dashboard.
+     */
+    public Map<String, Object> getEstadisticas() {
+        Map<String, Object> stats = new HashMap<>();
+        
+        try {
+            // Conexiones actuales
+            stats.put("connections", connectionManager.getAllConnections().size());
+            
+            // Contar mensajes por tipo hoy
+            int mensajesDirectos = mensajeRepository.countByTipoHoy(TipoMensaje.DIRECT);
+            int mensajesCanal = mensajeRepository.countByTipoHoy(TipoMensaje.CHANNEL);
+            stats.put("mensajesDirectos", mensajesDirectos);
+            stats.put("mensajesCanal", mensajesCanal);
+            
+            // Top usuarios activos
+            List<Map<String, Object>> topUsuarios = obtenerTopUsuariosActivos(5);
+            stats.put("topUsuarios", topUsuarios);
+            
+        } catch (Exception e) {
+            // En caso de error, retornar valores por defecto
+            stats.put("connections", 0);
+            stats.put("mensajesDirectos", 0);
+            stats.put("mensajesCanal", 0);
+            stats.put("topUsuarios", List.of());
+        }
+        
+        return stats;
+    }
+
+    /**
+     * Obtiene los usuarios más activos del día.
+     */
+    private List<Map<String, Object>> obtenerTopUsuariosActivos(int limit) {
+        try {
+            return usuarioRepository.getTopActivos(limit);
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 }
 

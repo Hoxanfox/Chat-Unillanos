@@ -17,6 +17,9 @@ public class MensajeEntity {
     private String contenido;
     private String fileId;              // null si no tiene archivo (para Épica 5)
     private LocalDateTime fechaEnvio;
+    private EstadoMensaje estado;       // ENVIADO, ENTREGADO, LEIDO
+    private LocalDateTime fechaEntrega;
+    private LocalDateTime fechaLectura;
     
     // Constructores
     public MensajeEntity() {
@@ -98,6 +101,30 @@ public class MensajeEntity {
     public void setFechaEnvio(LocalDateTime fechaEnvio) {
         this.fechaEnvio = fechaEnvio;
     }
+
+    public EstadoMensaje getEstado() {
+        return estado;
+    }
+
+    public void setEstado(EstadoMensaje estado) {
+        this.estado = estado;
+    }
+
+    public LocalDateTime getFechaEntrega() {
+        return fechaEntrega;
+    }
+
+    public void setFechaEntrega(LocalDateTime fechaEntrega) {
+        this.fechaEntrega = fechaEntrega;
+    }
+
+    public LocalDateTime getFechaLectura() {
+        return fechaLectura;
+    }
+
+    public void setFechaLectura(LocalDateTime fechaLectura) {
+        this.fechaLectura = fechaLectura;
+    }
     
     /**
      * Convierte la entidad a DTO.
@@ -124,6 +151,9 @@ public class MensajeEntity {
         dto.setFileId(this.fileId);
         dto.setFileName(fileName);
         dto.setFechaEnvio(this.fechaEnvio != null ? this.fechaEnvio.toString() : null);
+        dto.setEstado(this.estado != null ? this.estado.toString() : EstadoMensaje.ENVIADO.toString());
+        dto.setFechaEntrega(this.fechaEntrega != null ? this.fechaEntrega.toString() : null);
+        dto.setFechaLectura(this.fechaLectura != null ? this.fechaLectura.toString() : null);
         return dto;
     }
 
@@ -138,6 +168,9 @@ public class MensajeEntity {
                 ", contenido='" + (contenido != null && contenido.length() > 50 ? 
                     contenido.substring(0, 50) + "..." : contenido) + '\'' +
                 ", fechaEnvio=" + fechaEnvio +
+                ", estado=" + estado +
+                ", fechaEntrega=" + fechaEntrega +
+                ", fechaLectura=" + fechaLectura +
                 '}';
     }
 }

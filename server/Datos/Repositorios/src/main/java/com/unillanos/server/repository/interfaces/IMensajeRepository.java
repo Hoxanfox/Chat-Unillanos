@@ -1,6 +1,8 @@
 package com.unillanos.server.repository.interfaces;
 
+import com.unillanos.server.repository.models.EstadoMensaje;
 import com.unillanos.server.repository.models.MensajeEntity;
+import com.unillanos.server.repository.models.TipoMensaje;
 
 import java.util.List;
 import java.util.Optional;
@@ -93,5 +95,54 @@ public interface IMensajeRepository {
      * @param id ID del mensaje
      */
     void deleteById(Long id);
+    
+    // --- MÉTODOS DE ESTADO DE MENSAJES ---
+    
+    /**
+     * Actualiza el estado de un mensaje.
+     *
+     * @param mensajeId ID del mensaje
+     * @param nuevoEstado Nuevo estado del mensaje
+     */
+    void actualizarEstado(Long mensajeId, EstadoMensaje nuevoEstado);
+    
+    /**
+     * Marca un mensaje como entregado (cuando se envía la notificación).
+     *
+     * @param mensajeId ID del mensaje
+     */
+    void marcarComoEntregado(Long mensajeId);
+    
+    /**
+     * Marca un mensaje como leído por el destinatario.
+     *
+     * @param mensajeId ID del mensaje
+     * @param usuarioId ID del usuario que lee el mensaje
+     */
+    void marcarComoLeido(Long mensajeId, String usuarioId);
+    
+    /**
+     * Obtiene mensajes no leídos para un usuario específico.
+     *
+     * @param usuarioId ID del usuario
+     * @return Lista de IDs de mensajes no leídos
+     */
+    List<Long> obtenerMensajesNoLeidos(String usuarioId);
+    
+    /**
+     * Obtiene el conteo de mensajes no leídos para un usuario.
+     *
+     * @param usuarioId ID del usuario
+     * @return Cantidad de mensajes no leídos
+     */
+    int contarMensajesNoLeidos(String usuarioId);
+
+    /**
+     * Cuenta mensajes por tipo del día actual.
+     *
+     * @param tipo Tipo de mensaje a contar
+     * @return Cantidad de mensajes del tipo especificado enviados hoy
+     */
+    int countByTipoHoy(TipoMensaje tipo);
 }
 

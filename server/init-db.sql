@@ -58,6 +58,9 @@ CREATE TABLE IF NOT EXISTS mensajes (
     contenido TEXT NOT NULL,
     file_id VARCHAR(255),
     fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    estado VARCHAR(20) DEFAULT 'ENVIADO',
+    fecha_entrega TIMESTAMP NULL,
+    fecha_lectura TIMESTAMP NULL,
     FOREIGN KEY (remitente_id) REFERENCES usuarios(id) ON DELETE CASCADE,
     FOREIGN KEY (destinatario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
     FOREIGN KEY (canal_id) REFERENCES canales(id) ON DELETE CASCADE,
@@ -66,6 +69,7 @@ CREATE TABLE IF NOT EXISTS mensajes (
     INDEX idx_canal (canal_id),
     INDEX idx_tipo (tipo),
     INDEX idx_fecha_envio (fecha_envio),
+    INDEX idx_estado (estado),
     CHECK (
         (tipo = 'DIRECT' AND destinatario_id IS NOT NULL AND canal_id IS NULL) OR
         (tipo = 'CHANNEL' AND canal_id IS NOT NULL AND destinatario_id IS NULL)
@@ -101,6 +105,24 @@ CREATE TABLE IF NOT EXISTS logs_sistema (
     INDEX idx_timestamp (timestamp),
     INDEX idx_tipo (tipo),
     INDEX idx_usuario (usuario_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabla: chunk_sessions (para subida de archivos por trozos)
+CREATE TABLE IF NOT EXISTS chunk_sessions (
+    session_id VARCHAR(36) PRIMARY KEY,
+    usuario_id VARCHAR(36) NOT NULL,
+    nombre_archivo VARCHAR(255) NOT NULL,
+    tipo_mime VARCHAR(100) NOT NULL,
+    tamano_total BIGINT NOT NULL,
+    total_chunks INT NOT NULL,
+    chunks_recibidos TEXT,  -- JSON array [0,1,2,...]
+    fecha_inicio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ultima_actividad TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    estado VARCHAR(20) DEFAULT 'ACTIVA',
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    INDEX idx_usuario (usuario_id),
+    INDEX idx_estado (estado),
+    INDEX idx_ultima_actividad (ultima_actividad)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Datos de prueba (opcional, para desarrollo)

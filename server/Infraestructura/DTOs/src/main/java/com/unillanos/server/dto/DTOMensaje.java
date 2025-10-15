@@ -17,6 +17,9 @@ public class DTOMensaje {
     private String fileId;              // null si no tiene archivo
     private String fileName;            // null si no tiene archivo
     private String fechaEnvio;          // ISO-8601
+    private String estado;              // ENVIADO, ENTREGADO, LEIDO
+    private String fechaEntrega;        // ISO-8601, null si no entregado
+    private String fechaLectura;        // ISO-8601, null si no leído
 
     public DTOMensaje() {
     }
@@ -136,6 +139,30 @@ public class DTOMensaje {
         this.fechaEnvio = fechaEnvio;
     }
 
+    public String getEstado() {
+        return estado;
+    }
+
+    public void setEstado(String estado) {
+        this.estado = estado;
+    }
+
+    public String getFechaEntrega() {
+        return fechaEntrega;
+    }
+
+    public void setFechaEntrega(String fechaEntrega) {
+        this.fechaEntrega = fechaEntrega;
+    }
+
+    public String getFechaLectura() {
+        return fechaLectura;
+    }
+
+    public void setFechaLectura(String fechaLectura) {
+        this.fechaLectura = fechaLectura;
+    }
+
     @Override
     public String toString() {
         return "DTOMensaje{" +
@@ -147,6 +174,9 @@ public class DTOMensaje {
                 ", contenido='" + (contenido != null && contenido.length() > 50 ? 
                     contenido.substring(0, 50) + "..." : contenido) + '\'' +
                 ", fechaEnvio='" + fechaEnvio + '\'' +
+                ", estado='" + estado + '\'' +
+                ", fechaEntrega='" + fechaEntrega + '\'' +
+                ", fechaLectura='" + fechaLectura + '\'' +
                 '}';
     }
 }

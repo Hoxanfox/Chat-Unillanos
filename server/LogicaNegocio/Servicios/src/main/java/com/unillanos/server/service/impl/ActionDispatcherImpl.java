@@ -27,6 +27,8 @@ public class ActionDispatcherImpl implements IActionDispatcher {
     private final CanalService canalService;
     private final MensajeriaService mensajeriaService;
     private final ArchivoService archivoService;
+    private final ChunkingService chunkingService;
+    private final NotificationManager notificationManager;
     private final Gson gson;
 
     public ActionDispatcherImpl(GlobalExceptionHandler exceptionHandler, 
@@ -34,13 +36,17 @@ public class ActionDispatcherImpl implements IActionDispatcher {
                                 AutenticacionService autenticacionService,
                                 CanalService canalService,
                                 MensajeriaService mensajeriaService,
-                                ArchivoService archivoService) {
+                                ArchivoService archivoService,
+                                ChunkingService chunkingService,
+                                NotificationManager notificationManager) {
         this.exceptionHandler = exceptionHandler;
         this.loggerService = loggerService;
         this.autenticacionService = autenticacionService;
         this.canalService = canalService;
         this.mensajeriaService = mensajeriaService;
         this.archivoService = archivoService;
+        this.chunkingService = chunkingService;
+        this.notificationManager = notificationManager;
         this.gson = new Gson();
     }
 
@@ -83,11 +89,22 @@ public class ActionDispatcherImpl implements IActionDispatcher {
                 case "enviarMensajeDirecto" -> handleEnviarMensajeDirecto(request);
                 case "enviarMensajeCanal" -> handleEnviarMensajeCanal(request);
                 case "obtenerHistorial" -> handleObtenerHistorial(request);
+                case "marcar_mensaje_leido" -> handleMarcarMensajeLeido(request);
                 
                 // --- ACCIONES DE ARCHIVOS ---
                 case "subirArchivo" -> handleSubirArchivo(request);
                 case "descargarArchivo" -> handleDescargarArchivo(request);
                 case "listarArchivos" -> handleListarArchivos(request);
+                
+                // --- ACCIONES DE CHUNKING ---
+                case "iniciar_subida" -> handleIniciarSubida(request);
+                case "subir_chunk" -> handleSubirChunk(request);
+                case "finalizar_subida" -> handleFinalizarSubida(request);
+                case "descargar_chunk" -> handleDescargarChunk(request);
+                
+                // --- ACCIONES DE NOTIFICACIONES ---
+                case "suscribir_notificaciones" -> handleSuscribirNotificaciones(request, ctx);
+                case "desuscribir_notificaciones" -> handleDesuscribirNotificaciones(request);
                 
                 default -> DTOResponse.error(action, "Acción no reconocida: " + action);
             };
@@ -252,6 +269,57 @@ public class ActionDispatcherImpl implements IActionDispatcher {
         return archivoService.listarArchivos(dto);
     }
 
+    // --- HANDLERS DE NOTIFICACIONES ---
+
+    private DTOResponse handleSuscribirNotificaciones(DTORequest request, ChannelHandlerContext ctx) {
+        DTOSuscribirNotificaciones dto = gson.fromJson(gson.toJson(request.getPayload()), DTOSuscribirNotificaciones.class);
+        
+        // Generar un ID único para el cliente si no se proporciona
+        String clienteId = dto.getClienteId();
+        if (clienteId == null || clienteId.trim().isEmpty()) {
+            clienteId = "gui-" + System.currentTimeMillis();
+        }
+        
+        notificationManager.suscribir(clienteId, ctx, dto.getTiposInteres());
+        
+        return DTOResponse.success("suscribir_notificaciones", 
+            "Suscripción exitosa", 
+            Map.of("clienteId", clienteId, "tipos", dto.getTiposInteres()));
+    }
+
+    private DTOResponse handleDesuscribirNotificaciones(DTORequest request) {
+        DTOSuscribirNotificaciones dto = gson.fromJson(gson.toJson(request.getPayload()), DTOSuscribirNotificaciones.class);
+        
+        notificationManager.desuscribir(dto.getClienteId());
+        
+        return DTOResponse.success("desuscribir_notificaciones", 
+            "Desuscripción exitosa", 
+            Map.of("clienteId", dto.getClienteId()));
+    }
+
+    // --- HANDLERS DE CHUNKING ---
+
+    private DTOResponse handleIniciarSubida(DTORequest request) {
+        DTOIniciarSubida dto = gson.fromJson(gson.toJson(request.getPayload()), DTOIniciarSubida.class);
+        return chunkingService.iniciarSubida(dto);
+    }
+
+    private DTOResponse handleSubirChunk(DTORequest request) {
+        DTOSubirArchivoChunk dto = gson.fromJson(gson.toJson(request.getPayload()), DTOSubirArchivoChunk.class);
+        return chunkingService.subirChunk(dto);
+    }
+
+    private DTOResponse handleFinalizarSubida(DTORequest request) {
+        Map<String, Object> payload = gson.fromJson(gson.toJson(request.getPayload()), Map.class);
+        String sessionId = (String) payload.get("sessionId");
+        return chunkingService.finalizarSubida(sessionId);
+    }
+
+    private DTOResponse handleDescargarChunk(DTORequest request) {
+        DTODescargarArchivoChunk dto = gson.fromJson(gson.toJson(request.getPayload()), DTODescargarArchivoChunk.class);
+        return chunkingService.descargarChunk(dto);
+    }
+
     /**
      * Extrae la dirección IP del cliente desde el contexto de Netty.
      *
@@ -266,6 +334,17 @@ public class ActionDispatcherImpl implements IActionDispatcher {
             logger.warn("No se pudo extraer la IP del cliente", e);
             return "unknown";
         }
+    }
+
+    /**
+     * Maneja la acción marcar_mensaje_leido.
+     *
+     * @param request DTORequest con los datos del mensaje a marcar como leído
+     * @return DTOResponse con el resultado de la operación
+     */
+    private DTOResponse handleMarcarMensajeLeido(DTORequest request) {
+        DTOMarcarMensajeLeido dto = gson.fromJson(gson.toJson(request.getPayload()), DTOMarcarMensajeLeido.class);
+        return mensajeriaService.marcarComoLeido(dto);
     }
 }
 

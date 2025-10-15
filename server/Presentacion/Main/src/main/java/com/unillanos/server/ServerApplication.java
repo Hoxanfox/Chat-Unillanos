@@ -3,11 +3,13 @@ package com.unillanos.server;
 import com.unillanos.server.netty.server.NettyServer;
 import com.unillanos.server.gui.MainWindow;
 import com.unillanos.server.gui.SharedContext;
+import com.unillanos.server.config.ServerConfigProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.ComponentScan;
 
@@ -16,6 +18,7 @@ import org.springframework.context.annotation.ComponentScan;
  * Inicializa Spring Boot y arranca el servidor Netty.
  */
 @SpringBootApplication
+@EnableConfigurationProperties(ServerConfigProperties.class)
 @ComponentScan(basePackages = "com.unillanos.server")
 public class ServerApplication implements CommandLineRunner {
     

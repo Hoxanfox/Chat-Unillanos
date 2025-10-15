@@ -1,0 +1,646 @@
+---
+alwaysApply: false
+---
+
+# Plan de Implementación - Servidor Chat-Unillanos
+
+- [ ] 1. Configurar estructura del proyecto Maven multi-módulo
+  - Crear pom.xml padre con definición de módulos y dependencias comunes
+  - Configurar versiones de Java 21, Spring Boot 3.3.5, Netty 4.1.110, MySQL 8.x
+  - Crear estructura de carpetas según la arquitectura de 4 capas
+  - Configurar docker-compose.yml para MySQL
+  - _Requirements: 10.1, 10.4_
+
+- [ ] 2. Implementar capa de infraestructura base
+  - [ ] 2.1 Crear módulo DTOs.jar con clases de transferencia de datos
+    - Implementar DTORequest con campos action y payload
+    - Implementar DTOResponse con campos action, status, message y data
+    - Crear DTOs específicos: DTOLogin, DTORegistro, DTOMensaje, DTOCrearCanal, DTOSubirArchivo
+    - Añadir enums: EstadoUsuario, TipoMensaje, RolCanal
+    - _Requirements: 5.1, 5.3_
+  
+  - [ ] 2.2 Crear módulo Configuracion.jar con propiedades
+    - Implementar clase ConfigurationProperties para cargar application.properties
+    - Definir propiedades de base de datos (URL, usuario, contraseña, pool size)
+    - Definir propiedades de Netty (puerto, threads)
+    - _Requirements: 10.2_
+  
+  - [ ] 2.3 Crear módulo Logs.jar con sistema de logging
+    - Implementar LoggerService con SLF4J/Logback
+    - Crear métodos para registrar eventos: info, warn, error
+    - Implementar patrón Observer para notificar a la GUI
+    - _Requirements: 8.3, 8.4_
+
+- [ ] 3. Implementar capa de datos con JDBC
+  - [ ] 3.1 Crear entidades del dominio
+    - Implementar UsuarioEntity con todos los campos del modelo
+    - Implementar CanalEntity con campos y relaciones
+    - Implementar MensajeEntity con soporte para mensajes directos y de canal
+    - Implementar ArchivoEntity con hash SHA-256
+    - Implementar LogSistemaEntity para auditoría
+    - _Requirements: 6.4_
+  
+  - [ ] 3.2 Crear mappers para convertir ResultSet a entidades
+    - Implementar UsuarioMapper.mapRow()
+    - Implementar CanalMapper.mapRow()
+    - Implementar MensajeMapper.mapRow()
+    - Implementar ArchivoMapper.mapRow()
+    - _Requirements: 6.4_
+  
+  - [ ] 3.3 Implementar interfaces de repositorios
+    - Crear IUsuarioRepository con métodos CRUD
+    - Crear ICanalRepository con métodos de gestión de canales
+    - Crear IMensajeRepository con métodos de mensajería
+    - Crear IArchivoRepository con métodos de gestión de archivos
+    - Crear ILogSistemaRepository para auditoría
+    - _Requirements: 6.1, 10.2_
+  
+  - [ ] 3.4 Implementar repositorios con JDBC y HikariCP
+    - Implementar UsuarioRepositoryImpl con operaciones: findById, findByEmail, save, updateEstado
+    - Implementar CanalRepositoryImpl con operaciones: create, findById, addMember, listByUser
+    - Implementar MensajeRepositoryImpl con operaciones: save, findHistorial, findByCanal
+    - Implementar ArchivoRepositoryImpl con operaciones: save, findByHash, findById
+    - Implementar LogSistemaRepositoryImpl con operaciones: save, findByFilters
+    - Usar PreparedStatement en todas las operaciones
+    - Cerrar recursos en bloques finally
+    - _Requirements: 6.1, 6.2, 6.3, 6.5_
+  
+  - [ ]* 3.5 Escribir tests de integración para repositorios
+    - Configurar Testcontainers con MySQL para tests
+    - Escribir tests para UsuarioRepositoryImpl
+    - Escribir tests para CanalRepositoryImpl
+    - Escribir tests para MensajeRepositoryImpl
+    - Escribir tests para ArchivoRepositoryImpl
+    - _Requirements: 6.1, 6.2_
+
+- [ ] 4. Implementar capa de validación
+  - [ ] 4.1 Crear validadores de datos
+    - Implementar EmailValidator con regex para formato de email
+    - Implementar PasswordValidator con reglas de fortaleza
+    - Implementar DTOValidator para validar campos requeridos
+    - Implementar FileValidator para validar tamaño y tipo de archivos
+    - _Requirements: 9.1, 9.3_
+  
+  - [ ]* 4.2 Escribir tests unitarios para validadores
+    - Escribir tests para EmailValidator con casos válidos e inválidos
+    - Escribir tests para PasswordValidator con diferentes fortalezas
+    - Escribir tests para DTOValidator con DTOs completos e incompletos
+    - Escribir tests para FileValidator con diferentes tamaños y tipos
+    - _Requirements: 9.1, 9.3_
+
+- [ ] 5. Implementar capa de lógica de negocio
+  - [ ] 5.1 Crear interfaces de servicios
+    - Crear IActionDispatcher con método dispatch()
+    - Crear IAutenticacionService con métodos de autenticación
+    - Crear IMensajeriaService con métodos de mensajería
+    - Crear ICanalService con métodos de gestión de canales
+    - Crear IArchivoService con métodos de gestión de archivos
+    - _Requirements: 10.2_
+  
+  - [ ] 5.2 Implementar AutenticacionService
+    - Implementar registrarUsuario() con validación de email único y hashing BCrypt
+    - Implementar autenticarUsuario() con verificación de credenciales
+    - Implementar actualizarPerfil() con validación de datos
+    - Usar inyección por constructor para repositorios y validadores
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 9.2_
+  
+  - [ ] 5.3 Implementar CanalService
+    - Implementar crearCanal() con asignación automática de rol admin
+    - Implementar unirseCanal() con registro de fecha de unión
+    - Implementar listarCanales() filtrando por usuario
+    - Implementar invitarUsuario() con notificación a miembros
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+  
+  - [ ] 5.4 Implementar MensajeriaService
+    - Implementar enviarMensajeDirecto() con tipo DIRECT y notificación al destinatario
+    - Implementar enviarMensajeCanal() con tipo CHANNEL y notificación a miembros
+    - Implementar obtenerHistorial() con ordenamiento por fecha
+    - Implementar soporte para archivos adjuntos en mensajes
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+  
+  - [ ] 5.5 Implementar ArchivoService
+    - Implementar subirArchivo() con cálculo de hash SHA-256
+    - Implementar verificarDuplicado() para reutilizar archivos existentes
+    - Implementar descargarArchivo() con verificación de permisos
+    - Almacenar metadatos del archivo en base de datos
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
+  
+  - [ ] 5.6 Implementar ConnectionManager
+    - Crear mapa ConcurrentHashMap<String, ChannelHandlerContext> para conexiones
+    - Implementar registrarConexion() para añadir usuarios conectados
+    - Implementar desconectarUsuario() para remover del mapa
+    - Implementar notificarUsuario() para enviar DTOResponse a usuario específico
+    - Implementar notificarCanal() para enviar DTOResponse a todos los miembros del canal
+    - Actualizar estado de usuario a ONLINE/OFFLINE en base de datos
+    - _Requirements: 1.5, 3.1, 3.2_
+  
+  - [ ] 5.7 Implementar ActionDispatcherImpl
+    - Crear mapa de acciones a servicios
+    - Implementar dispatch() que enruta según campo action del DTORequest
+    - Manejar acciones: "login", "register", "sendMessage", "createChannel", "uploadFile", etc.
+    - Capturar excepciones y retornar DTOResponse con status error
+    - _Requirements: 5.2, 5.4_
+  
+  - [ ]* 5.8 Escribir tests unitarios para servicios
+    - Escribir tests para AutenticacionService con repositorios mockeados
+    - Escribir tests para CanalService con repositorios mockeados
+    - Escribir tests para MensajeriaService con repositorios mockeados
+    - Escribir tests para ArchivoService con repositorios mockeados
+    - Escribir tests para ActionDispatcherImpl con servicios mockeados
+    - _Requirements: 1.1, 2.1, 3.1, 4.1_
+
+- [ ] 6. Implementar servidor Netty
+  - [ ] 6.1 Crear configuración del servidor Netty
+    - Configurar EventLoopGroup con hilos virtuales de Java 21
+    - Configurar ServerBootstrap con opciones de red
+    - Implementar pipeline con LineBasedFrameDecoder y StringDecoder/Encoder
+    - Configurar puerto desde application.properties
+    - _Requirements: 5.5, 10.3_
+  
+  - [ ] 6.2 Implementar ClientRequestHandler
+    - Implementar channelRead() para deserializar DTORequest con Gson
+    - Delegar petición a IActionDispatcher
+    - Serializar DTOResponse y enviar al cliente con delimitador \n
+    - Implementar channelActive() para registrar conexión en ConnectionManager
+    - Implementar channelInactive() para desconectar usuario
+    - Implementar exceptionCaught() para manejar errores de red
+    - _Requirements: 5.1, 5.2, 5.3, 5.4_
+  
+  - [ ] 6.3 Integrar servidor Netty con Spring Boot
+    - Crear bean de NettyServer en configuración de Spring
+    - Iniciar servidor Netty al arrancar la aplicación
+    - Detener servidor Netty al cerrar la aplicación
+    - _Requirements: 5.5, 10.3_
+
+- [ ] 7. Implementar sistema de logging y auditoría
+  - [ ] 7.1 Configurar Logback
+    - Crear logback.xml con appenders para consola y archivo
+    - Configurar niveles de log por paquete
+    - Configurar formato de logs con timestamp, nivel y mensaje
+    - _Requirements: 8.3_
+  
+  - [ ] 7.2 Implementar registro de eventos en base de datos
+    - Registrar eventos de LOGIN en logs_sistema
+    - Registrar eventos de SYSTEM (inicio/detención del servidor)
+    - Registrar acciones importantes con usuario_id, ip_address y detalles
+    - Registrar errores con nivel ERROR
+    - _Requirements: 8.1, 8.2, 8.4, 8.5_
+  
+  - [ ] 7.3 Implementar patrón Observer para notificaciones
+    - Crear interfaz ILogObserver con método onLogEvent()
+    - Implementar lista de observadores en LoggerService
+    - Notificar a observadores cuando ocurre un evento importante
+    - _Requirements: 7.5, 8.2_
+
+- [ ] 8. Implementar interfaz de administración JavaFX
+  - [ ] 8.1 Crear estructura MVC de la GUI
+    - Crear DashboardController como controlador principal
+    - Crear vistas FXML: dashboard.fxml, users-table.fxml, logs-view.fxml
+    - Configurar Scene y Stage principal
+    - _Requirements: 7.1_
+  
+  - [ ] 8.2 Implementar vista de estado del servidor
+    - Mostrar estado del servidor (activo/inactivo)
+    - Mostrar número de conexiones activas
+    - Mostrar botones para iniciar/detener servidor
+    - Actualizar en tiempo real usando patrón Observer
+    - _Requirements: 7.1, 7.5_
+  
+  - [ ] 8.3 Implementar vista de usuarios conectados
+    - Crear TableView con columnas: nombre, email, IP, estado
+    - Actualizar tabla cuando usuarios se conectan/desconectan
+    - Implementar búsqueda y filtrado de usuarios
+    - _Requirements: 7.2, 7.4_
+  
+  - [ ] 8.4 Implementar vista de logs del sistema
+    - Crear TableView con columnas: timestamp, tipo, usuario, acción, detalles
+    - Implementar filtros por tipo, usuario y rango de fechas
+    - Actualizar logs en tiempo real usando patrón Observer
+    - _Requirements: 7.3, 8.5_
+  
+  - [ ] 8.5 Integrar GUI con servicios del backend
+    - Inyectar ConnectionManager para obtener usuarios conectados
+    - Inyectar LoggerService como Observable
+    - Implementar ILogObserver en DashboardController
+    - Actualizar vistas cuando se reciben notificaciones
+    - _Requirements: 7.5_
+
+- [ ] 9. Implementar punto de entrada principal
+  - [ ] 9.1 Crear clase ServerApplication
+    - Anotar con @SpringBootApplication
+    - Implementar método main() que inicia Spring Boot
+    - Inicializar JavaFX en hilo separado
+    - Configurar shutdown hooks para cerrar recursos
+    - _Requirements: 10.3, 10.5_
+  
+  - [ ] 9.2 Configurar inyección de dependencias
+    - Configurar beans de Spring para todos los servicios
+    - Configurar beans para repositorios
+    - Configurar bean de HikariCP DataSource
+    - Configurar bean de NettyServer
+    - Usar inyección por constructor en todos los componentes
+    - _Requirements: 10.3_
+
+- [ ] 10. Crear scripts de base de datos
+  - [ ] 10.1 Crear script de inicialización de esquema
+    - Crear tabla usuarios con todos los campos y constraints
+    - Crear tabla canales con foreign key a usuarios
+    - Crear tabla canal_miembros con composite primary key
+    - Crear tabla mensajes con foreign keys y índices
+    - Crear tabla archivos con unique constraints en hash y nombre
+    - Crear tabla logs_sistema con índices en timestamp y tipo
+    - _Requirements: 6.1, 8.1_
+  
+  - [ ] 10.2 Crear script de datos de prueba
+    - Insertar usuarios de prueba con contraseñas hasheadas
+    - Insertar canales de prueba
+    - Insertar relaciones en canal_miembros
+    - Insertar mensajes de prueba
+    - _Requirements: 6.1_
+
+- [ ] 11. Configurar Docker Compose
+  - [ ] 11.1 Crear docker-compose.yml para MySQL
+    - Configurar servicio MySQL 8.x
+    - Configurar volumen para persistencia de datos
+    - Configurar variables de entorno (usuario, contraseña, base de datos)
+    - Exponer puerto 3306
+    - Montar script de inicialización de esquema
+    - _Requirements: 6.1_
+
+- [ ] 12. Implementar manejo de errores global
+  - [ ] 12.1 Crear excepciones personalizadas
+    - Crear ValidationException con campo y mensaje
+    - Crear RepositoryException con operación y causa
+    - Crear AuthenticationException con razón
+    - _Requirements: 9.4_
+  
+  - [ ] 12.2 Implementar manejo de errores en cada capa
+    - Capturar excepciones en ClientRequestHandler y retornar DTOResponse con error
+    - Capturar excepciones en servicios y convertir a mensajes descriptivos
+    - Capturar SQLException en repositorios y lanzar RepositoryException
+    - Registrar todos los errores en logs
+    - _Requirements: 5.4, 9.4_
+
+- [ ] 13. Implementar seguridad
+  - [ ] 13.1 Implementar hashing de contraseñas con BCrypt
+    - Usar BCrypt.withDefaults().hashToString() con factor 12
+    - Implementar verificación de contraseña con BCrypt.verifyer()
+    - _Requirements: 9.2_
+  
+  - [ ] 13.2 Implementar prevención de SQL injection
+    - Verificar que todos los repositorios usen PreparedStatement
+    - Nunca concatenar strings para construir queries
+    - _Requirements: 6.1, 9.2_
+  
+  - [ ] 13.3 Implementar validación de entrada
+    - Validar todos los DTOs antes de procesarlos en servicios
+    - Sanitizar datos de usuario antes de almacenar
+    - _Requirements: 9.1, 9.3_
+
+- [ ] 14. Realizar pruebas end-to-end
+  - [ ] 14.1 Crear cliente de prueba TCP
+    - Implementar cliente que se conecta al servidor Netty
+    - Implementar serialización/deserialización de DTOs
+    - _Requirements: 5.1, 5.3_
+  
+  - [ ]* 14.2 Escribir tests end-to-end
+    - Test de flujo completo: registro → login → enviar mensaje directo
+    - Test de flujo de canales: crear canal → unirse → enviar mensaje
+    - Test de flujo de archivos: subir archivo → enviar en mensaje → descargar
+    - Test de notificaciones en tiempo real
+    - _Requirements: 1.1, 1.2, 2.1, 3.1, 4.1_
+
+- [ ] 15. Documentar y finalizar
+  - [ ] 15.1 Verificar compilación del proyecto
+    - Ejecutar mvn clean install sin errores
+    - Verificar que no existan dependencias cíclicas
+    - Verificar que todas las capas respeten la arquitectura
+    - _Requirements: 10.1, 10.4_
+  
+  - [ ] 15.2 Crear README con instrucciones
+    - Documentar requisitos previos (Java 21, Maven, Docker)
+    - Documentar comandos para levantar base de datos
+    - Documentar comandos para compilar y ejecutar el servidor
+    - Documentar estructura del proyecto
+    - _Requirements: 10.5_
+# Plan de Implementación - Servidor Chat-Unillanos
+
+- [ ] 1. Configurar estructura del proyecto Maven multi-módulo
+  - Crear pom.xml padre con definición de módulos y dependencias comunes
+  - Configurar versiones de Java 21, Spring Boot 3.3.5, Netty 4.1.110, MySQL 8.x
+  - Crear estructura de carpetas según la arquitectura de 4 capas
+  - Configurar docker-compose.yml para MySQL
+  - _Requirements: 10.1, 10.4_
+
+- [ ] 2. Implementar capa de infraestructura base
+  - [ ] 2.1 Crear módulo DTOs.jar con clases de transferencia de datos
+    - Implementar DTORequest con campos action y payload
+    - Implementar DTOResponse con campos action, status, message y data
+    - Crear DTOs específicos: DTOLogin, DTORegistro, DTOMensaje, DTOCrearCanal, DTOSubirArchivo
+    - Añadir enums: EstadoUsuario, TipoMensaje, RolCanal
+    - _Requirements: 5.1, 5.3_
+  
+  - [ ] 2.2 Crear módulo Configuracion.jar con propiedades
+    - Implementar clase ConfigurationProperties para cargar application.properties
+    - Definir propiedades de base de datos (URL, usuario, contraseña, pool size)
+    - Definir propiedades de Netty (puerto, threads)
+    - _Requirements: 10.2_
+  
+  - [ ] 2.3 Crear módulo Logs.jar con sistema de logging
+    - Implementar LoggerService con SLF4J/Logback
+    - Crear métodos para registrar eventos: info, warn, error
+    - Implementar patrón Observer para notificar a la GUI
+    - _Requirements: 8.3, 8.4_
+
+- [ ] 3. Implementar capa de datos con JDBC
+  - [ ] 3.1 Crear entidades del dominio
+    - Implementar UsuarioEntity con todos los campos del modelo
+    - Implementar CanalEntity con campos y relaciones
+    - Implementar MensajeEntity con soporte para mensajes directos y de canal
+    - Implementar ArchivoEntity con hash SHA-256
+    - Implementar LogSistemaEntity para auditoría
+    - _Requirements: 6.4_
+  
+  - [ ] 3.2 Crear mappers para convertir ResultSet a entidades
+    - Implementar UsuarioMapper.mapRow()
+    - Implementar CanalMapper.mapRow()
+    - Implementar MensajeMapper.mapRow()
+    - Implementar ArchivoMapper.mapRow()
+    - _Requirements: 6.4_
+  
+  - [ ] 3.3 Implementar interfaces de repositorios
+    - Crear IUsuarioRepository con métodos CRUD
+    - Crear ICanalRepository con métodos de gestión de canales
+    - Crear IMensajeRepository con métodos de mensajería
+    - Crear IArchivoRepository con métodos de gestión de archivos
+    - Crear ILogSistemaRepository para auditoría
+    - _Requirements: 6.1, 10.2_
+  
+  - [ ] 3.4 Implementar repositorios con JDBC y HikariCP
+    - Implementar UsuarioRepositoryImpl con operaciones: findById, findByEmail, save, updateEstado
+    - Implementar CanalRepositoryImpl con operaciones: create, findById, addMember, listByUser
+    - Implementar MensajeRepositoryImpl con operaciones: save, findHistorial, findByCanal
+    - Implementar ArchivoRepositoryImpl con operaciones: save, findByHash, findById
+    - Implementar LogSistemaRepositoryImpl con operaciones: save, findByFilters
+    - Usar PreparedStatement en todas las operaciones
+    - Cerrar recursos en bloques finally
+    - _Requirements: 6.1, 6.2, 6.3, 6.5_
+  
+  - [ ]* 3.5 Escribir tests de integración para repositorios
+    - Configurar Testcontainers con MySQL para tests
+    - Escribir tests para UsuarioRepositoryImpl
+    - Escribir tests para CanalRepositoryImpl
+    - Escribir tests para MensajeRepositoryImpl
+    - Escribir tests para ArchivoRepositoryImpl
+    - _Requirements: 6.1, 6.2_
+
+- [ ] 4. Implementar capa de validación
+  - [ ] 4.1 Crear validadores de datos
+    - Implementar EmailValidator con regex para formato de email
+    - Implementar PasswordValidator con reglas de fortaleza
+    - Implementar DTOValidator para validar campos requeridos
+    - Implementar FileValidator para validar tamaño y tipo de archivos
+    - _Requirements: 9.1, 9.3_
+  
+  - [ ]* 4.2 Escribir tests unitarios para validadores
+    - Escribir tests para EmailValidator con casos válidos e inválidos
+    - Escribir tests para PasswordValidator con diferentes fortalezas
+    - Escribir tests para DTOValidator con DTOs completos e incompletos
+    - Escribir tests para FileValidator con diferentes tamaños y tipos
+    - _Requirements: 9.1, 9.3_
+
+- [ ] 5. Implementar capa de lógica de negocio
+  - [ ] 5.1 Crear interfaces de servicios
+    - Crear IActionDispatcher con método dispatch()
+    - Crear IAutenticacionService con métodos de autenticación
+    - Crear IMensajeriaService con métodos de mensajería
+    - Crear ICanalService con métodos de gestión de canales
+    - Crear IArchivoService con métodos de gestión de archivos
+    - _Requirements: 10.2_
+  
+  - [ ] 5.2 Implementar AutenticacionService
+    - Implementar registrarUsuario() con validación de email único y hashing BCrypt
+    - Implementar autenticarUsuario() con verificación de credenciales
+    - Implementar actualizarPerfil() con validación de datos
+    - Usar inyección por constructor para repositorios y validadores
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 9.2_
+  
+  - [ ] 5.3 Implementar CanalService
+    - Implementar crearCanal() con asignación automática de rol admin
+    - Implementar unirseCanal() con registro de fecha de unión
+    - Implementar listarCanales() filtrando por usuario
+    - Implementar invitarUsuario() con notificación a miembros
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+  
+  - [ ] 5.4 Implementar MensajeriaService
+    - Implementar enviarMensajeDirecto() con tipo DIRECT y notificación al destinatario
+    - Implementar enviarMensajeCanal() con tipo CHANNEL y notificación a miembros
+    - Implementar obtenerHistorial() con ordenamiento por fecha
+    - Implementar soporte para archivos adjuntos en mensajes
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+  
+  - [ ] 5.5 Implementar ArchivoService
+    - Implementar subirArchivo() con cálculo de hash SHA-256
+    - Implementar verificarDuplicado() para reutilizar archivos existentes
+    - Implementar descargarArchivo() con verificación de permisos
+    - Almacenar metadatos del archivo en base de datos
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
+  
+  - [ ] 5.6 Implementar ConnectionManager
+    - Crear mapa ConcurrentHashMap<String, ChannelHandlerContext> para conexiones
+    - Implementar registrarConexion() para añadir usuarios conectados
+    - Implementar desconectarUsuario() para remover del mapa
+    - Implementar notificarUsuario() para enviar DTOResponse a usuario específico
+    - Implementar notificarCanal() para enviar DTOResponse a todos los miembros del canal
+    - Actualizar estado de usuario a ONLINE/OFFLINE en base de datos
+    - _Requirements: 1.5, 3.1, 3.2_
+  
+  - [ ] 5.7 Implementar ActionDispatcherImpl
+    - Crear mapa de acciones a servicios
+    - Implementar dispatch() que enruta según campo action del DTORequest
+    - Manejar acciones: "login", "register", "sendMessage", "createChannel", "uploadFile", etc.
+    - Capturar excepciones y retornar DTOResponse con status error
+    - _Requirements: 5.2, 5.4_
+  
+  - [ ]* 5.8 Escribir tests unitarios para servicios
+    - Escribir tests para AutenticacionService con repositorios mockeados
+    - Escribir tests para CanalService con repositorios mockeados
+    - Escribir tests para MensajeriaService con repositorios mockeados
+    - Escribir tests para ArchivoService con repositorios mockeados
+    - Escribir tests para ActionDispatcherImpl con servicios mockeados
+    - _Requirements: 1.1, 2.1, 3.1, 4.1_
+
+- [ ] 6. Implementar servidor Netty
+  - [ ] 6.1 Crear configuración del servidor Netty
+    - Configurar EventLoopGroup con hilos virtuales de Java 21
+    - Configurar ServerBootstrap con opciones de red
+    - Implementar pipeline con LineBasedFrameDecoder y StringDecoder/Encoder
+    - Configurar puerto desde application.properties
+    - _Requirements: 5.5, 10.3_
+  
+  - [ ] 6.2 Implementar ClientRequestHandler
+    - Implementar channelRead() para deserializar DTORequest con Gson
+    - Delegar petición a IActionDispatcher
+    - Serializar DTOResponse y enviar al cliente con delimitador \n
+    - Implementar channelActive() para registrar conexión en ConnectionManager
+    - Implementar channelInactive() para desconectar usuario
+    - Implementar exceptionCaught() para manejar errores de red
+    - _Requirements: 5.1, 5.2, 5.3, 5.4_
+  
+  - [ ] 6.3 Integrar servidor Netty con Spring Boot
+    - Crear bean de NettyServer en configuración de Spring
+    - Iniciar servidor Netty al arrancar la aplicación
+    - Detener servidor Netty al cerrar la aplicación
+    - _Requirements: 5.5, 10.3_
+
+- [ ] 7. Implementar sistema de logging y auditoría
+  - [ ] 7.1 Configurar Logback
+    - Crear logback.xml con appenders para consola y archivo
+    - Configurar niveles de log por paquete
+    - Configurar formato de logs con timestamp, nivel y mensaje
+    - _Requirements: 8.3_
+  
+  - [ ] 7.2 Implementar registro de eventos en base de datos
+    - Registrar eventos de LOGIN en logs_sistema
+    - Registrar eventos de SYSTEM (inicio/detención del servidor)
+    - Registrar acciones importantes con usuario_id, ip_address y detalles
+    - Registrar errores con nivel ERROR
+    - _Requirements: 8.1, 8.2, 8.4, 8.5_
+  
+  - [ ] 7.3 Implementar patrón Observer para notificaciones
+    - Crear interfaz ILogObserver con método onLogEvent()
+    - Implementar lista de observadores en LoggerService
+    - Notificar a observadores cuando ocurre un evento importante
+    - _Requirements: 7.5, 8.2_
+
+- [ ] 8. Implementar interfaz de administración JavaFX
+  - [ ] 8.1 Crear estructura MVC de la GUI
+    - Crear DashboardController como controlador principal
+    - Crear vistas FXML: dashboard.fxml, users-table.fxml, logs-view.fxml
+    - Configurar Scene y Stage principal
+    - _Requirements: 7.1_
+  
+  - [ ] 8.2 Implementar vista de estado del servidor
+    - Mostrar estado del servidor (activo/inactivo)
+    - Mostrar número de conexiones activas
+    - Mostrar botones para iniciar/detener servidor
+    - Actualizar en tiempo real usando patrón Observer
+    - _Requirements: 7.1, 7.5_
+  
+  - [ ] 8.3 Implementar vista de usuarios conectados
+    - Crear TableView con columnas: nombre, email, IP, estado
+    - Actualizar tabla cuando usuarios se conectan/desconectan
+    - Implementar búsqueda y filtrado de usuarios
+    - _Requirements: 7.2, 7.4_
+  
+  - [ ] 8.4 Implementar vista de logs del sistema
+    - Crear TableView con columnas: timestamp, tipo, usuario, acción, detalles
+    - Implementar filtros por tipo, usuario y rango de fechas
+    - Actualizar logs en tiempo real usando patrón Observer
+    - _Requirements: 7.3, 8.5_
+  
+  - [ ] 8.5 Integrar GUI con servicios del backend
+    - Inyectar ConnectionManager para obtener usuarios conectados
+    - Inyectar LoggerService como Observable
+    - Implementar ILogObserver en DashboardController
+    - Actualizar vistas cuando se reciben notificaciones
+    - _Requirements: 7.5_
+
+- [ ] 9. Implementar punto de entrada principal
+  - [ ] 9.1 Crear clase ServerApplication
+    - Anotar con @SpringBootApplication
+    - Implementar método main() que inicia Spring Boot
+    - Inicializar JavaFX en hilo separado
+    - Configurar shutdown hooks para cerrar recursos
+    - _Requirements: 10.3, 10.5_
+  
+  - [ ] 9.2 Configurar inyección de dependencias
+    - Configurar beans de Spring para todos los servicios
+    - Configurar beans para repositorios
+    - Configurar bean de HikariCP DataSource
+    - Configurar bean de NettyServer
+    - Usar inyección por constructor en todos los componentes
+    - _Requirements: 10.3_
+
+- [ ] 10. Crear scripts de base de datos
+  - [ ] 10.1 Crear script de inicialización de esquema
+    - Crear tabla usuarios con todos los campos y constraints
+    - Crear tabla canales con foreign key a usuarios
+    - Crear tabla canal_miembros con composite primary key
+    - Crear tabla mensajes con foreign keys y índices
+    - Crear tabla archivos con unique constraints en hash y nombre
+    - Crear tabla logs_sistema con índices en timestamp y tipo
+    - _Requirements: 6.1, 8.1_
+  
+  - [ ] 10.2 Crear script de datos de prueba
+    - Insertar usuarios de prueba con contraseñas hasheadas
+    - Insertar canales de prueba
+    - Insertar relaciones en canal_miembros
+    - Insertar mensajes de prueba
+    - _Requirements: 6.1_
+
+- [ ] 11. Configurar Docker Compose
+  - [ ] 11.1 Crear docker-compose.yml para MySQL
+    - Configurar servicio MySQL 8.x
+    - Configurar volumen para persistencia de datos
+    - Configurar variables de entorno (usuario, contraseña, base de datos)
+    - Exponer puerto 3306
+    - Montar script de inicialización de esquema
+    - _Requirements: 6.1_
+
+- [ ] 12. Implementar manejo de errores global
+  - [ ] 12.1 Crear excepciones personalizadas
+    - Crear ValidationException con campo y mensaje
+    - Crear RepositoryException con operación y causa
+    - Crear AuthenticationException con razón
+    - _Requirements: 9.4_
+  
+  - [ ] 12.2 Implementar manejo de errores en cada capa
+    - Capturar excepciones en ClientRequestHandler y retornar DTOResponse con error
+    - Capturar excepciones en servicios y convertir a mensajes descriptivos
+    - Capturar SQLException en repositorios y lanzar RepositoryException
+    - Registrar todos los errores en logs
+    - _Requirements: 5.4, 9.4_
+
+- [ ] 13. Implementar seguridad
+  - [ ] 13.1 Implementar hashing de contraseñas con BCrypt
+    - Usar BCrypt.withDefaults().hashToString() con factor 12
+    - Implementar verificación de contraseña con BCrypt.verifyer()
+    - _Requirements: 9.2_
+  
+  - [ ] 13.2 Implementar prevención de SQL injection
+    - Verificar que todos los repositorios usen PreparedStatement
+    - Nunca concatenar strings para construir queries
+    - _Requirements: 6.1, 9.2_
+  
+  - [ ] 13.3 Implementar validación de entrada
+    - Validar todos los DTOs antes de procesarlos en servicios
+    - Sanitizar datos de usuario antes de almacenar
+    - _Requirements: 9.1, 9.3_
+
+- [ ] 14. Realizar pruebas end-to-end
+  - [ ] 14.1 Crear cliente de prueba TCP
+    - Implementar cliente que se conecta al servidor Netty
+    - Implementar serialización/deserialización de DTOs
+    - _Requirements: 5.1, 5.3_
+  
+  - [ ]* 14.2 Escribir tests end-to-end
+    - Test de flujo completo: registro → login → enviar mensaje directo
+    - Test de flujo de canales: crear canal → unirse → enviar mensaje
+    - Test de flujo de archivos: subir archivo → enviar en mensaje → descargar
+    - Test de notificaciones en tiempo real
+    - _Requirements: 1.1, 1.2, 2.1, 3.1, 4.1_
+
+- [ ] 15. Documentar y finalizar
+  - [ ] 15.1 Verificar compilación del proyecto
+    - Ejecutar mvn clean install sin errores
+    - Verificar que no existan dependencias cíclicas
+    - Verificar que todas las capas respeten la arquitectura
+    - _Requirements: 10.1, 10.4_
+  
+  - [ ] 15.2 Crear README con instrucciones
+    - Documentar requisitos previos (Java 21, Maven, Docker)
+    - Documentar comandos para levantar base de datos
+    - Documentar comandos para compilar y ejecutar el servidor
+    - Documentar estructura del proyecto
+    - _Requirements: 10.5_

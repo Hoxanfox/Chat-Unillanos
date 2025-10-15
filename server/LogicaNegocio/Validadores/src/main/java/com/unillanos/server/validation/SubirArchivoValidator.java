@@ -1,5 +1,6 @@
 package com.unillanos.server.validation;
 
+import com.unillanos.server.config.ServerConfigProperties;
 import com.unillanos.server.dto.DTOSubirArchivo;
 import com.unillanos.server.exception.ValidationException;
 
@@ -13,9 +14,10 @@ public class SubirArchivoValidator {
      * Valida todos los datos de subida de un archivo.
      *
      * @param dto DTO con los datos del archivo a subir
+     * @param config Configuración del servidor
      * @throws ValidationException si algún campo no es válido
      */
-    public static void validate(DTOSubirArchivo dto) throws ValidationException {
+    public static void validate(DTOSubirArchivo dto, ServerConfigProperties config) throws ValidationException {
         if (dto == null) {
             throw new ValidationException("Los datos del archivo son requeridos", "dto");
         }
@@ -36,7 +38,7 @@ public class SubirArchivoValidator {
         
         // Validar tamaño con tipo lógico (String)
         String tipoLogico = TipoArchivoValidator.detectarTipo(dto.getTipoMime());
-        TamanoArchivoValidator.validate(dto.getTamanoBytes(), tipoLogico);
+        TamanoArchivoValidator.validate(dto.getTamanoBytes(), tipoLogico, config);
         
         // Validar base64Data
         if (dto.getBase64Data() == null || dto.getBase64Data().trim().isEmpty()) {

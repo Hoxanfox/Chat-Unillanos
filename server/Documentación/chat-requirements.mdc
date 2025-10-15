@@ -1,0 +1,258 @@
+---
+alwaysApply: true
+---
+
+# Documento de Requisitos - Servidor Chat-Unillanos
+
+## Introducción
+
+El servidor Chat-Unillanos es una aplicación de mensajería en tiempo real construida con una arquitectura modular de 4 capas (Presentación, Lógica de Negocio, Datos e Infraestructura). El sistema permite la comunicación entre usuarios mediante mensajes directos y canales grupales, con soporte para archivos adjuntos y una interfaz de administración JavaFX. La arquitectura está diseñada para ser escalable, mantenible y seguir principios SOLID con inyección de dependencias.
+
+## Requisitos
+
+### Requisito 1: Gestión de Usuarios
+
+**User Story:** Como administrador del sistema, quiero gestionar usuarios (registro, autenticación, actualización de perfil), para que los usuarios puedan acceder de forma segura a la plataforma de chat.
+
+#### Acceptance Criteria
+
+1. WHEN un nuevo usuario se registra THEN el sistema SHALL validar que el email sea único y almacenar la contraseña con hash BCrypt
+2. WHEN un usuario intenta autenticarse THEN el sistema SHALL verificar las credenciales contra la base de datos y retornar un token de sesión válido
+3. WHEN un usuario actualiza su perfil THEN el sistema SHALL validar los datos y actualizar la información en la base de datos
+4. IF un usuario intenta registrarse con un email existente THEN el sistema SHALL retornar un error descriptivo
+5. WHEN un usuario se conecta THEN el sistema SHALL actualizar su estado a "online" y registrar su dirección IP
+
+### Requisito 2: Gestión de Canales
+
+**User Story:** Como usuario del chat, quiero crear y unirme a canales de comunicación grupal, para que pueda participar en conversaciones con múltiples personas.
+
+#### Acceptance Criteria
+
+1. WHEN un usuario crea un canal THEN el sistema SHALL asignarle automáticamente el rol de "admin" del canal
+2. WHEN un usuario se une a un canal THEN el sistema SHALL registrar la fecha de unión y asignarle el rol de "member"
+3. WHEN un administrador de canal invita a un usuario THEN el sistema SHALL añadir al usuario al canal y notificar a todos los miembros
+4. IF un usuario intenta crear un canal con nombre duplicado THEN el sistema SHALL retornar un error
+5. WHEN un usuario lista los canales THEN el sistema SHALL retornar solo los canales a los que pertenece
+
+### Requisito 3: Mensajería en Tiempo Real
+
+**User Story:** Como usuario del chat, quiero enviar y recibir mensajes en tiempo real tanto en conversaciones directas como en canales, para que pueda comunicarme efectivamente con otros usuarios.
+
+#### Acceptance Criteria
+
+1. WHEN un usuario envía un mensaje directo THEN el sistema SHALL almacenar el mensaje con tipo "DIRECT" y notificar al destinatario si está conectado
+2. WHEN un usuario envía un mensaje a un canal THEN el sistema SHALL almacenar el mensaje con tipo "CHANNEL" y notificar a todos los miembros conectados del canal
+3. WHEN un usuario solicita el historial de mensajes THEN el sistema SHALL retornar los mensajes ordenados por fecha de envío
+4. IF un mensaje contiene un archivo adjunto THEN el sistema SHALL validar el archivo y almacenar la referencia en el campo file_id
+5. WHEN un mensaje es enviado THEN el sistema SHALL registrar la fecha y hora exacta del envío
+
+### Requisito 4: Gestión de Archivos
+
+**User Story:** Como usuario del chat, quiero compartir archivos en conversaciones y canales, para que pueda intercambiar documentos, imágenes y otros recursos con otros usuarios.
+
+#### Acceptance Criteria
+
+1. WHEN un usuario sube un archivo THEN el sistema SHALL calcular el hash SHA-256 para detectar duplicados
+2. IF un archivo con el mismo hash ya existe THEN el sistema SHALL reutilizar el archivo existente sin duplicar el almacenamiento
+3. WHEN un archivo es subido THEN el sistema SHALL almacenar el nombre original, nombre almacenado, tamaño y fecha de subida
+4. WHEN un usuario descarga un archivo THEN el sistema SHALL verificar que el usuario tenga permisos para acceder al archivo
+5. WHEN un archivo es referenciado en un mensaje THEN el sistema SHALL crear la relación entre el mensaje y el archivo
+
+### Requisito 5: Comunicación de Red con Netty
+
+**User Story:** Como desarrollador del sistema, quiero implementar un servidor TCP/IP asíncrono y eficiente, para que el sistema pueda manejar múltiples conexiones concurrentes sin bloqueos.
+
+#### Acceptance Criteria
+
+1. WHEN el servidor Netty recibe una petición THEN el sistema SHALL deserializar el DTORequest y delegar al ActionDispatcher
+2. WHEN el ActionDispatcher procesa una acción THEN el sistema SHALL enrutar la petición al servicio correspondiente según el campo "action"
+3. WHEN un servicio completa una operación THEN el sistema SHALL serializar el DTOResponse y enviarlo al cliente
+4. IF ocurre un error durante el procesamiento THEN el sistema SHALL retornar un DTOResponse con status "error" y mensaje descriptivo
+5. WHEN múltiples clientes se conectan simultáneamente THEN el sistema SHALL usar hilos virtuales de Java 21 para manejar la concurrencia
+
+### Requisito 6: Acceso a Datos con JDBC
+
+**User Story:** Como desarrollador del sistema, quiero implementar el acceso a datos usando JDBC puro con el patrón Repository, para que la capa de datos sea eficiente y mantenible sin dependencias de ORM.
+
+#### Acceptance Criteria
+
+1. WHEN un repositorio ejecuta una consulta THEN el sistema SHALL usar PreparedStatement para prevenir inyección SQL
+2. WHEN se necesita una conexión a la base de datos THEN el sistema SHALL obtenerla del pool HikariCP
+3. WHEN una operación de base de datos falla THEN el sistema SHALL cerrar los recursos (Connection, PreparedStatement, ResultSet) en el bloque finally
+4. WHEN un repositorio retorna datos THEN el sistema SHALL usar mappers para convertir ResultSet a entidades
+5. IF una transacción requiere múltiples operaciones THEN el sistema SHALL usar transacciones JDBC con commit/rollback
+
+### Requisito 7: Interfaz de Administración JavaFX
+
+**User Story:** Como administrador del servidor, quiero una interfaz gráfica de escritorio para monitorear el estado del servidor y gestionar usuarios, para que pueda administrar el sistema de forma visual.
+
+#### Acceptance Criteria
+
+1. WHEN el servidor inicia THEN la GUI SHALL mostrar el estado del servidor (activo/inactivo) y el número de conexiones
+2. WHEN un usuario se conecta o desconecta THEN la GUI SHALL actualizar la lista de usuarios conectados en tiempo real
+3. WHEN el administrador visualiza logs THEN la GUI SHALL mostrar los eventos del sistema ordenados por timestamp
+4. WHEN el administrador busca un usuario THEN la GUI SHALL filtrar y mostrar los resultados en la tabla
+5. WHEN ocurre un evento importante THEN la GUI SHALL usar el patrón Observer para actualizar la vista automáticamente
+
+### Requisito 8: Sistema de Logging y Auditoría
+
+**User Story:** Como administrador del sistema, quiero registrar todas las acciones importantes del sistema, para que pueda auditar eventos y diagnosticar problemas.
+
+#### Acceptance Criteria
+
+1. WHEN un usuario se autentica THEN el sistema SHALL registrar el evento en logs_sistema con tipo "LOGIN"
+2. WHEN un usuario realiza una acción importante THEN el sistema SHALL registrar la acción con el usuario_id, ip_address y detalles
+3. WHEN ocurre un error THEN el sistema SHALL registrar el error con nivel ERROR usando SLF4J/Logback
+4. WHEN el sistema inicia o se detiene THEN el sistema SHALL registrar el evento con tipo "SYSTEM"
+5. WHEN se consultan logs THEN el sistema SHALL permitir filtrar por tipo, usuario y rango de fechas
+
+### Requisito 9: Seguridad y Validación
+
+**User Story:** Como desarrollador del sistema, quiero implementar validaciones y seguridad en todas las capas, para que el sistema sea robusto y proteja los datos de los usuarios.
+
+#### Acceptance Criteria
+
+1. WHEN se recibe un DTORequest THEN el sistema SHALL validar que todos los campos requeridos estén presentes
+2. WHEN se almacena una contraseña THEN el sistema SHALL usar BCrypt con un factor de trabajo apropiado
+3. WHEN se valida un email THEN el sistema SHALL verificar el formato usando expresiones regulares
+4. IF una validación falla THEN el sistema SHALL retornar un mensaje de error específico sin exponer detalles internos
+5. WHEN se accede a un recurso protegido THEN el sistema SHALL verificar que el usuario tenga permisos
+
+### Requisito 10: Arquitectura Modular y Dependencias
+
+**User Story:** Como desarrollador del sistema, quiero mantener una arquitectura modular estricta con dependencias unidireccionales, para que el código sea mantenible y escalable.
+
+#### Acceptance Criteria
+
+1. WHEN se compila el proyecto THEN el sistema SHALL verificar que no existan dependencias cíclicas entre módulos
+2. WHEN una capa superior necesita funcionalidad de una capa inferior THEN el sistema SHALL depender de interfaces, no de implementaciones
+3. WHEN se inyectan dependencias THEN el sistema SHALL usar inyección por constructor con @Autowired
+4. IF un módulo intenta importar una clase de una capa superior THEN la compilación SHALL fallar
+5. WHEN se añade una nueva funcionalidad THEN el sistema SHALL seguir el flujo: Netty → Servicios → Repositorios → Base de Datos
+# Documento de Requisitos - Servidor Chat-Unillanos
+
+## Introducción
+
+El servidor Chat-Unillanos es una aplicación de mensajería en tiempo real construida con una arquitectura modular de 4 capas (Presentación, Lógica de Negocio, Datos e Infraestructura). El sistema permite la comunicación entre usuarios mediante mensajes directos y canales grupales, con soporte para archivos adjuntos y una interfaz de administración JavaFX. La arquitectura está diseñada para ser escalable, mantenible y seguir principios SOLID con inyección de dependencias.
+
+## Requisitos
+
+### Requisito 1: Gestión de Usuarios
+
+**User Story:** Como administrador del sistema, quiero gestionar usuarios (registro, autenticación, actualización de perfil), para que los usuarios puedan acceder de forma segura a la plataforma de chat.
+
+#### Acceptance Criteria
+
+1. WHEN un nuevo usuario se registra THEN el sistema SHALL validar que el email sea único y almacenar la contraseña con hash BCrypt
+2. WHEN un usuario intenta autenticarse THEN el sistema SHALL verificar las credenciales contra la base de datos y retornar un token de sesión válido
+3. WHEN un usuario actualiza su perfil THEN el sistema SHALL validar los datos y actualizar la información en la base de datos
+4. IF un usuario intenta registrarse con un email existente THEN el sistema SHALL retornar un error descriptivo
+5. WHEN un usuario se conecta THEN el sistema SHALL actualizar su estado a "online" y registrar su dirección IP
+
+### Requisito 2: Gestión de Canales
+
+**User Story:** Como usuario del chat, quiero crear y unirme a canales de comunicación grupal, para que pueda participar en conversaciones con múltiples personas.
+
+#### Acceptance Criteria
+
+1. WHEN un usuario crea un canal THEN el sistema SHALL asignarle automáticamente el rol de "admin" del canal
+2. WHEN un usuario se une a un canal THEN el sistema SHALL registrar la fecha de unión y asignarle el rol de "member"
+3. WHEN un administrador de canal invita a un usuario THEN el sistema SHALL añadir al usuario al canal y notificar a todos los miembros
+4. IF un usuario intenta crear un canal con nombre duplicado THEN el sistema SHALL retornar un error
+5. WHEN un usuario lista los canales THEN el sistema SHALL retornar solo los canales a los que pertenece
+
+### Requisito 3: Mensajería en Tiempo Real
+
+**User Story:** Como usuario del chat, quiero enviar y recibir mensajes en tiempo real tanto en conversaciones directas como en canales, para que pueda comunicarme efectivamente con otros usuarios.
+
+#### Acceptance Criteria
+
+1. WHEN un usuario envía un mensaje directo THEN el sistema SHALL almacenar el mensaje con tipo "DIRECT" y notificar al destinatario si está conectado
+2. WHEN un usuario envía un mensaje a un canal THEN el sistema SHALL almacenar el mensaje con tipo "CHANNEL" y notificar a todos los miembros conectados del canal
+3. WHEN un usuario solicita el historial de mensajes THEN el sistema SHALL retornar los mensajes ordenados por fecha de envío
+4. IF un mensaje contiene un archivo adjunto THEN el sistema SHALL validar el archivo y almacenar la referencia en el campo file_id
+5. WHEN un mensaje es enviado THEN el sistema SHALL registrar la fecha y hora exacta del envío
+
+### Requisito 4: Gestión de Archivos
+
+**User Story:** Como usuario del chat, quiero compartir archivos en conversaciones y canales, para que pueda intercambiar documentos, imágenes y otros recursos con otros usuarios.
+
+#### Acceptance Criteria
+
+1. WHEN un usuario sube un archivo THEN el sistema SHALL calcular el hash SHA-256 para detectar duplicados
+2. IF un archivo con el mismo hash ya existe THEN el sistema SHALL reutilizar el archivo existente sin duplicar el almacenamiento
+3. WHEN un archivo es subido THEN el sistema SHALL almacenar el nombre original, nombre almacenado, tamaño y fecha de subida
+4. WHEN un usuario descarga un archivo THEN el sistema SHALL verificar que el usuario tenga permisos para acceder al archivo
+5. WHEN un archivo es referenciado en un mensaje THEN el sistema SHALL crear la relación entre el mensaje y el archivo
+
+### Requisito 5: Comunicación de Red con Netty
+
+**User Story:** Como desarrollador del sistema, quiero implementar un servidor TCP/IP asíncrono y eficiente, para que el sistema pueda manejar múltiples conexiones concurrentes sin bloqueos.
+
+#### Acceptance Criteria
+
+1. WHEN el servidor Netty recibe una petición THEN el sistema SHALL deserializar el DTORequest y delegar al ActionDispatcher
+2. WHEN el ActionDispatcher procesa una acción THEN el sistema SHALL enrutar la petición al servicio correspondiente según el campo "action"
+3. WHEN un servicio completa una operación THEN el sistema SHALL serializar el DTOResponse y enviarlo al cliente
+4. IF ocurre un error durante el procesamiento THEN el sistema SHALL retornar un DTOResponse con status "error" y mensaje descriptivo
+5. WHEN múltiples clientes se conectan simultáneamente THEN el sistema SHALL usar hilos virtuales de Java 21 para manejar la concurrencia
+
+### Requisito 6: Acceso a Datos con JDBC
+
+**User Story:** Como desarrollador del sistema, quiero implementar el acceso a datos usando JDBC puro con el patrón Repository, para que la capa de datos sea eficiente y mantenible sin dependencias de ORM.
+
+#### Acceptance Criteria
+
+1. WHEN un repositorio ejecuta una consulta THEN el sistema SHALL usar PreparedStatement para prevenir inyección SQL
+2. WHEN se necesita una conexión a la base de datos THEN el sistema SHALL obtenerla del pool HikariCP
+3. WHEN una operación de base de datos falla THEN el sistema SHALL cerrar los recursos (Connection, PreparedStatement, ResultSet) en el bloque finally
+4. WHEN un repositorio retorna datos THEN el sistema SHALL usar mappers para convertir ResultSet a entidades
+5. IF una transacción requiere múltiples operaciones THEN el sistema SHALL usar transacciones JDBC con commit/rollback
+
+### Requisito 7: Interfaz de Administración JavaFX
+
+**User Story:** Como administrador del servidor, quiero una interfaz gráfica de escritorio para monitorear el estado del servidor y gestionar usuarios, para que pueda administrar el sistema de forma visual.
+
+#### Acceptance Criteria
+
+1. WHEN el servidor inicia THEN la GUI SHALL mostrar el estado del servidor (activo/inactivo) y el número de conexiones
+2. WHEN un usuario se conecta o desconecta THEN la GUI SHALL actualizar la lista de usuarios conectados en tiempo real
+3. WHEN el administrador visualiza logs THEN la GUI SHALL mostrar los eventos del sistema ordenados por timestamp
+4. WHEN el administrador busca un usuario THEN la GUI SHALL filtrar y mostrar los resultados en la tabla
+5. WHEN ocurre un evento importante THEN la GUI SHALL usar el patrón Observer para actualizar la vista automáticamente
+
+### Requisito 8: Sistema de Logging y Auditoría
+
+**User Story:** Como administrador del sistema, quiero registrar todas las acciones importantes del sistema, para que pueda auditar eventos y diagnosticar problemas.
+
+#### Acceptance Criteria
+
+1. WHEN un usuario se autentica THEN el sistema SHALL registrar el evento en logs_sistema con tipo "LOGIN"
+2. WHEN un usuario realiza una acción importante THEN el sistema SHALL registrar la acción con el usuario_id, ip_address y detalles
+3. WHEN ocurre un error THEN el sistema SHALL registrar el error con nivel ERROR usando SLF4J/Logback
+4. WHEN el sistema inicia o se detiene THEN el sistema SHALL registrar el evento con tipo "SYSTEM"
+5. WHEN se consultan logs THEN el sistema SHALL permitir filtrar por tipo, usuario y rango de fechas
+
+### Requisito 9: Seguridad y Validación
+
+**User Story:** Como desarrollador del sistema, quiero implementar validaciones y seguridad en todas las capas, para que el sistema sea robusto y proteja los datos de los usuarios.
+
+#### Acceptance Criteria
+
+1. WHEN se recibe un DTORequest THEN el sistema SHALL validar que todos los campos requeridos estén presentes
+2. WHEN se almacena una contraseña THEN el sistema SHALL usar BCrypt con un factor de trabajo apropiado
+3. WHEN se valida un email THEN el sistema SHALL verificar el formato usando expresiones regulares
+4. IF una validación falla THEN el sistema SHALL retornar un mensaje de error específico sin exponer detalles internos
+5. WHEN se accede a un recurso protegido THEN el sistema SHALL verificar que el usuario tenga permisos
+
+### Requisito 10: Arquitectura Modular y Dependencias
+
+**User Story:** Como desarrollador del sistema, quiero mantener una arquitectura modular estricta con dependencias unidireccionales, para que el código sea mantenible y escalable.
+
+#### Acceptance Criteria
+
+1. WHEN se compila el proyecto THEN el sistema SHALL verificar que no existan dependencias cíclicas entre módulos
+2. WHEN una capa superior necesita funcionalidad de una capa inferior THEN el sistema SHALL depender de interfaces, no de implementaciones
+3. WHEN se inyectan dependencias THEN el sistema SHALL usar inyección por constructor con @Autowired
+4. IF un módulo intenta importar una clase de una capa superior THEN la compilación SHALL fallar
+5. WHEN se añade una nueva funcionalidad THEN el sistema SHALL seguir el flujo: Netty → Servicios → Repositorios → Base de Datos

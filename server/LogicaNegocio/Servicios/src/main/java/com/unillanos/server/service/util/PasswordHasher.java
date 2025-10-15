@@ -1,6 +1,7 @@
 package com.unillanos.server.service.util;
 
 import at.favre.lib.crypto.bcrypt.BCrypt;
+import com.unillanos.server.config.ServerConfigProperties;
 
 /**
  * Utilidad para hashear y verificar contraseñas usando BCrypt.
@@ -10,7 +11,6 @@ import at.favre.lib.crypto.bcrypt.BCrypt;
  */
 public class PasswordHasher {
     
-    private static final int COST_FACTOR = 12;
     private static final BCrypt.Hasher hasher = BCrypt.withDefaults();
     private static final BCrypt.Verifyer verifyer = BCrypt.verifyer();
     
@@ -18,13 +18,14 @@ public class PasswordHasher {
      * Hashea una contraseña en texto plano usando BCrypt.
      *
      * @param plainPassword Contraseña en texto plano
+     * @param config Configuración del servidor
      * @return Hash de la contraseña (empieza con $2a$ o $2b$)
      */
-    public static String hash(String plainPassword) {
+    public static String hash(String plainPassword, ServerConfigProperties config) {
         if (plainPassword == null || plainPassword.isEmpty()) {
             throw new IllegalArgumentException("La contraseña no puede ser nula o vacía");
         }
-        return hasher.hashToString(COST_FACTOR, plainPassword.toCharArray());
+        return hasher.hashToString(config.getSeguridad().getBcryptStrength(), plainPassword.toCharArray());
     }
     
     /**

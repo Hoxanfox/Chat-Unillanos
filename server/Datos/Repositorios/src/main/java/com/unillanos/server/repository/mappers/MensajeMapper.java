@@ -1,5 +1,6 @@
 package com.unillanos.server.repository.mappers;
 
+import com.unillanos.server.repository.models.EstadoMensaje;
 import com.unillanos.server.repository.models.MensajeEntity;
 import com.unillanos.server.repository.models.TipoMensaje;
 
@@ -42,6 +43,24 @@ public class MensajeMapper {
         Timestamp fechaEnvio = rs.getTimestamp("fecha_envio");
         if (fechaEnvio != null) {
             mensaje.setFechaEnvio(fechaEnvio.toLocalDateTime());
+        }
+        
+        // Mapear campos de estado
+        String estadoStr = rs.getString("estado");
+        if (estadoStr != null && !estadoStr.trim().isEmpty()) {
+            mensaje.setEstado(EstadoMensaje.fromString(estadoStr));
+        } else {
+            mensaje.setEstado(EstadoMensaje.ENVIADO); // Estado por defecto
+        }
+        
+        Timestamp fechaEntrega = rs.getTimestamp("fecha_entrega");
+        if (fechaEntrega != null) {
+            mensaje.setFechaEntrega(fechaEntrega.toLocalDateTime());
+        }
+        
+        Timestamp fechaLectura = rs.getTimestamp("fecha_lectura");
+        if (fechaLectura != null) {
+            mensaje.setFechaLectura(fechaLectura.toLocalDateTime());
         }
         
         return mensaje;
