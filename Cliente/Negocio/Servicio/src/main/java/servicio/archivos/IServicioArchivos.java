@@ -15,4 +15,12 @@ public interface IServicioArchivos {
      * @return Una promesa que se resolverá con el identificador del archivo en el servidor.
      */
     CompletableFuture<String> subirArchivo(File archivo);
+
+    /**
+     * Sube un archivo al servidor durante el proceso de registro (sin autenticación).
+     *
+     * @param archivo El archivo a subir
+     * @return CompletableFuture que se completa con el ID del archivo subido
+     */
+    CompletableFuture<String> subirArchivoParaRegistro(File archivo);
 }

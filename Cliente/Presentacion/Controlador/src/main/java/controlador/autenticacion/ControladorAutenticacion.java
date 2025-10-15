@@ -43,8 +43,8 @@ public class ControladorAutenticacion implements IControladorAutenticacion {
             // 1. Leer los bytes del archivo para la persistencia local.
             byte[] fotoBytes = Files.readAllBytes(archivoFoto.toPath());
 
-            // 2. Iniciar la subida del archivo al servidor.
-            return servicioArchivos.subirArchivo(archivoFoto)
+            // 2. Iniciar la subida del archivo al servidor (sin autenticación para registro).
+            return servicioArchivos.subirArchivoParaRegistro(archivoFoto)
                     .thenCompose(photoId -> {
                         // 3. Crear el DTO de registro con el photoId obtenido.
                         DTORegistro datosRegistro = new DTORegistro(

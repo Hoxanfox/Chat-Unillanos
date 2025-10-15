@@ -19,4 +19,12 @@ public interface IGestionArchivos {
      * se completará excepcionalmente si ocurre un error.
      */
     CompletableFuture<String> subirArchivo(File archivo);
+
+    /**
+     * Sube un archivo al servidor durante el proceso de registro (sin autenticación).
+     *
+     * @param archivo El archivo a subir
+     * @return CompletableFuture que se completa con el ID del archivo subido
+     */
+    CompletableFuture<String> subirArchivoParaRegistro(File archivo);
 }

@@ -6,8 +6,8 @@ echo.
 
 cd /d "%~dp0"
 
-echo Compilando el cliente...
-call mvn clean compile
+echo Compilando e instalando el cliente...
+call mvn clean install -DskipTests
 
 if %errorlevel% neq 0 (
     echo.

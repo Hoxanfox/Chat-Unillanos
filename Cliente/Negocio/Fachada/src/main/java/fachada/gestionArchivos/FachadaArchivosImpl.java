@@ -25,4 +25,10 @@ public class FachadaArchivosImpl implements IFachadaArchivos {
         // Simplemente delega la llamada.
         return gestionArchivos.subirArchivo(archivo);
     }
+
+    @Override
+    public CompletableFuture<String> subirArchivoParaRegistro(File archivo) {
+        // Simplemente delega la llamada.
+        return gestionArchivos.subirArchivoParaRegistro(archivo);
+    }
 }

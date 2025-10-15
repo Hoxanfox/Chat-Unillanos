@@ -113,6 +113,59 @@ public class ChunkingService {
     }
 
     /**
+     * Inicia una nueva sesión de subida de archivo para el proceso de registro.
+     * Permite subir archivos sin validar que el usuario existe en la base de datos.
+     *
+     * @param dto Datos para iniciar la subida
+     * @return Respuesta con sessionId y configuración
+     */
+    public DTOResponse iniciarSubidaParaRegistro(DTOIniciarSubida dto) {
+        try {
+            // 1. Validar datos básicos (sin validar usuario)
+            ChunkValidator.validateIniciarSubidaParaRegistro(dto, config);
+            
+            // 2. Crear sesión (sin validar usuario)
+            String sessionId = UUID.randomUUID().toString();
+            ChunkSessionEntity session = new ChunkSessionEntity(
+                sessionId,
+                dto.getUsuarioId(),
+                dto.getNombreArchivo(),
+                dto.getTipoMime(),
+                dto.getTamanoTotal(),
+                dto.getTotalChunks(),
+                new HashSet<>(),
+                LocalDateTime.now(),
+                LocalDateTime.now(),
+                EstadoSesion.ACTIVA
+            );
+            
+            ChunkSessionEntity sessionGuardada = chunkSessionRepository.iniciarSesion(session);
+            
+            // 3. Crear directorio temporal para la sesión
+            crearDirectorioSesion(sessionId);
+            
+            // 4. Preparar respuesta específica para registro
+            DTOIniciarSubidaParaRegistroResponse response = new DTOIniciarSubidaParaRegistroResponse(
+                sessionId,
+                config.getArchivos().getChunkSize(),
+                new ArrayList<>()
+            );
+            
+            loggerService.logInfo("iniciarSubidaParaRegistro", 
+                String.format("Sesión de subida para registro iniciada: %s para usuario temporal %s", sessionId, dto.getUsuarioId()));
+            
+            return DTOResponse.success("uploadFileForRegistration", "Sesión de subida para registro iniciada", response);
+            
+        } catch (ValidationException e) {
+            logger.warn("Error al iniciar subida para registro: {}", e.getMessage());
+            return DTOResponse.error("uploadFileForRegistration", e.getMessage());
+        } catch (Exception e) {
+            logger.error("Error inesperado al iniciar subida para registro", e);
+            return DTOResponse.error("uploadFileForRegistration", "Error interno del servidor al iniciar subida para registro.");
+        }
+    }
+
+    /**
      * Sube un chunk individual de un archivo.
      *
      * @param dto Datos del chunk a subir
@@ -150,8 +203,10 @@ public class ChunkingService {
             }
             
             // 6. Guardar chunk en disco
+            // Convertir de 1-based (cliente) a 0-based (servidor interno)
+            int chunkIndex = dto.getNumeroChunk() - 1;
             Path chunkPath = Paths.get(config.getArchivos().getDirectorioTemp(), dto.getSessionId(), 
-                "chunk_" + dto.getNumeroChunk());
+                "chunk_" + chunkIndex);
             Files.write(chunkPath, chunkData);
             
             // 7. Registrar chunk en la sesión
@@ -170,6 +225,104 @@ public class ChunkingService {
         } catch (Exception e) {
             logger.error("Error inesperado al subir chunk: {}", e.getMessage(), e);
             return DTOResponse.error("subir_chunk", "Error inesperado al procesar chunk.");
+        }
+    }
+
+    /**
+     * Sube un chunk individual de un archivo durante el proceso de registro.
+     * Similar a subirChunk pero sin validar hash ni usuario.
+     *
+     * @param dto Datos del chunk a subir
+     * @return Respuesta de confirmación
+     */
+    public DTOResponse subirChunkParaRegistro(DTOSubirArchivoChunk dto) {
+        try {
+            // 1. Validar chunk (sin validar usuario ni hash)
+            ChunkValidator.validateSubirChunkParaRegistro(dto, config);
+            
+            // 2. Verificar sesión
+            Optional<ChunkSessionEntity> sessionOpt = chunkSessionRepository.obtenerSesion(dto.getSessionId());
+            if (sessionOpt.isEmpty()) {
+                throw new NotFoundException("Sesión no encontrada", "SESSION_NOT_FOUND");
+            }
+            
+            ChunkSessionEntity session = sessionOpt.get();
+            
+            // 3. Verificar que la sesión esté activa
+            if (session.getEstadoSesion() != EstadoSesion.ACTIVA) {
+                throw new ValidationException("La sesión no está activa", "sessionId");
+            }
+            
+            // 4. Verificar que el chunk no haya sido recibido previamente
+            if (session.getChunksRecibidos().contains(dto.getNumeroChunk())) {
+                logger.info("Chunk {} ya recibido para sesión {}", dto.getNumeroChunk(), dto.getSessionId());
+                return DTOResponse.success("subir_chunk_para_registro", "Chunk ya recibido", null);
+            }
+            
+            // 5. NO verificar hash del chunk para registro (se omite por simplicidad)
+            
+            // 6. Guardar chunk en disco
+            byte[] chunkData = Base64.getDecoder().decode(dto.getBase64ChunkData());
+            // Convertir de 1-based (cliente) a 0-based (servidor interno)
+            int chunkIndex = dto.getNumeroChunk() - 1;
+            Path chunkPath = Paths.get(config.getArchivos().getDirectorioTemp(), dto.getSessionId(), 
+                "chunk_" + chunkIndex);
+            Files.write(chunkPath, chunkData);
+            
+            // 7. Registrar chunk en la sesión
+            chunkSessionRepository.registrarChunk(dto.getSessionId(), dto.getNumeroChunk());
+            
+            logger.debug("Chunk {} guardado para sesión de registro {}",
+                dto.getNumeroChunk(), dto.getSessionId());
+            
+            return DTOResponse.success("subir_chunk_para_registro", "Chunk recibido exitosamente", null);
+            
+        } catch (ValidationException | NotFoundException e) {
+            logger.warn("Error al subir chunk para registro: {}", e.getMessage());
+            return DTOResponse.error("subir_chunk_para_registro", e.getMessage());
+        } catch (IOException e) {
+            logger.error("Error de E/S al guardar chunk para registro: {}", e.getMessage(), e);
+            return DTOResponse.error("subir_chunk_para_registro", "Error interno del servidor al guardar chunk.");
+        } catch (Exception e) {
+            logger.error("Error inesperado al subir chunk para registro: {}", e.getMessage(), e);
+            return DTOResponse.error("subir_chunk_para_registro", "Error inesperado al procesar chunk.");
+        }
+    }
+
+    /**
+     * Obtiene información básica de una sesión de chunking.
+     *
+     * @param sessionId ID de la sesión
+     * @return Respuesta con la información de la sesión
+     */
+    public DTOResponse obtenerInformacionSesion(String sessionId) {
+        try {
+            // Verificar sesión
+            Optional<ChunkSessionEntity> sessionOpt = chunkSessionRepository.obtenerSesion(sessionId);
+            if (sessionOpt.isEmpty()) {
+                return DTOResponse.error("obtener_informacion_sesion", "Sesión no encontrada");
+            }
+            
+            ChunkSessionEntity session = sessionOpt.get();
+            
+            // Preparar respuesta con información básica
+            Map<String, Object> sessionInfo = new HashMap<>();
+            sessionInfo.put("sessionId", session.getSessionId());
+            sessionInfo.put("usuarioId", session.getUsuarioId());
+            sessionInfo.put("nombreArchivo", session.getNombreArchivo());
+            sessionInfo.put("tipoMime", session.getTipoMime());
+            sessionInfo.put("tamanoTotal", session.getTamanoTotal());
+            sessionInfo.put("totalChunks", session.getTotalChunks());
+            sessionInfo.put("chunksRecibidos", session.getChunksRecibidos());
+            sessionInfo.put("estadoSesion", session.getEstadoSesion().toString());
+            sessionInfo.put("fechaCreacion", session.getFechaInicio().toString());
+            sessionInfo.put("fechaUltimaActividad", session.getUltimaActividad().toString());
+            
+            return DTOResponse.success("obtener_informacion_sesion", "Información de sesión obtenida", sessionInfo);
+            
+        } catch (Exception e) {
+            logger.error("Error al obtener información de sesión: {}", e.getMessage(), e);
+            return DTOResponse.error("obtener_informacion_sesion", "Error interno del servidor");
         }
     }
 
