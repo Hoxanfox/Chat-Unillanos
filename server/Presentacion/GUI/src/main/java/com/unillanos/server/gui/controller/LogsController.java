@@ -1,6 +1,9 @@
 package com.unillanos.server.gui.controller;
 
 import com.unillanos.server.gui.SharedContext;
+import com.unillanos.server.gui.components.ToastNotification;
+import com.unillanos.server.gui.styles.DesignSystem;
+import com.unillanos.server.gui.styles.StyleUtils;
 import com.unillanos.server.service.impl.LoggerService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -30,16 +33,19 @@ public class LogsController {
         this.root.setPadding(new Insets(16));
         this.root.setAlignment(Pos.TOP_LEFT);
 
-        Label header = new Label("Logs");
-        header.setStyle("-fx-font-size: 20px; -fx-font-weight: bold;");
+            Label header = new Label("Logs");
+            header.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; -fx-text-fill: #1F2937; -fx-padding: 16px 0px;");
 
         chkLive = new CheckBox("En vivo");
         chkLive.setSelected(true);
+        
         cmbTipo = new ComboBox<>();
         cmbTipo.getItems().addAll("", "INFO", "ERROR", "SYSTEM", "LOGIN", "LOGOUT");
         cmbTipo.setPromptText("Tipo");
+        
         txtUsuario = new TextField();
         txtUsuario.setPromptText("UsuarioId");
+        
         btnExportCsv = new Button("Exportar CSV");
 
         HBox filters = new HBox(8, chkLive, cmbTipo, txtUsuario, btnExportCsv);
@@ -55,7 +61,19 @@ public class LogsController {
 
         btnExportCsv.setOnAction(e -> exportCsv());
         chkLive.setOnAction(e -> {
-            if (chkLive.isSelected()) attachLiveListener(); else detachLiveListener();
+            if (chkLive.isSelected()) {
+                attachLiveListener();
+                ToastNotification.showInfo(
+                    SharedContext.getPrimaryStage(),
+                    "Modo en vivo activado - Los logs se actualizarán automáticamente"
+                );
+            } else {
+                detachLiveListener();
+                ToastNotification.showInfo(
+                    SharedContext.getPrimaryStage(),
+                    "Modo en vivo desactivado"
+                );
+            }
         });
     }
 
@@ -85,20 +103,41 @@ public class LogsController {
     }
 
     private void exportCsv() {
-        StringBuilder sb = new StringBuilder();
-        for (String s : listView.getItems()) {
-            String csvLine = s.replaceAll(",", " ");
-            sb.append(csvLine).append("\n");
+        try {
+            if (listView.getItems().isEmpty()) {
+                ToastNotification.showWarning(
+                    SharedContext.getPrimaryStage(),
+                    "No hay logs para exportar"
+                );
+                return;
+            }
+
+            StringBuilder sb = new StringBuilder();
+            for (String s : listView.getItems()) {
+                String csvLine = s.replaceAll(",", " ");
+                sb.append(csvLine).append("\n");
+            }
+            
+            // Mostrar en diálogo simple (en un caso real, guardar a archivo)
+            TextArea ta = new TextArea(sb.toString());
+            ta.setEditable(false);
+            ta.setWrapText(false);
+            Dialog<Void> dialog = new Dialog<>();
+            dialog.setTitle("CSV");
+            dialog.getDialogPane().setContent(ta);
+            dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+            dialog.showAndWait();
+
+            ToastNotification.showSuccess(
+                SharedContext.getPrimaryStage(),
+                "CSV exportado exitosamente (" + listView.getItems().size() + " entradas)"
+            );
+        } catch (Exception e) {
+            ToastNotification.showError(
+                SharedContext.getPrimaryStage(),
+                "Error al exportar CSV: " + e.getMessage()
+            );
         }
-        // Mostrar en diálogo simple (en un caso real, guardar a archivo)
-        TextArea ta = new TextArea(sb.toString());
-        ta.setEditable(false);
-        ta.setWrapText(false);
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("CSV");
-        dialog.getDialogPane().setContent(ta);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.showAndWait();
     }
 
     public Node getView() {

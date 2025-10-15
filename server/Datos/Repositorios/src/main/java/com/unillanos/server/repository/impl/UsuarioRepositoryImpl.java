@@ -12,7 +12,9 @@ import org.springframework.stereotype.Repository;
 import javax.sql.DataSource;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -384,5 +386,44 @@ public class UsuarioRepositoryImpl implements IUsuarioRepository {
         } catch (SQLException e) {
             logger.warn("Error al cerrar recursos JDBC", e);
         }
+    }
+
+    @Override
+    public List<Map<String, Object>> getTopActivos(int limit) {
+        String sql = """
+            SELECT u.nombre_usuario as nombre, COUNT(m.id) as mensajes
+            FROM usuarios u
+            LEFT JOIN mensajes m ON u.id = m.remitente_id 
+                AND DATE(m.fecha_envio) = CURDATE()
+            GROUP BY u.id, u.nombre_usuario
+            HAVING COUNT(m.id) > 0
+            ORDER BY mensajes DESC
+            LIMIT ?
+            """;
+
+        List<Map<String, Object>> topUsuarios = new ArrayList<>();
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, limit);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> usuario = new HashMap<>();
+                    usuario.put("nombre", rs.getString("nombre"));
+                    usuario.put("mensajes", rs.getInt("mensajes"));
+                    topUsuarios.add(usuario);
+                }
+            }
+
+            logger.debug("Encontrados {} usuarios activos", topUsuarios.size());
+
+        } catch (SQLException e) {
+            logger.error("Error al obtener usuarios más activos: {}", e.getMessage(), e);
+            throw new RepositoryException("Error al obtener usuarios más activos", "TOP_ACTIVE_USERS_ERROR", e);
+        }
+
+        return topUsuarios;
     }
 }

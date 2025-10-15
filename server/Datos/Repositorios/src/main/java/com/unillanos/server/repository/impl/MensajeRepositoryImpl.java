@@ -3,7 +3,9 @@ package com.unillanos.server.repository.impl;
 import com.unillanos.server.exception.RepositoryException;
 import com.unillanos.server.repository.interfaces.IMensajeRepository;
 import com.unillanos.server.repository.mappers.MensajeMapper;
+import com.unillanos.server.repository.models.EstadoMensaje;
 import com.unillanos.server.repository.models.MensajeEntity;
+import com.unillanos.server.repository.models.TipoMensaje;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
@@ -261,6 +263,154 @@ public class MensajeRepositoryImpl implements IMensajeRepository {
             logger.error("Error al eliminar mensaje de la base de datos: {}", e.getMessage(), e);
             throw new RepositoryException("Error al eliminar mensaje", "MESSAGE_DELETE_ERROR", e);
         }
+    }
+
+    @Override
+    public void actualizarEstado(Long mensajeId, EstadoMensaje nuevoEstado) {
+        String sql = "UPDATE mensajes SET estado = ? WHERE id = ?";
+        
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, nuevoEstado.toString());
+            stmt.setLong(2, mensajeId);
+            
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected == 0) {
+                logger.warn("No se encontró mensaje con ID: {} para actualizar estado", mensajeId);
+            } else {
+                logger.debug("Estado de mensaje {} actualizado a {}", mensajeId, nuevoEstado);
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Error al actualizar estado del mensaje {}: {}", mensajeId, e.getMessage(), e);
+            throw new RepositoryException("Error al actualizar estado del mensaje", "MESSAGE_STATE_UPDATE_ERROR", e);
+        }
+    }
+
+    @Override
+    public void marcarComoEntregado(Long mensajeId) {
+        String sql = "UPDATE mensajes SET estado = ?, fecha_entrega = ? WHERE id = ?";
+        
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, EstadoMensaje.ENTREGADO.toString());
+            stmt.setTimestamp(2, Timestamp.valueOf(LocalDateTime.now()));
+            stmt.setLong(3, mensajeId);
+            
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected == 0) {
+                logger.warn("No se encontró mensaje con ID: {} para marcar como entregado", mensajeId);
+            } else {
+                logger.debug("Mensaje {} marcado como entregado", mensajeId);
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Error al marcar mensaje {} como entregado: {}", mensajeId, e.getMessage(), e);
+            throw new RepositoryException("Error al marcar mensaje como entregado", "MESSAGE_DELIVERY_ERROR", e);
+        }
+    }
+
+    @Override
+    public void marcarComoLeido(Long mensajeId, String usuarioId) {
+        String sql = "UPDATE mensajes SET estado = ?, fecha_lectura = ? WHERE id = ? AND destinatario_id = ?";
+        
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, EstadoMensaje.LEIDO.toString());
+            stmt.setTimestamp(2, Timestamp.valueOf(LocalDateTime.now()));
+            stmt.setLong(3, mensajeId);
+            stmt.setString(4, usuarioId);
+            
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected == 0) {
+                logger.warn("No se encontró mensaje {} para usuario {} o no es el destinatario", mensajeId, usuarioId);
+            } else {
+                logger.debug("Mensaje {} marcado como leído por usuario {}", mensajeId, usuarioId);
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Error al marcar mensaje {} como leído por usuario {}: {}", mensajeId, usuarioId, e.getMessage(), e);
+            throw new RepositoryException("Error al marcar mensaje como leído", "MESSAGE_READ_ERROR", e);
+        }
+    }
+
+    @Override
+    public List<Long> obtenerMensajesNoLeidos(String usuarioId) {
+        String sql = "SELECT id FROM mensajes WHERE destinatario_id = ? AND estado IN ('ENVIADO', 'ENTREGADO') ORDER BY fecha_envio DESC";
+        List<Long> mensajesNoLeidos = new ArrayList<>();
+        
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, usuarioId);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    mensajesNoLeidos.add(rs.getLong("id"));
+                }
+            }
+            
+            logger.debug("Encontrados {} mensajes no leídos para usuario {}", mensajesNoLeidos.size(), usuarioId);
+            
+        } catch (SQLException e) {
+            logger.error("Error al obtener mensajes no leídos para usuario {}: {}", usuarioId, e.getMessage(), e);
+            throw new RepositoryException("Error al obtener mensajes no leídos", "MESSAGE_UNREAD_QUERY_ERROR", e);
+        }
+        
+        return mensajesNoLeidos;
+    }
+
+    @Override
+    public int contarMensajesNoLeidos(String usuarioId) {
+        String sql = "SELECT COUNT(*) FROM mensajes WHERE destinatario_id = ? AND estado IN ('ENVIADO', 'ENTREGADO')";
+        
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, usuarioId);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    int count = rs.getInt(1);
+                    logger.debug("Usuario {} tiene {} mensajes no leídos", usuarioId, count);
+                    return count;
+                }
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Error al contar mensajes no leídos para usuario {}: {}", usuarioId, e.getMessage(), e);
+            throw new RepositoryException("Error al contar mensajes no leídos", "MESSAGE_UNREAD_COUNT_ERROR", e);
+        }
+        
+        return 0;
+    }
+
+    @Override
+    public int countByTipoHoy(TipoMensaje tipo) {
+        String sql = "SELECT COUNT(*) FROM mensajes WHERE tipo = ? AND DATE(fecha_envio) = CURDATE()";
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, tipo.toString());
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    int count = rs.getInt(1);
+                    logger.debug("Mensajes de tipo {} enviados hoy: {}", tipo, count);
+                    return count;
+                }
+            }
+
+        } catch (SQLException e) {
+            logger.error("Error al contar mensajes por tipo hoy: {}", e.getMessage(), e);
+            throw new RepositoryException("Error al contar mensajes por tipo", "MESSAGE_COUNT_BY_TYPE_ERROR", e);
+        }
+
+        return 0;
     }
 }
 

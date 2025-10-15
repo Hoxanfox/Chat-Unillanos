@@ -3,6 +3,9 @@ package com.unillanos.server.gui.controller;
 import com.unillanos.server.dto.DTOCanal;
 import com.unillanos.server.dto.DTOMiembroCanal;
 import com.unillanos.server.gui.SharedContext;
+import com.unillanos.server.gui.components.ToastNotification;
+import com.unillanos.server.gui.styles.DesignSystem;
+import com.unillanos.server.gui.styles.StyleUtils;
 import com.unillanos.server.service.impl.AdminChannelsService;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -38,8 +41,8 @@ public class ChannelsController {
 
         channelsService = SharedContext.get().getBean(AdminChannelsService.class);
 
-        Label header = new Label("Canales");
-        header.setStyle("-fx-font-size: 20px; -fx-font-weight: bold;");
+            Label header = new Label("Canales");
+            header.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; -fx-text-fill: #1F2937; -fx-padding: 16px 0px;");
 
         channelsTable = new TableView<>();
         channelsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
@@ -78,9 +81,35 @@ public class ChannelsController {
         Button btnCreate = new Button("Crear canal");
         btnCreate.setOnAction(e -> showCreateDialog());
         Button btnActivate = new Button("Activar");
-        btnActivate.setOnAction(e -> withSelectedChannel(c -> channelsService.setActive(c.getId(), true)));
+        btnActivate.setOnAction(e -> withSelectedChannel(c -> {
+            try {
+                channelsService.setActive(c.getId(), true);
+                ToastNotification.showSuccess(
+                    SharedContext.getPrimaryStage(),
+                    "Canal '" + c.getNombre() + "' activado exitosamente"
+                );
+            } catch (Exception ex) {
+                ToastNotification.showError(
+                    SharedContext.getPrimaryStage(),
+                    "Error al activar canal: " + ex.getMessage()
+                );
+            }
+        }));
         Button btnDeactivate = new Button("Desactivar");
-        btnDeactivate.setOnAction(e -> withSelectedChannel(c -> channelsService.setActive(c.getId(), false)));
+        btnDeactivate.setOnAction(e -> withSelectedChannel(c -> {
+            try {
+                channelsService.setActive(c.getId(), false);
+                ToastNotification.showWarning(
+                    SharedContext.getPrimaryStage(),
+                    "Canal '" + c.getNombre() + "' desactivado exitosamente"
+                );
+            } catch (Exception ex) {
+                ToastNotification.showError(
+                    SharedContext.getPrimaryStage(),
+                    "Error al desactivar canal: " + ex.getMessage()
+                );
+            }
+        }));
 
         HBox actions = new HBox(8, btnCreate, btnActivate, btnDeactivate);
         actions.setAlignment(Pos.CENTER_LEFT);
@@ -98,10 +127,17 @@ public class ChannelsController {
     }
 
     private Node loadPage(int pageIndex) {
-        int offset = pageIndex * PAGE_SIZE;
-        List<DTOCanal> canales = channelsService.listChannels(PAGE_SIZE, offset);
-        channelsData.setAll(canales);
-        pagination.setPageCount(canales.size() < PAGE_SIZE && pageIndex == 0 ? 1 : pageIndex + 2);
+        try {
+            int offset = pageIndex * PAGE_SIZE;
+            List<DTOCanal> canales = channelsService.listChannels(PAGE_SIZE, offset);
+            channelsData.setAll(canales);
+            pagination.setPageCount(canales.size() < PAGE_SIZE && pageIndex == 0 ? 1 : pageIndex + 2);
+        } catch (Exception e) {
+            ToastNotification.showError(
+                SharedContext.getPrimaryStage(),
+                "Error al cargar canales: " + e.getMessage()
+            );
+        }
         return channelsTable;
     }
 
@@ -125,8 +161,19 @@ public class ChannelsController {
         dialog.getDialogPane().getButtonTypes().addAll(btCrear, ButtonType.CANCEL);
         dialog.setResultConverter(bt -> {
             if (bt == btCrear) {
-                var dto = channelsService.createChannel(tfNombre.getText(), tfDesc.getText(), tfCreador.getText());
-                loadPage(0);
+                try {
+                    var dto = channelsService.createChannel(tfNombre.getText(), tfDesc.getText(), tfCreador.getText());
+                    ToastNotification.showSuccess(
+                        SharedContext.getPrimaryStage(),
+                        "Canal '" + tfNombre.getText() + "' creado exitosamente"
+                    );
+                    loadPage(0);
+                } catch (Exception ex) {
+                    ToastNotification.showError(
+                        SharedContext.getPrimaryStage(),
+                        "Error al crear canal: " + ex.getMessage()
+                    );
+                }
             }
             return null;
         });
@@ -138,6 +185,11 @@ public class ChannelsController {
         if (sel != null) {
             action.accept(sel);
             loadPage(0);
+        } else {
+            ToastNotification.showWarning(
+                SharedContext.getPrimaryStage(),
+                "Por favor selecciona un canal primero"
+            );
         }
     }
 }

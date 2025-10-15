@@ -32,11 +32,15 @@ public class ConnectionManager {
     
     // Gson para serializar DTOResponse a JSON
     private final Gson gson;
+    
+    // NotificationManager para notificar cambios de conexión
+    private final NotificationManager notificationManager;
 
-    public ConnectionManager() {
+    public ConnectionManager(NotificationManager notificationManager) {
         this.activeConnections = new ConcurrentHashMap<>();
         this.virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor();
         this.gson = new Gson();
+        this.notificationManager = notificationManager;
     }
 
     /**
@@ -49,6 +53,13 @@ public class ConnectionManager {
         activeConnections.put(userId, ctx);
         logger.info("Conexión registrada - userId: {}, total conexiones: {}", 
                     userId, activeConnections.size());
+        
+        // Notificar a clientes GUI suscritos
+        notificationManager.notificar("CONEXION", Map.of(
+            "usuarioId", userId,
+            "totalConexiones", activeConnections.size(),
+            "accion", "CONECTADO"
+        ));
     }
 
     /**
@@ -61,6 +72,13 @@ public class ConnectionManager {
         if (removed != null) {
             logger.info("Conexión eliminada - userId: {}, total conexiones: {}", 
                        userId, activeConnections.size());
+            
+            // Notificar a clientes GUI suscritos
+            notificationManager.notificar("DESCONEXION", Map.of(
+                "usuarioId", userId,
+                "totalConexiones", activeConnections.size(),
+                "accion", "DESCONECTADO"
+            ));
         }
     }
 

@@ -1,0 +1,99 @@
+---
+alwaysApply: true
+---
+## 2. Modelo Entidad-Relación (MER)
+
+El siguiente diagrama define la estructura y las relaciones de las tablas en la base de datos MySQL. Se ha optado por una tabla `mensajes` unificada para simplificar y escalar el sistema.
+
+```mermaid
+erDiagram
+    usuarios {
+        varchar(36) id PK
+        varchar(100) nombre
+        varchar(100) email UK
+        varchar(255) password_hash
+        varchar(255) photo_id
+        varchar(45) ip_address
+        timestamp fecha_registro
+        enum estado
+    }
+
+    canales {
+        varchar(36) id PK
+        varchar(100) nombre UK
+        text descripcion
+        varchar(36) creador_id FK
+        timestamp fecha_creacion
+        boolean activo
+    }
+
+    canal_miembros {
+        varchar(36) canal_id PK, FK
+        varchar(36) usuario_id PK, FK
+        timestamp fecha_union
+        enum rol
+    }
+
+    mensajes {
+        bigint id PK
+        varchar(36) remitente_id FK
+        varchar(36) destinatario_id FK
+        varchar(36) canal_id FK
+        enum tipo
+        text contenido
+        varchar(255) file_id
+        timestamp fecha_envio
+    }
+
+    archivos {
+        varchar(36) id PK
+        varchar(255) nombre_original
+        varchar(255) nombre_almacenado UK
+        varchar(64) hash_sha256 UK
+        bigint tamano_bytes
+        varchar(36) usuario_id FK
+        timestamp fecha_subida
+    }
+
+    logs_sistema {
+        bigint id PK
+        timestamp timestamp
+        enum tipo
+        varchar(36) usuario_id
+        varchar(45) ip_address
+        varchar(100) accion
+        text detalles
+    }
+
+    usuarios ||--o{ canales : "crea"
+    usuarios ||--o{ mensajes : "envía"
+    usuarios ||--o{ archivos : "sube"
+    canales ||--|{ canal_miembros : "contiene"
+    usuarios ||--|{ canal_miembros : "pertenece a"
+    canales ||--o{ mensajes : "recibe en"
+
+# 2. Protocolo de Comunicación (TCP/IP) - NUEVO
+
+La comunicación entre cliente y servidor se realiza mediante objetos JSON serializados como String, donde cada mensaje está delimitado por un salto de línea (`\n`).
+
+## Formato de Petición (Cliente → Servidor)
+
+El cliente siempre enviará un objeto `DTORequest` con la siguiente estructura:
+
+```json
+{
+  "action": "nombreDeLaAccion",
+  "payload": { ... } // Objeto DTO específico de la acción
+}
+
+## Formato de Respuesta (Servidor → Cliente)
+
+El servidor siempre responderá con un objeto `DTOResponse`. Este formato se usa tanto para respuestas directas a una petición como para notificaciones (push) a otros clientes.
+
+```json
+{
+  "action": "accionOriginal_o_accionNotificacion",
+  "status": "success" | "error",
+  "message": "Mensaje descriptivo sobre el resultado",
+  "data": { ... } // Objeto DTO con los datos de la respuesta o null
+}

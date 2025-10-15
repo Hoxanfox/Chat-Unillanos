@@ -11,6 +11,7 @@ import com.unillanos.server.repository.interfaces.IMensajeRepository;
 import com.unillanos.server.repository.interfaces.IUsuarioRepository;
 import com.unillanos.server.repository.interfaces.IArchivoRepository;
 import com.unillanos.server.repository.models.*;
+import com.unillanos.server.repository.models.EstadoMensaje;
 import com.unillanos.server.validation.EnviarMensajeValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -108,6 +109,7 @@ public class MensajeriaService {
             mensaje.setContenido(dto.getContenido());
             mensaje.setFileId(dto.getFileId());
             mensaje.setFechaEnvio(LocalDateTime.now());
+            mensaje.setEstado(EstadoMensaje.ENVIADO); // Estado inicial
             
             // 6. Guardar mensaje en BD (recuperar ID generado)
             MensajeEntity mensajeGuardado = mensajeRepository.save(mensaje);
@@ -119,6 +121,9 @@ public class MensajeriaService {
             
             // 8. Si destinatario está online, notificar en tiempo real
             if (connectionManager.isUserOnline(dto.getDestinatarioId())) {
+                // Marcar como entregado
+                mensajeRepository.marcarComoEntregado(mensajeGuardado.getId());
+                
                 DTOMensaje notificacionMensaje = mensajeGuardado.toDTO(
                     remitente.getNombre(),
                     destinatario.getNombre(),
@@ -131,7 +136,7 @@ public class MensajeriaService {
                     notificacionMensaje
                 );
                 connectionManager.notifyUser(dto.getDestinatarioId(), notificacion);
-                logger.debug("Notificación enviada al destinatario {}", destinatario.getNombre());
+                logger.debug("Notificación enviada al destinatario {} y mensaje marcado como entregado", destinatario.getNombre());
             }
             
             // 9. Retornar DTOResponse.success con DTOMensaje
@@ -392,6 +397,82 @@ public class MensajeriaService {
         } catch (Exception e) {
             logger.error("Error inesperado al obtener historial", e);
             throw new RuntimeException("Error al obtener historial", e);
+        }
+    }
+
+    /**
+     * Marca un mensaje como leído por el destinatario.
+     *
+     * @param dto DTO con el ID del mensaje y el usuario que lo lee
+     * @return DTOResponse con el resultado de la operación
+     */
+    public DTOResponse marcarComoLeido(DTOMarcarMensajeLeido dto) {
+        try {
+            // Validaciones básicas
+            if (dto == null) {
+                throw new ValidationException("Los datos para marcar como leído son requeridos", "dto");
+            }
+            if (dto.getMensajeId() == null || dto.getMensajeId().trim().isEmpty()) {
+                throw new ValidationException("El ID del mensaje es requerido", "mensajeId");
+            }
+            if (dto.getUsuarioId() == null || dto.getUsuarioId().trim().isEmpty()) {
+                throw new ValidationException("El ID del usuario es requerido", "usuarioId");
+            }
+
+            Long mensajeId;
+            try {
+                mensajeId = Long.parseLong(dto.getMensajeId());
+            } catch (NumberFormatException e) {
+                throw new ValidationException("El ID del mensaje debe ser un número válido", "mensajeId");
+            }
+
+            // Verificar que el mensaje existe
+            Optional<MensajeEntity> mensajeOpt = mensajeRepository.findById(mensajeId);
+            if (mensajeOpt.isEmpty()) {
+                throw new NotFoundException("Mensaje no encontrado", "MESSAGE_NOT_FOUND");
+            }
+
+            MensajeEntity mensaje = mensajeOpt.get();
+
+            // Verificar que el usuario es el destinatario
+            if (!mensaje.getDestinatarioId().equals(dto.getUsuarioId())) {
+                throw new AuthenticationException("No tienes autorización para marcar este mensaje como leído", "UNAUTHORIZED_MESSAGE_READ");
+            }
+
+            // Verificar que el mensaje no esté ya leído
+            if (mensaje.getEstado() == EstadoMensaje.LEIDO) {
+                logger.info("Mensaje {} ya estaba marcado como leído", mensajeId);
+                return DTOResponse.success("marcar_leido", "Mensaje ya estaba marcado como leído", null);
+            }
+
+            // Marcar como leído en la base de datos
+            mensajeRepository.marcarComoLeido(mensajeId, dto.getUsuarioId());
+
+            // Notificar al remitente del cambio de estado si está conectado
+            if (connectionManager.isUserOnline(mensaje.getRemitenteId())) {
+                DTOEstadoMensaje estadoNotificacion = new DTOEstadoMensaje(
+                    dto.getMensajeId(),
+                    EstadoMensaje.LEIDO.toString(),
+                    mensaje.getFechaEnvio().toString(),
+                    mensaje.getFechaEntrega() != null ? mensaje.getFechaEntrega().toString() : null,
+                    LocalDateTime.now().toString()
+                );
+
+                DTOResponse notificacion = DTOResponse.success("mensaje_leido", 
+                    "Tu mensaje ha sido leído", estadoNotificacion);
+
+                connectionManager.notifyUser(mensaje.getRemitenteId(), notificacion);
+            }
+
+            logger.info("Mensaje {} marcado como leído por usuario {}", mensajeId, dto.getUsuarioId());
+            return DTOResponse.success("marcar_leido", "Mensaje marcado como leído exitosamente", null);
+
+        } catch (ValidationException | NotFoundException | AuthenticationException e) {
+            logger.warn("Error al marcar mensaje como leído: {}", e.getMessage());
+            return DTOResponse.error("marcar_leido", e.getMessage());
+        } catch (Exception e) {
+            logger.error("Error inesperado al marcar mensaje como leído", e);
+            return DTOResponse.error("marcar_leido", "Error inesperado al marcar el mensaje como leído");
         }
     }
 }

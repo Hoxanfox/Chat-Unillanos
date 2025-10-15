@@ -1,5 +1,6 @@
 package com.unillanos.server.validation;
 
+import com.unillanos.server.config.ServerConfigProperties;
 import com.unillanos.server.exception.ValidationException;
 
 /**
@@ -8,23 +9,23 @@ import com.unillanos.server.exception.ValidationException;
  */
 public class PasswordValidator {
     
-    private static final int MIN_LENGTH = 8;
     private static final int MAX_LENGTH = 100;
     
     /**
      * Valida una contraseña y lanza excepción si no cumple los requisitos.
      *
      * @param password Contraseña a validar
+     * @param config Configuración del servidor
      * @throws ValidationException si la contraseña no es válida
      */
-    public static void validate(String password) throws ValidationException {
+    public static void validate(String password, ServerConfigProperties config) throws ValidationException {
         if (password == null || password.isEmpty()) {
             throw new ValidationException("La contraseña es requerida", "password");
         }
         
-        if (password.length() < MIN_LENGTH) {
+        if (password.length() < config.getSeguridad().getLongitudMinPassword()) {
             throw new ValidationException(
-                "La contraseña debe tener al menos " + MIN_LENGTH + " caracteres", 
+                "La contraseña debe tener al menos " + config.getSeguridad().getLongitudMinPassword() + " caracteres", 
                 "password"
             );
         }

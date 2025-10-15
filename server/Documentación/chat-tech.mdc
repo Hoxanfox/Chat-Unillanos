@@ -1,0 +1,140 @@
+---
+alwaysApply: true
+---
+
+# Tech Stack
+
+## Core Technologies
+
+- **Java 21 (LTS)** - Aprovecha hilos virtuales (Project Loom) para concurrencia eficiente
+- **Spring Boot 3.3.5** - Inyección de dependencias y gestión del ciclo de vida
+- **Maven 4.0.0** - Sistema de construcción multi-módulo
+- **Netty 4.1.110.Final** - Servidor TCP/IP asíncrono y no bloqueante
+- **MySQL 8.x** - Base de datos relacional (gestionada con Docker)
+- **JavaFX 21** - Interfaz gráfica de administración
+
+## Libraries & Frameworks
+
+- **HikariCP** - Pool de conexiones (incluido en Spring Boot)
+- **Gson 2.10.1** - Serialización JSON de DTOs
+- **BCrypt (at.favre.lib)** - Hashing seguro de contraseñas
+- **SLF4J + Logback** - Sistema de logging (incluido en Spring Boot)
+
+## Testing
+
+- **JUnit 5** - Framework de testing
+- **Mockito** - Mocking de dependencias
+- **Testcontainers** - Contenedores Docker para tests de integración
+- **AssertJ** - Assertions fluidas
+
+## Common Commands
+
+### Database
+```bash
+# Levantar MySQL con Docker
+docker-compose up -d
+
+# Detener MySQL
+docker-compose down
+```
+
+### Build
+```bash
+# Compilar todo el proyecto
+mvn clean install
+
+# Compilar sin tests
+mvn clean install -DskipTests
+```
+
+### Run
+```bash
+# Ejecutar el servidor (desde raíz del proyecto)
+mvn -pl Presentacion/Main spring-boot:run
+```
+
+### Test
+```bash
+# Ejecutar todos los tests
+mvn test
+
+# Ejecutar tests de un módulo específico
+mvn -pl LogicaNegocio/Servicios test
+```
+
+## Architecture Principles
+
+- **JDBC Puro** - No usar JPA/Hibernate, solo JDBC con PreparedStatement
+- **Inyección por Constructor** - Usar @Autowired en constructores, no en campos
+- **Interfaces sobre Implementaciones** - Depender de interfaces (IUsuarioRepository, IActionDispatcher)
+- **Hilos Virtuales** - Usar `Executors.newVirtualThreadPerTaskExecutor()` para tareas asíncronas
+- **Patrón Repository** - Toda lógica JDBC en clases *RepositoryImpl
+- **Patrón Observer** - Para notificaciones en tiempo real (GUI, ConnectionManager)
+# Tech Stack
+
+## Core Technologies
+
+- **Java 21 (LTS)** - Aprovecha hilos virtuales (Project Loom) para concurrencia eficiente
+- **Spring Boot 3.3.5** - Inyección de dependencias y gestión del ciclo de vida
+- **Maven 4.0.0** - Sistema de construcción multi-módulo
+- **Netty 4.1.110.Final** - Servidor TCP/IP asíncrono y no bloqueante
+- **MySQL 8.x** - Base de datos relacional (gestionada con Docker)
+- **JavaFX 21** - Interfaz gráfica de administración
+
+## Libraries & Frameworks
+
+- **HikariCP** - Pool de conexiones (incluido en Spring Boot)
+- **Gson 2.10.1** - Serialización JSON de DTOs
+- **BCrypt (at.favre.lib)** - Hashing seguro de contraseñas
+- **SLF4J + Logback** - Sistema de logging (incluido en Spring Boot)
+
+## Testing
+
+- **JUnit 5** - Framework de testing
+- **Mockito** - Mocking de dependencias
+- **Testcontainers** - Contenedores Docker para tests de integración
+- **AssertJ** - Assertions fluidas
+
+## Common Commands
+
+### Database
+```bash
+# Levantar MySQL con Docker
+docker-compose up -d
+
+# Detener MySQL
+docker-compose down
+```
+
+### Build
+```bash
+# Compilar todo el proyecto
+mvn clean install
+
+# Compilar sin tests
+mvn clean install -DskipTests
+```
+
+### Run
+```bash
+# Ejecutar el servidor (desde raíz del proyecto)
+mvn -pl Presentacion/Main spring-boot:run
+```
+
+### Test
+```bash
+# Ejecutar todos los tests
+mvn test
+
+# Ejecutar tests de un módulo específico
+mvn -pl LogicaNegocio/Servicios test
+```
+
+## Architecture Principles
+
+- **JDBC Puro** - No usar JPA/Hibernate, solo JDBC con PreparedStatement
+- **Inyección por Constructor** - Usar @Autowired en constructores, no en campos
+- **Interfaces sobre Implementaciones** - Depender de interfaces (IUsuarioRepository, IActionDispatcher)
+- **Hilos Virtuales** - Usar `Executors.newVirtualThreadPerTaskExecutor()` para tareas asíncronas
+- **Patrón Repository** - Toda lógica JDBC en clases *RepositoryImpl
+- **Patrón Observer** - Para notificaciones en tiempo real (GUI, ConnectionManager)
