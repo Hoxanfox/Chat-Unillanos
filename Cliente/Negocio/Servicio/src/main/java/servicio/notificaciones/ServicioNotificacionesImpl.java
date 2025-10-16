@@ -70,6 +70,7 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
     }
 
     @Override
+<<<<<<< HEAD
     public CompletableFuture<Void> aceptarInvitacionCanal(String invitacionId, String canalId) {
         System.out.println("✅ [ServicioNotificaciones]: Aceptando invitación a canal: " + canalId);
 
@@ -104,6 +105,8 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
     }
 
     @Override
+=======
+>>>>>>> refs/remotes/origin/develop
     public void registrarObservador(IObservador observador) {
         if (!observadores.contains(observador)) {
             observadores.add(observador);
@@ -124,3 +127,7 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
         }
     }
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> refs/remotes/origin/develop

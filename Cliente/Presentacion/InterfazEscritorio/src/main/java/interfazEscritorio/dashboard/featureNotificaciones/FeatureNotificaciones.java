@@ -87,6 +87,7 @@ public class FeatureNotificaciones extends VBox implements IObservador {
     private void cargarNotificaciones(List<DTONotificacion> notificaciones) {
         tarjetasContainer.getChildren().clear();
 
+<<<<<<< HEAD
         // Filtrar solo notificaciones de invitaciones a canales
         List<DTONotificacion> invitacionesCanal = notificaciones.stream()
             .filter(n -> "INVITACION_CANAL".equals(n.getTipo()))
@@ -101,6 +102,17 @@ public class FeatureNotificaciones extends VBox implements IObservador {
             tarjetasContainer.getChildren().add(sinNotificaciones);
         } else {
             for (DTONotificacion notificacion : invitacionesCanal) {
+=======
+        long noLeidas = notificaciones.stream().filter(n -> !n.isLeida()).count();
+        titulo.setText("NOTIFICATIONS (" + notificaciones.size() + (noLeidas > 0 ? " - " + noLeidas + " new" : "") + ")");
+
+        if (notificaciones.isEmpty()) {
+            Label sinNotificaciones = new Label("No hay notificaciones");
+            sinNotificaciones.setStyle("-fx-text-fill: gray; -fx-font-size: 14px;");
+            tarjetasContainer.getChildren().add(sinNotificaciones);
+        } else {
+            for (DTONotificacion notificacion : notificaciones) {
+>>>>>>> refs/remotes/origin/develop
                 tarjetasContainer.getChildren().add(crearTarjetaNotificacion(notificacion));
             }
         }
@@ -124,6 +136,7 @@ public class FeatureNotificaciones extends VBox implements IObservador {
         Label tiempoLabel = new Label(notificacion.getTiempoRelativo());
         tiempoLabel.setStyle("-fx-text-fill: gray;");
 
+<<<<<<< HEAD
         // Crear barra de botones para aceptar/rechazar
         javafx.scene.layout.HBox botonesBox = new javafx.scene.layout.HBox(10);
         botonesBox.setPadding(new Insets(5, 0, 0, 0));
@@ -159,6 +172,19 @@ public class FeatureNotificaciones extends VBox implements IObservador {
         botonesBox.getChildren().addAll(btnAceptar, btnRechazar);
 
         card.getChildren().addAll(tituloLabel, contenidoText, tiempoLabel, botonesBox);
+=======
+        // Si no está leída, agregar botón para marcar como leída
+        if (!notificacion.isLeida()) {
+            Hyperlink marcarLeida = new Hyperlink("Mark as read");
+            marcarLeida.setOnAction(e -> {
+                System.out.println("🖱️ [FeatureNotificaciones]: Marcando como leída: " + notificacion.getId());
+                controlador.marcarComoLeida(notificacion.getId());
+            });
+            card.getChildren().addAll(tituloLabel, contenidoText, tiempoLabel, marcarLeida);
+        } else {
+            card.getChildren().addAll(tituloLabel, contenidoText, tiempoLabel);
+        }
+>>>>>>> refs/remotes/origin/develop
 
         return card;
     }

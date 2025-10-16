@@ -28,6 +28,7 @@ public interface IFachadaNotificaciones {
      * @return CompletableFuture que se completa cuando todas están marcadas.
      */
     CompletableFuture<Void> marcarTodasNotificacionesLeidas();
+<<<<<<< HEAD
 
     /**
      * Acepta una invitación a un canal.
@@ -44,3 +45,7 @@ public interface IFachadaNotificaciones {
      */
     CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId);
 }
+=======
+}
+
+>>>>>>> refs/remotes/origin/develop

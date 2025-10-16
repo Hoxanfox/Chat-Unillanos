@@ -36,6 +36,7 @@ public class FachadaNotificacionesImpl implements IFachadaNotificaciones {
         System.out.println("📝 [FachadaNotificaciones]: Marcando todas las notificaciones como leídas");
         return gestorNotificaciones.marcarTodasComoLeidas();
     }
+<<<<<<< HEAD
 
     @Override
     public CompletableFuture<Void> aceptarInvitacionCanal(String invitacionId, String canalId) {
@@ -48,4 +49,6 @@ public class FachadaNotificacionesImpl implements IFachadaNotificaciones {
         System.out.println("❌ [FachadaNotificaciones]: Rechazando invitación: " + invitacionId);
         return gestorNotificaciones.rechazarInvitacionCanal(invitacionId);
     }
+=======
+>>>>>>> refs/remotes/origin/develop
 }

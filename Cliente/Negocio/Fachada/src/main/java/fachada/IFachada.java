@@ -25,6 +25,7 @@ public interface IFachada {
      * Marca todas las notificaciones como leídas.
      */
     CompletableFuture<Void> marcarTodasNotificacionesLeidas();
+<<<<<<< HEAD
 
     /**
      * Acepta una invitación a un canal.
@@ -41,3 +42,7 @@ public interface IFachada {
      */
     CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId);
 }
+=======
+}
+
+>>>>>>> refs/remotes/origin/develop

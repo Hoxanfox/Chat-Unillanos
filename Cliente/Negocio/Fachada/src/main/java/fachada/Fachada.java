@@ -39,6 +39,7 @@ public class Fachada implements IFachada {
     public CompletableFuture<Void> marcarTodasNotificacionesLeidas() {
         return fachadaGeneral.getFachadaNotificaciones().marcarTodasNotificacionesLeidas();
     }
+<<<<<<< HEAD
 
     @Override
     public CompletableFuture<Void> aceptarInvitacionCanal(String invitacionId, String canalId) {
@@ -49,4 +50,6 @@ public class Fachada implements IFachada {
     public CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId) {
         return fachadaGeneral.getFachadaNotificaciones().rechazarInvitacionCanal(invitacionId);
     }
+=======
+>>>>>>> refs/remotes/origin/develop
 }

@@ -24,6 +24,7 @@ public interface IServicioNotificaciones {
     CompletableFuture<Void> marcarTodasComoLeidas();
     
     /**
+<<<<<<< HEAD
      * Acepta una invitación a un canal.
      */
     CompletableFuture<Void> aceptarInvitacionCanal(String invitacionId, String canalId);
@@ -34,6 +35,8 @@ public interface IServicioNotificaciones {
     CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId);
 
     /**
+=======
+>>>>>>> refs/remotes/origin/develop
      * Registra un observador para recibir actualizaciones.
      */
     void registrarObservador(IObservador observador);
@@ -43,3 +46,7 @@ public interface IServicioNotificaciones {
      */
     void removerObservador(IObservador observador);
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> refs/remotes/origin/develop
