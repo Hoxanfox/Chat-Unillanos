@@ -1,7 +1,7 @@
 package com.unillanos.server.repository.interfaces;
 
-import com.unillanos.server.repository.models.EstadoUsuario;
-import com.unillanos.server.repository.models.UsuarioEntity;
+import com.unillanos.server.entity.EstadoUsuario;
+import com.unillanos.server.entity.UsuarioEntity;
 
 import java.util.List;
 import java.util.Map;
@@ -38,6 +38,14 @@ public interface IUsuarioRepository {
      * @return true si existe un usuario con ese email
      */
     boolean existsByEmail(String email);
+    
+    /**
+     * Verifica si existe un usuario con el ID dado.
+     *
+     * @param id ID a verificar
+     * @return true si existe un usuario con ese ID
+     */
+    boolean existsById(String id);
     
     /**
      * Obtiene todos los usuarios con paginación.

@@ -22,6 +22,10 @@
         <!-- Módulos internos -->
         <dependency>
             <groupId>com.unillanos</groupId>
+            <artifactId>entidades</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.unillanos</groupId>
             <artifactId>dtos</artifactId>
         </dependency>
         <dependency>

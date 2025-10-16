@@ -1,4 +1,4 @@
-package com.unillanos.server.repository.models;
+package com.unillanos.server.entity;
 
 /**
  * Enum que representa el tipo de archivo multimedia.
@@ -26,4 +26,3 @@ public enum TipoArchivo {
         }
     }
 }
-

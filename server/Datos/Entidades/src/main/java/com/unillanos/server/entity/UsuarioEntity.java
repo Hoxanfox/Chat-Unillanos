@@ -1,6 +1,4 @@
-package com.unillanos.server.repository.models;
-
-import com.unillanos.server.dto.DTOUsuario;
+package com.unillanos.server.entity;
 
 import java.time.LocalDateTime;
 
@@ -102,8 +100,8 @@ public class UsuarioEntity {
      * 
      * @return DTOUsuario con los datos del usuario
      */
-    public DTOUsuario toDTO() {
-        DTOUsuario dto = new DTOUsuario();
+    public com.unillanos.server.dto.DTOUsuario toDTO() {
+        com.unillanos.server.dto.DTOUsuario dto = new com.unillanos.server.dto.DTOUsuario();
         dto.setId(this.id);
         dto.setNombre(this.nombre);
         dto.setEmail(this.email);
@@ -126,4 +124,3 @@ public class UsuarioEntity {
                 '}';
     }
 }
-

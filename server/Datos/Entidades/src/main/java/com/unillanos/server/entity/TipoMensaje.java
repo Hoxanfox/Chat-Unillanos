@@ -1,4 +1,4 @@
-package com.unillanos.server.repository.models;
+package com.unillanos.server.entity;
 
 /**
  * Enum que representa el tipo de mensaje.
@@ -25,4 +25,3 @@ public enum TipoMensaje {
         }
     }
 }
-

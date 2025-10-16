@@ -1,8 +1,8 @@
 package com.unillanos.server.repository.impl;
 
 import com.unillanos.server.repository.interfaces.IChunkSessionRepository;
-import com.unillanos.server.repository.models.ChunkSessionEntity;
-import com.unillanos.server.repository.models.EstadoSesion;
+import com.unillanos.server.entity.ChunkSessionEntity;
+import com.unillanos.server.entity.EstadoSesion;
 import com.unillanos.server.repository.mappers.ChunkSessionMapper;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -154,6 +154,31 @@ public class ChunkSessionRepositoryImpl implements IChunkSessionRepository {
         } catch (SQLException e) {
             logger.error("Error al actualizar última actividad: {}", e.getMessage(), e);
             throw new RuntimeException("Error al actualizar última actividad", e);
+        }
+    }
+    
+    @Override
+    public void actualizarSesion(ChunkSessionEntity session) {
+        String sql = "UPDATE chunk_sessions SET chunks_recibidos = ?, ultima_actividad = ?, estado = ? WHERE session_id = ?";
+        
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, gson.toJson(session.getChunksRecibidos()));
+            stmt.setTimestamp(2, Timestamp.valueOf(session.getUltimaActividad()));
+            stmt.setString(3, session.getEstadoSesion().toString());
+            stmt.setString(4, session.getSessionId());
+            
+            int rowsUpdated = stmt.executeUpdate();
+            if (rowsUpdated == 0) {
+                logger.warn("No se encontró sesión para actualizar: {}", session.getSessionId());
+            } else {
+                logger.debug("Sesión actualizada: {}", session.getSessionId());
+            }
+            
+        } catch (SQLException e) {
+            logger.error("Error al actualizar sesión: {}", e.getMessage(), e);
+            throw new RuntimeException("Error al actualizar sesión", e);
         }
     }
 

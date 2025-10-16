@@ -4,8 +4,8 @@ import com.unillanos.server.config.ServerConfigProperties;
 import com.unillanos.server.repository.interfaces.ILogRepository;
 import com.unillanos.server.repository.interfaces.IMensajeRepository;
 import com.unillanos.server.repository.interfaces.IUsuarioRepository;
-import com.unillanos.server.repository.models.LogEntity;
-import com.unillanos.server.repository.models.TipoMensaje;
+import com.unillanos.server.entity.LogEntity;
+import com.unillanos.server.entity.TipoMensaje;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;

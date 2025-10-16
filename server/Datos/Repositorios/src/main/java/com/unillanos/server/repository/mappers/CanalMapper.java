@@ -1,6 +1,6 @@
 package com.unillanos.server.repository.mappers;
 
-import com.unillanos.server.repository.models.CanalEntity;
+import com.unillanos.server.entity.CanalEntity;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;

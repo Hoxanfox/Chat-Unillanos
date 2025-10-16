@@ -1,7 +1,7 @@
 package com.unillanos.server.repository.interfaces;
 
-import com.unillanos.server.repository.models.ChunkSessionEntity;
-import com.unillanos.server.repository.models.EstadoSesion;
+import com.unillanos.server.entity.ChunkSessionEntity;
+import com.unillanos.server.entity.EstadoSesion;
 
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +49,13 @@ public interface IChunkSessionRepository {
      * @param sessionId ID de la sesión
      */
     void actualizarUltimaActividad(String sessionId);
+    
+    /**
+     * Actualiza una sesión completa.
+     *
+     * @param session Sesión a actualizar
+     */
+    void actualizarSesion(ChunkSessionEntity session);
     
     /**
      * Elimina una sesión.

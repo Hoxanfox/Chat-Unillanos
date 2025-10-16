@@ -1,4 +1,4 @@
-package com.unillanos.server.repository.models;
+package com.unillanos.server.entity;
 
 /**
  * Enum que representa los posibles roles de un usuario en un canal.
@@ -26,4 +26,3 @@ public enum RolCanal {
         }
     }
 }
-

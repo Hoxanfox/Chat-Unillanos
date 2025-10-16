@@ -3,7 +3,7 @@ package com.unillanos.server.repository.impl;
 import com.unillanos.server.exception.RepositoryException;
 import com.unillanos.server.repository.interfaces.ILogRepository;
 import com.unillanos.server.repository.mappers.LogMapper;
-import com.unillanos.server.repository.models.LogEntity;
+import com.unillanos.server.entity.LogEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;

@@ -1,6 +1,6 @@
 package com.unillanos.server.repository.interfaces;
 
-import com.unillanos.server.repository.models.LogEntity;
+import com.unillanos.server.entity.LogEntity;
 
 import java.util.List;
 

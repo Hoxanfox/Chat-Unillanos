@@ -2,6 +2,7 @@ package com.unillanos.server.service.impl;
 
 import com.google.gson.Gson;
 import com.unillanos.server.dto.*;
+import com.unillanos.server.dto.response.*;
 import com.unillanos.server.exception.ValidationException;
 import com.unillanos.server.service.interfaces.IActionDispatcher;
 import io.netty.channel.ChannelHandlerContext;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.net.InetSocketAddress;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -32,6 +34,8 @@ public class ActionDispatcherImpl implements IActionDispatcher {
     private final NotificationManager notificationManager;
     private final AdminUsersService adminUsersService;
     private final ConnectionManager connectionManager;
+    private final NotificationService notificationService;
+    private final ContactService contactService;
     private final Gson gson;
 
     public ActionDispatcherImpl(GlobalExceptionHandler exceptionHandler, 
@@ -43,7 +47,9 @@ public class ActionDispatcherImpl implements IActionDispatcher {
                                 ChunkingService chunkingService,
                                 NotificationManager notificationManager,
                                 AdminUsersService adminUsersService,
-                                ConnectionManager connectionManager) {
+                                ConnectionManager connectionManager,
+                                NotificationService notificationService,
+                                ContactService contactService) {
         this.exceptionHandler = exceptionHandler;
         this.loggerService = loggerService;
         this.autenticacionService = autenticacionService;
@@ -54,6 +60,8 @@ public class ActionDispatcherImpl implements IActionDispatcher {
         this.notificationManager = notificationManager;
         this.adminUsersService = adminUsersService;
         this.connectionManager = connectionManager;
+        this.notificationService = notificationService;
+        this.contactService = contactService;
         this.gson = new Gson();
     }
 
@@ -101,7 +109,8 @@ public class ActionDispatcherImpl implements IActionDispatcher {
                 // Adaptaciones para coincidir con el cliente
                 case "enviarMensajePrivado" -> handleEnviarMensajeDirecto(request);
                 case "obtenerHistorial" -> handleObtenerHistorial(request);
-                case "solicitarHistorialPrivado" -> handleObtenerHistorial(request);
+                case "solicitarHistorialPrivado" -> handleSolicitarHistorialPrivado(request);
+                case "solicitarHistorialCanal" -> handleSolicitarHistorialCanal(request);
                 case "marcar_mensaje_leido" -> handleMarcarMensajeLeido(request);
                 
                 // --- ACCIONES DE CONTACTOS ---
@@ -112,23 +121,26 @@ public class ActionDispatcherImpl implements IActionDispatcher {
                 case "descargarArchivo" -> handleDescargarArchivo(request);
                 case "listarArchivos" -> handleListarArchivos(request);
                 
-                // --- ACCIONES DE CHUNKING ---
-                case "iniciar_subida" -> handleIniciarSubida(request);
-                case "subir_chunk" -> handleSubirChunk(request);
-                case "finalizar_subida" -> handleFinalizarSubida(request);
-                case "descargar_chunk" -> handleDescargarChunk(request);
                 
                 // --- ACCIONES DE SUBIDA DE ARCHIVOS (Cliente) ---
                 case "startFileUpload" -> handleStartFileUpload(request, ctx);
                 case "endFileUpload" -> handleEndFileUpload(request);
                 
-                // --- ACCIONES DE SUBIDA DURANTE REGISTRO (Sin autenticación) ---
+                // --- ACCIONES DE SUBIDA DE ARCHIVOS (Solo para usuarios autenticados) ---
+                case "uploadFileChunk" -> handleUploadFileChunk(request, ctx);
+                
+                // --- ACCIONES DE SUBIDA DE ARCHIVOS PARA REGISTRO (Sin autenticación) ---
                 case "uploadFileForRegistration" -> handleUploadFileForRegistration(request);
-                case "uploadFileChunk" -> handleUploadFileChunk(request);
+                case "uploadFileChunkForRegistration" -> handleUploadFileChunkForRegistration(request);
+                case "endFileUploadForRegistration" -> handleEndFileUploadForRegistration(request);
                 
                 // --- ACCIONES DE NOTIFICACIONES ---
                 case "suscribir_notificaciones" -> handleSuscribirNotificaciones(request, ctx);
                 case "desuscribir_notificaciones" -> handleDesuscribirNotificaciones(request);
+                case "obtenerNotificaciones" -> handleObtenerNotificaciones(request);
+                case "marcarNotificacionLeida" -> handleMarcarNotificacionLeida(request);
+                case "responderSolicitudAmistad" -> handleResponderSolicitudAmistad(request);
+                case "responderInvitacionCanal" -> handleResponderInvitacionCanal(request);
                 
                 default -> DTOResponse.error(action, "Acción no reconocida: " + action);
             };
@@ -365,29 +377,6 @@ public class ActionDispatcherImpl implements IActionDispatcher {
             Map.of("clienteId", dto.getClienteId()));
     }
 
-    // --- HANDLERS DE CHUNKING ---
-
-    private DTOResponse handleIniciarSubida(DTORequest request) {
-        DTOIniciarSubida dto = gson.fromJson(gson.toJson(request.getPayload()), DTOIniciarSubida.class);
-        return chunkingService.iniciarSubida(dto);
-    }
-
-    private DTOResponse handleSubirChunk(DTORequest request) {
-        DTOSubirArchivoChunk dto = gson.fromJson(gson.toJson(request.getPayload()), DTOSubirArchivoChunk.class);
-        return chunkingService.subirChunk(dto);
-    }
-
-    private DTOResponse handleFinalizarSubida(DTORequest request) {
-        Map<String, Object> payload = gson.fromJson(gson.toJson(request.getPayload()), Map.class);
-        String sessionId = (String) payload.get("sessionId");
-        return chunkingService.finalizarSubida(sessionId);
-    }
-
-    private DTOResponse handleDescargarChunk(DTORequest request) {
-        DTODescargarArchivoChunk dto = gson.fromJson(gson.toJson(request.getPayload()), DTODescargarArchivoChunk.class);
-        return chunkingService.descargarChunk(dto);
-    }
-
     /**
      * Extrae la dirección IP del cliente desde el contexto de Netty.
      *
@@ -482,86 +471,34 @@ public class ActionDispatcherImpl implements IActionDispatcher {
         }
     }
 
-    /**
-     * Maneja la subida de archivos durante el proceso de registro.
-     * Permite subir archivos sin autenticación para el registro de usuarios.
-     *
-     * @param request DTORequest con los datos de inicio de subida
-     * @return DTOResponse con el resultado de la operación
-     */
-    private DTOResponse handleUploadFileForRegistration(DTORequest request) {
-        try {
-            // Deserializar el payload del cliente
-            @SuppressWarnings("unchecked")
-            Map<String, Object> clientPayload = (Map<String, Object>) request.getPayload();
-            
-            String fileName = (String) clientPayload.get("fileName");
-            String fileMimeType = (String) clientPayload.get("fileMimeType");
-            
-            // Manejar tanto Integer como Double para totalChunks
-            Object totalChunksObj = clientPayload.get("totalChunks");
-            int totalChunks;
-            if (totalChunksObj instanceof Integer) {
-                totalChunks = (Integer) totalChunksObj;
-            } else if (totalChunksObj instanceof Double) {
-                totalChunks = ((Double) totalChunksObj).intValue();
-            } else {
-                return DTOResponse.error("uploadFileForRegistration", "totalChunks debe ser un número");
-            }
-            
-            if (fileName == null || fileMimeType == null || totalChunksObj == null) {
-                return DTOResponse.error("uploadFileForRegistration", "Faltan datos requeridos en el payload");
-            }
-            
-            // Para archivos de registro, usamos un tamaño estimado más flexible
-            // El tamaño real se validará cuando se reciban los chunks
-            long estimatedSize = totalChunks * 1024 * 512; // 512 KB por chunk, igual que el cliente
-            
-            // Crear un userId temporal para la subida (usaremos solo el UUID para que quepa en la columna)
-            String tempUserId = java.util.UUID.randomUUID().toString();
-            
-            // Crear el DTO que espera el servidor
-            DTOIniciarSubida dto = new DTOIniciarSubida(
-                tempUserId,
-                fileName,
-                fileMimeType,
-                estimatedSize,
-                totalChunks
-            );
-            
-            // Llamar al método especial para registro
-            DTOResponse response = chunkingService.iniciarSubidaParaRegistro(dto);
-            
-            // El ChunkingService ya devuelve el DTO correcto con uploadId incluido
-            // Solo necesitamos cambiar la acción de la respuesta para que coincida con la petición del cliente
-            if ("success".equals(response.getStatus())) {
-                return DTOResponse.success("uploadFileForRegistration", response.getMessage(), response.getData());
-            } else {
-                return DTOResponse.error("uploadFileForRegistration", response.getMessage());
-            }
-            
-        } catch (Exception e) {
-            logger.error("Error al procesar uploadFileForRegistration", e);
-            return DTOResponse.error("uploadFileForRegistration", "Error interno del servidor: " + e.getMessage());
-        }
-    }
 
     /**
-     * Maneja la subida de chunks durante el proceso de registro.
-     * Adapta el payload del cliente al formato esperado por el servidor.
+     * Maneja la subida de chunks de archivos.
+     * Requiere que el usuario esté autenticado.
      *
      * @param request DTORequest con los datos del chunk
+     * @param ctx Contexto de Netty para obtener el userId
      * @return DTOResponse con el resultado de la operación
      */
-    private DTOResponse handleUploadFileChunk(DTORequest request) {
+    private DTOResponse handleUploadFileChunk(DTORequest request, ChannelHandlerContext ctx) {
         try {
+            // Obtener el userId del contexto de conexión
+            String userId = connectionManager.getUserIdByContext(ctx);
+            if (userId == null) {
+                return DTOResponse.error("uploadFileChunk", "Usuario no autenticado");
+            }
+
             // Deserializar el payload del cliente
             @SuppressWarnings("unchecked")
             Map<String, Object> clientPayload = (Map<String, Object>) request.getPayload();
             
             String uploadId = (String) clientPayload.get("uploadId");
             Object chunkNumberObj = clientPayload.get("chunkNumber");
+            // El cliente envía chunkData_base64, pero también puede venir como chunkData
             String chunkDataBase64 = (String) clientPayload.get("chunkData_base64");
+            if (chunkDataBase64 == null) {
+                chunkDataBase64 = (String) clientPayload.get("chunkData");
+            }
             
             // Validar campos requeridos
             if (uploadId == null || chunkNumberObj == null || chunkDataBase64 == null) {
@@ -582,7 +519,6 @@ public class ActionDispatcherImpl implements IActionDispatcher {
             String sessionId = uploadId;
             
             // Obtener información de la sesión para completar el DTO
-            // Necesitamos obtener los datos de la sesión para completar los campos requeridos
             DTOResponse sessionInfo = chunkingService.obtenerInformacionSesion(sessionId);
             if (!"success".equals(sessionInfo.getStatus())) {
                 return DTOResponse.error("uploadFileChunk", "No se pudo obtener información de la sesión");
@@ -619,17 +555,17 @@ public class ActionDispatcherImpl implements IActionDispatcher {
             // Crear el DTO completo que espera el servidor
             DTOSubirArchivoChunk dto = new DTOSubirArchivoChunk();
             dto.setSessionId(sessionId);
-            dto.setUsuarioId("temp"); // Valor temporal para registro
+            dto.setUsuarioId(userId); // Usar el userId real del usuario autenticado
             dto.setNombreArchivo(nombreArchivo);
             dto.setTipoMime(tipoMime);
             dto.setTamanoTotal(tamanoTotal);
             dto.setNumeroChunk(chunkNumber);
             dto.setTotalChunks(totalChunks);
             dto.setBase64ChunkData(chunkDataBase64);
-            dto.setHashChunk(""); // Hash vacío para registro
+            dto.setHashChunk(""); // Hash vacío para simplificar
             
-            // Llamar al método específico para registro
-            DTOResponse response = chunkingService.subirChunkParaRegistro(dto);
+            // Llamar al método normal de subida de chunks
+            DTOResponse response = chunkingService.subirChunk(dto);
             
             // Generar la acción específica que espera el cliente
             String clientExpectedAction = "uploadFileChunk_" + uploadId + "_" + chunkNumber;
@@ -677,6 +613,433 @@ public class ActionDispatcherImpl implements IActionDispatcher {
         } catch (Exception e) {
             logger.error("Error al procesar endFileUpload", e);
             return DTOResponse.error("endFileUpload", "Error interno del servidor: " + e.getMessage());
+        }
+    }
+
+    // ===== NUEVOS MÉTODOS PARA FASE 1 =====
+
+    /**
+     * Maneja la solicitud de historial de canal.
+     * El cliente envía: { "canalId": "uuid", "limite": 50 }
+     */
+    private DTOResponse handleSolicitarHistorialCanal(DTORequest request) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = (Map<String, Object>) request.getPayload();
+            
+            String canalId = (String) payload.get("canalId");
+            Object limiteObj = payload.get("limite");
+            int limite = 50; // Valor por defecto
+            
+            if (limiteObj instanceof Integer) {
+                limite = (Integer) limiteObj;
+            } else if (limiteObj instanceof Double) {
+                limite = ((Double) limiteObj).intValue();
+            }
+            
+            if (canalId == null || canalId.trim().isEmpty()) {
+                return DTOResponse.error("solicitarHistorialCanal", "canalId es requerido");
+            }
+            
+            // Crear DTOHistorial para el servicio existente
+            DTOHistorial dto = new DTOHistorial();
+            dto.setCanalId(canalId);
+            dto.setLimit(limite);
+            dto.setOffset(0);
+            
+            // Usar el servicio existente y convertir a DTO específico
+            DTOResponse response = mensajeriaService.obtenerHistorial(dto);
+            
+            if ("success".equals(response.getStatus())) {
+                @SuppressWarnings("unchecked")
+                List<DTOMensaje> mensajes = (List<DTOMensaje>) response.getData();
+                
+                // Convertir a DTOs específicos para el cliente
+                List<DTOMensajeCanalResponse> mensajesResponse = mensajes.stream()
+                    .map(this::convertirAMensajeCanalResponse)
+                    .toList();
+                
+                // Crear respuesta estructurada
+                DTOResponseHistorialCanal historialResponse = new DTOResponseHistorialCanal(
+                    mensajesResponse,
+                    mensajes.size() >= limite, // Si devolvió el límite completo, probablemente hay más
+                    mensajes.size(),
+                    canalId,
+                    "Canal" // TODO: Obtener nombre real del canal desde CanalRepository
+                );
+                
+                return DTOResponse.success("solicitarHistorialCanal", 
+                    String.format("Historial obtenido: %d mensajes", mensajes.size()), 
+                    historialResponse);
+            } else {
+                return DTOResponse.error("solicitarHistorialCanal", response.getMessage());
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error al procesar solicitarHistorialCanal", e);
+            return DTOResponse.error("solicitarHistorialCanal", "Error interno del servidor: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Maneja la solicitud de historial privado.
+     * El cliente envía solo el contactoId como string
+     */
+    private DTOResponse handleSolicitarHistorialPrivado(DTORequest request) {
+        try {
+            String contactoId = (String) request.getPayload();
+            
+            if (contactoId == null || contactoId.trim().isEmpty()) {
+                return DTOResponse.error("solicitarHistorialPrivado", "contactoId es requerido");
+            }
+            
+            // Crear DTOHistorial para el servicio existente
+            DTOHistorial dto = new DTOHistorial();
+            dto.setDestinatarioId(contactoId);
+            dto.setLimit(50); // Valor por defecto
+            dto.setOffset(0);
+            
+            // Usar el servicio existente y convertir a DTO específico
+            DTOResponse response = mensajeriaService.obtenerHistorial(dto);
+            
+            if ("success".equals(response.getStatus())) {
+                @SuppressWarnings("unchecked")
+                List<DTOMensaje> mensajes = (List<DTOMensaje>) response.getData();
+                
+                // Convertir a DTOs específicos para el cliente
+                List<DTOMensajePrivadoResponse> mensajesResponse = mensajes.stream()
+                    .map(this::convertirAMensajePrivadoResponse)
+                    .toList();
+                
+                // Crear respuesta estructurada
+                DTOResponseHistorialPrivado historialResponse = new DTOResponseHistorialPrivado(
+                    mensajesResponse,
+                    mensajes.size() >= 50, // Si devolvió el límite completo, probablemente hay más
+                    mensajes.size(),
+                    contactoId,
+                    "Contacto" // TODO: Obtener nombre real del contacto desde UsuarioRepository
+                );
+                
+                return DTOResponse.success("solicitarHistorialPrivado", 
+                    String.format("Historial obtenido: %d mensajes", mensajes.size()), 
+                    historialResponse);
+            } else {
+                return DTOResponse.error("solicitarHistorialPrivado", response.getMessage());
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error al procesar solicitarHistorialPrivado", e);
+            return DTOResponse.error("solicitarHistorialPrivado", "Error interno del servidor: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Maneja la solicitud de notificaciones.
+     * El cliente envía: { "usuarioId": "uuid" }
+     */
+    private DTOResponse handleObtenerNotificaciones(DTORequest request) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = (Map<String, Object>) request.getPayload();
+            
+            String usuarioId = (String) payload.get("usuarioId");
+            
+            if (usuarioId == null || usuarioId.trim().isEmpty()) {
+                return DTOResponse.error("obtenerNotificaciones", "usuarioId es requerido");
+            }
+            
+            // Usar el NotificationService real
+            return notificationService.obtenerNotificaciones(usuarioId);
+            
+        } catch (Exception e) {
+            logger.error("Error al procesar obtenerNotificaciones", e);
+            return DTOResponse.error("obtenerNotificaciones", "Error interno del servidor: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Maneja marcar notificación como leída.
+     * El cliente envía: { "notificacionId": "uuid" }
+     */
+    private DTOResponse handleMarcarNotificacionLeida(DTORequest request) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = (Map<String, Object>) request.getPayload();
+            
+            String notificacionId = (String) payload.get("notificacionId");
+            
+            if (notificacionId == null || notificacionId.trim().isEmpty()) {
+                return DTOResponse.error("marcarNotificacionLeida", "notificacionId es requerido");
+            }
+            
+            // Usar el NotificationService real
+            return notificationService.marcarNotificacionLeida(notificacionId);
+            
+        } catch (Exception e) {
+            logger.error("Error al procesar marcarNotificacionLeida", e);
+            return DTOResponse.error("marcarNotificacionLeida", "Error interno del servidor: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Maneja responder solicitud de amistad.
+     * El cliente envía: { "solicitudId": "uuid", "usuarioId": "uuid", "aceptar": true/false }
+     */
+    private DTOResponse handleResponderSolicitudAmistad(DTORequest request) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = (Map<String, Object>) request.getPayload();
+            
+            String solicitudId = (String) payload.get("solicitudId");
+            String usuarioId = (String) payload.get("usuarioId");
+            Boolean aceptar = (Boolean) payload.get("aceptar");
+            
+            if (solicitudId == null || solicitudId.trim().isEmpty()) {
+                return DTOResponse.error("responderSolicitudAmistad", "solicitudId es requerido");
+            }
+            
+            if (usuarioId == null || usuarioId.trim().isEmpty()) {
+                return DTOResponse.error("responderSolicitudAmistad", "usuarioId es requerido");
+            }
+            
+            if (aceptar == null) {
+                return DTOResponse.error("responderSolicitudAmistad", "aceptar es requerido");
+            }
+            
+            // Usar el ContactService real
+            return contactService.responderSolicitudAmistad(solicitudId, usuarioId, aceptar);
+            
+        } catch (Exception e) {
+            logger.error("Error al procesar responderSolicitudAmistad", e);
+            return DTOResponse.error("responderSolicitudAmistad", "Error interno del servidor: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Maneja responder invitación a canal.
+     * El cliente envía: { "invitacionId": "uuid", "usuarioId": "uuid", "aceptar": true/false }
+     */
+    private DTOResponse handleResponderInvitacionCanal(DTORequest request) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = (Map<String, Object>) request.getPayload();
+            
+            String invitacionId = (String) payload.get("invitacionId");
+            String usuarioId = (String) payload.get("usuarioId");
+            Boolean aceptar = (Boolean) payload.get("aceptar");
+            
+            if (invitacionId == null || invitacionId.trim().isEmpty()) {
+                return DTOResponse.error("responderInvitacionCanal", "invitacionId es requerido");
+            }
+            
+            if (usuarioId == null || usuarioId.trim().isEmpty()) {
+                return DTOResponse.error("responderInvitacionCanal", "usuarioId es requerido");
+            }
+            
+            if (aceptar == null) {
+                return DTOResponse.error("responderInvitacionCanal", "aceptar es requerido");
+            }
+            
+            // Por ahora retornar una respuesta de éxito
+            // TODO: Implementar CanalService.invitarMiembro cuando esté disponible
+            String mensaje = aceptar ? "Invitación a canal aceptada" : "Invitación a canal rechazada";
+            return DTOResponse.success("responderInvitacionCanal", mensaje, null);
+            
+        } catch (Exception e) {
+            logger.error("Error al procesar responderInvitacionCanal", e);
+            return DTOResponse.error("responderInvitacionCanal", "Error interno del servidor: " + e.getMessage());
+        }
+    }
+
+    // ===== MÉTODOS DE CONVERSIÓN DE DTOs =====
+
+    /**
+     * Convierte DTOMensaje a DTOMensajeCanalResponse
+     */
+    private DTOMensajeCanalResponse convertirAMensajeCanalResponse(DTOMensaje mensaje) {
+        return new DTOMensajeCanalResponse(
+            mensaje.getId() != null ? mensaje.getId().toString() : null,
+            mensaje.getCanalId(),
+            mensaje.getRemitenteId(),
+            mensaje.getRemitenteNombre(),
+            mensaje.getContenido(),
+            mensaje.getTipo(),
+                mensaje.getFileId(),
+            mensaje.getFechaEnvio() != null ? java.time.LocalDateTime.parse(mensaje.getFechaEnvio()) : null,
+                mensaje.getFileName()
+        );
+    }
+
+    /**
+     * Convierte DTOMensaje a DTOMensajePrivadoResponse
+     */
+    private DTOMensajePrivadoResponse convertirAMensajePrivadoResponse(DTOMensaje mensaje) {
+        return new DTOMensajePrivadoResponse(
+            mensaje.getId() != null ? mensaje.getId().toString() : null,
+            mensaje.getRemitenteId(),
+            mensaje.getDestinatarioId(),
+            mensaje.getRemitenteNombre(),
+            mensaje.getDestinatarioNombre(),
+            mensaje.getContenido(),
+            mensaje.getTipo(),
+                mensaje.getFileId(),
+            mensaje.getFechaEnvio() != null ? java.time.LocalDateTime.parse(mensaje.getFechaEnvio()) : null,
+                mensaje.getFileName()
+        );
+    }
+
+    // --- HANDLERS DE SUBIDA DE ARCHIVOS PARA REGISTRO ---
+
+    /**
+     * Maneja la acción uploadFileForRegistration del cliente.
+     * Permite iniciar la subida de archivos durante el proceso de registro sin autenticación.
+     *
+     * @param request DTORequest con los datos de inicio de subida del cliente
+     * @return DTOResponse con el resultado de la operación
+     */
+    private DTOResponse handleUploadFileForRegistration(DTORequest request) {
+        try {
+            // Deserializar el payload del cliente
+            @SuppressWarnings("unchecked")
+            Map<String, Object> clientPayload = (Map<String, Object>) request.getPayload();
+            
+            String fileName = (String) clientPayload.get("fileName");
+            String fileMimeType = (String) clientPayload.get("fileMimeType");
+            
+            // Manejar tanto Integer como Double para totalChunks
+            Object totalChunksObj = clientPayload.get("totalChunks");
+            int totalChunks;
+            if (totalChunksObj instanceof Integer) {
+                totalChunks = (Integer) totalChunksObj;
+            } else if (totalChunksObj instanceof Double) {
+                totalChunks = ((Double) totalChunksObj).intValue();
+            } else {
+                return DTOResponse.error("uploadFileForRegistration", "totalChunks debe ser un número");
+            }
+            
+            if (fileName == null || fileMimeType == null || totalChunksObj == null) {
+                return DTOResponse.error("uploadFileForRegistration", "Faltan datos requeridos en el payload");
+            }
+            
+            // Calcular el tamaño total estimado (usando el mismo CHUNK_SIZE que el cliente: 512KB)
+            long estimatedSize = totalChunks * 1024 * 512; // 512 KB por chunk, igual que el cliente
+            
+            // Crear un usuario temporal para la subida (usaremos el fileName como identificador temporal)
+            String tempUserId = "temp_" + fileName.hashCode();
+            
+            // Crear el DTO que espera el servidor
+            DTOIniciarSubida dto = new DTOIniciarSubida(
+                tempUserId,
+                fileName,
+                fileMimeType,
+                estimatedSize,
+                totalChunks
+            );
+            
+            // Usar el método de chunking service para registro
+            return chunkingService.iniciarSubidaParaRegistro(dto);
+            
+        } catch (Exception e) {
+            logger.error("Error en handleUploadFileForRegistration: {}", e.getMessage(), e);
+            return DTOResponse.error("uploadFileForRegistration", "Error interno del servidor");
+        }
+    }
+
+    /**
+     * Maneja la acción uploadFileChunkForRegistration del cliente.
+     * Permite subir chunks de archivos durante el proceso de registro sin autenticación.
+     *
+     * @param request DTORequest con los datos del chunk del cliente
+     * @return DTOResponse con el resultado de la operación
+     */
+    private DTOResponse handleUploadFileChunkForRegistration(DTORequest request) {
+        try {
+            // Deserializar el payload del cliente
+            @SuppressWarnings("unchecked")
+            Map<String, Object> clientPayload = (Map<String, Object>) request.getPayload();
+            
+            String sessionId = (String) clientPayload.get("sessionId");
+            String chunkData = (String) clientPayload.get("chunkData_base64");
+            
+            // Manejar tanto Integer como Double para numeroChunk
+            Object numeroChunkObj = clientPayload.get("numeroChunk");
+            int numeroChunk;
+            if (numeroChunkObj instanceof Integer) {
+                numeroChunk = (Integer) numeroChunkObj;
+            } else if (numeroChunkObj instanceof Double) {
+                numeroChunk = ((Double) numeroChunkObj).intValue();
+            } else {
+                return DTOResponse.error("uploadFileChunkForRegistration", "numeroChunk debe ser un número");
+            }
+            
+            // Manejar tanto Integer como Double para totalChunks
+            Object totalChunksObj = clientPayload.get("totalChunks");
+            int totalChunks;
+            if (totalChunksObj instanceof Integer) {
+                totalChunks = (Integer) totalChunksObj;
+            } else if (totalChunksObj instanceof Double) {
+                totalChunks = ((Double) totalChunksObj).intValue();
+            } else {
+                return DTOResponse.error("uploadFileChunkForRegistration", "totalChunks debe ser un número");
+            }
+            
+            if (sessionId == null || chunkData == null || numeroChunkObj == null || totalChunksObj == null) {
+                return DTOResponse.error("uploadFileChunkForRegistration", "Faltan datos requeridos en el payload");
+            }
+            
+            // Crear el DTO que espera el servidor
+            DTOSubirArchivoChunk dto = new DTOSubirArchivoChunk(
+                sessionId,
+                null, // userId es null para registro
+                null, // nombreArchivo es null para registro
+                null, // tipoMime es null para registro
+                0L,   // tamanoTotal es 0 para registro
+                numeroChunk,
+                totalChunks,
+                chunkData,
+                null  // hashChunk es null para registro (simplificado)
+            );
+            
+            // Usar el método de chunking service para registro
+            return chunkingService.subirChunkParaRegistro(dto);
+            
+        } catch (Exception e) {
+            logger.error("Error en handleUploadFileChunkForRegistration: {}", e.getMessage(), e);
+            return DTOResponse.error("uploadFileChunkForRegistration", "Error interno del servidor");
+        }
+    }
+
+    /**
+     * Maneja la acción endFileUploadForRegistration del cliente.
+     * Permite finalizar la subida de archivos durante el proceso de registro sin autenticación.
+     *
+     * @param request DTORequest con los datos de finalización de subida del cliente
+     * @return DTOResponse con el resultado de la operación
+     */
+    private DTOResponse handleEndFileUploadForRegistration(DTORequest request) {
+        try {
+            // Deserializar el payload del cliente
+            @SuppressWarnings("unchecked")
+            Map<String, Object> clientPayload = (Map<String, Object>) request.getPayload();
+            
+            String sessionId = (String) clientPayload.get("sessionId");
+            
+            if (sessionId == null) {
+                return DTOResponse.error("endFileUploadForRegistration", "sessionId es requerido");
+            }
+            
+            // Crear el DTO que espera el servidor
+            DTOEndUpload dto = new DTOEndUpload(
+                sessionId,
+                null  // userId es null para registro
+            );
+            
+            // Usar el método de chunking service para registro
+            return chunkingService.finalizarSubidaParaRegistro(dto);
+            
+        } catch (Exception e) {
+            logger.error("Error en handleEndFileUploadForRegistration: {}", e.getMessage(), e);
+            return DTOResponse.error("endFileUploadForRegistration", "Error interno del servidor");
         }
     }
 }

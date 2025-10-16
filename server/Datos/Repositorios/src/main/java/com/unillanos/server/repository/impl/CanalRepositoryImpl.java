@@ -3,7 +3,7 @@ package com.unillanos.server.repository.impl;
 import com.unillanos.server.exception.RepositoryException;
 import com.unillanos.server.repository.interfaces.ICanalRepository;
 import com.unillanos.server.repository.mappers.CanalMapper;
-import com.unillanos.server.repository.models.CanalEntity;
+import com.unillanos.server.entity.CanalEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;

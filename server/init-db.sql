@@ -81,15 +81,17 @@ CREATE TABLE IF NOT EXISTS archivos (
     id VARCHAR(36) PRIMARY KEY,
     nombre_original VARCHAR(255) NOT NULL,
     nombre_almacenado VARCHAR(255) NOT NULL UNIQUE,
+    tipo_mime VARCHAR(100) NOT NULL,
+    tipo_archivo ENUM('IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT', 'OTHER') NOT NULL,
     hash_sha256 VARCHAR(64) NOT NULL UNIQUE,
     tamano_bytes BIGINT NOT NULL,
-    tipo ENUM('IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT', 'OTHER') NOT NULL,
+    ruta_almacenamiento VARCHAR(500) NOT NULL,
     usuario_id VARCHAR(36) NOT NULL,
     fecha_subida TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
     INDEX idx_hash (hash_sha256),
     INDEX idx_usuario (usuario_id),
-    INDEX idx_tipo (tipo)
+    INDEX idx_tipo_archivo (tipo_archivo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tabla: logs_sistema
@@ -123,6 +125,45 @@ CREATE TABLE IF NOT EXISTS chunk_sessions (
     INDEX idx_usuario (usuario_id),
     INDEX idx_estado (estado),
     INDEX idx_ultima_actividad (ultima_actividad)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabla: notificaciones
+CREATE TABLE IF NOT EXISTS notificaciones (
+    id VARCHAR(36) PRIMARY KEY,
+    usuario_id VARCHAR(36) NOT NULL,
+    tipo VARCHAR(50) NOT NULL,
+    titulo VARCHAR(200) NOT NULL,
+    mensaje TEXT NOT NULL,
+    remitente_id VARCHAR(36),
+    canal_id VARCHAR(36),
+    leida BOOLEAN DEFAULT FALSE,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    accion VARCHAR(50),
+    metadata TEXT,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    FOREIGN KEY (remitente_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+    FOREIGN KEY (canal_id) REFERENCES canales(id) ON DELETE SET NULL,
+    INDEX idx_usuario (usuario_id),
+    INDEX idx_tipo (tipo),
+    INDEX idx_leida (leida),
+    INDEX idx_timestamp (timestamp)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tabla: contactos (relaciones de amistad)
+CREATE TABLE IF NOT EXISTS contactos (
+    id VARCHAR(36) PRIMARY KEY,
+    usuario_id VARCHAR(36) NOT NULL,
+    contacto_id VARCHAR(36) NOT NULL,
+    estado ENUM('PENDIENTE', 'ACEPTADO', 'RECHAZADO', 'BLOQUEADO') DEFAULT 'PENDIENTE',
+    fecha_solicitud TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_respuesta TIMESTAMP NULL,
+    solicitado_por ENUM('usuario', 'contacto') NOT NULL,
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    FOREIGN KEY (contacto_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_contacto (usuario_id, contacto_id),
+    INDEX idx_usuario (usuario_id),
+    INDEX idx_contacto (contacto_id),
+    INDEX idx_estado (estado)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Datos de prueba (opcional, para desarrollo)

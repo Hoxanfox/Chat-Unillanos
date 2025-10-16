@@ -1,4 +1,4 @@
-package com.unillanos.server.repository.models;
+package com.unillanos.server.entity;
 
 import com.unillanos.server.dto.DTOMensaje;
 
@@ -174,4 +174,3 @@ public class MensajeEntity {
                 '}';
     }
 }
-

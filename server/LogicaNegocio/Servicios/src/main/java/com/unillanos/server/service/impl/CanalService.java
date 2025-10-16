@@ -8,7 +8,7 @@ import com.unillanos.server.exception.ValidationException;
 import com.unillanos.server.repository.interfaces.ICanalMiembroRepository;
 import com.unillanos.server.repository.interfaces.ICanalRepository;
 import com.unillanos.server.repository.interfaces.IUsuarioRepository;
-import com.unillanos.server.repository.models.*;
+import com.unillanos.server.entity.*;
 import com.unillanos.server.validation.CrearCanalValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

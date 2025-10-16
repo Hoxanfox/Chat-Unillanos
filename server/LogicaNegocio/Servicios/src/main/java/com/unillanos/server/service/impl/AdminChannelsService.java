@@ -5,10 +5,10 @@ import com.unillanos.server.dto.DTOMiembroCanal;
 import com.unillanos.server.repository.interfaces.ICanalMiembroRepository;
 import com.unillanos.server.repository.interfaces.ICanalRepository;
 import com.unillanos.server.repository.interfaces.IUsuarioRepository;
-import com.unillanos.server.repository.models.CanalEntity;
-import com.unillanos.server.repository.models.CanalMiembroEntity;
-import com.unillanos.server.repository.models.RolCanal;
-import com.unillanos.server.repository.models.UsuarioEntity;
+import com.unillanos.server.entity.CanalEntity;
+import com.unillanos.server.entity.CanalMiembroEntity;
+import com.unillanos.server.entity.RolCanal;
+import com.unillanos.server.entity.UsuarioEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;

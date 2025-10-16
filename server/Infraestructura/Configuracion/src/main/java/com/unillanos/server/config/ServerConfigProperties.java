@@ -91,6 +91,7 @@ public class ServerConfigProperties {
         private long maxTamanoDocumento = 10485760; // 10 MB
         private int chunkSize = 2097152; // 2 MB
         private String directorioTemp = "./uploads/temp";
+        private String directorioFinal = "./uploads/final";
         private int sesionExpiracionHoras = 24;
         
         public String getDirectorioBase() {
@@ -147,6 +148,14 @@ public class ServerConfigProperties {
         
         public void setDirectorioTemp(String directorioTemp) {
             this.directorioTemp = directorioTemp;
+        }
+        
+        public String getDirectorioFinal() {
+            return directorioFinal;
+        }
+        
+        public void setDirectorioFinal(String directorioFinal) {
+            this.directorioFinal = directorioFinal;
         }
         
         public int getSesionExpiracionHoras() {

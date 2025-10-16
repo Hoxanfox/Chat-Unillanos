@@ -1,4 +1,4 @@
-package com.unillanos.server.repository.models;
+package com.unillanos.server.entity;
 
 import com.unillanos.server.dto.DTOCanal;
 
@@ -109,4 +109,3 @@ public class CanalEntity {
                 '}';
     }
 }
-

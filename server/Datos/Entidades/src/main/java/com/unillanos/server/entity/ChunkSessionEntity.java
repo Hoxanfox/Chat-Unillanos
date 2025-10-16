@@ -1,4 +1,4 @@
-package com.unillanos.server.repository.models;
+package com.unillanos.server.entity;
 
 import java.time.LocalDateTime;
 import java.util.Set;

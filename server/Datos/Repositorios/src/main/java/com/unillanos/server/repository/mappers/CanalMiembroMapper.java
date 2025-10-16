@@ -1,7 +1,7 @@
 package com.unillanos.server.repository.mappers;
 
-import com.unillanos.server.repository.models.CanalMiembroEntity;
-import com.unillanos.server.repository.models.RolCanal;
+import com.unillanos.server.entity.CanalMiembroEntity;
+import com.unillanos.server.entity.RolCanal;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;

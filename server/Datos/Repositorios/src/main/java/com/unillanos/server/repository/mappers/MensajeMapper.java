@@ -1,8 +1,8 @@
 package com.unillanos.server.repository.mappers;
 
-import com.unillanos.server.repository.models.EstadoMensaje;
-import com.unillanos.server.repository.models.MensajeEntity;
-import com.unillanos.server.repository.models.TipoMensaje;
+import com.unillanos.server.entity.EstadoMensaje;
+import com.unillanos.server.entity.MensajeEntity;
+import com.unillanos.server.entity.TipoMensaje;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;

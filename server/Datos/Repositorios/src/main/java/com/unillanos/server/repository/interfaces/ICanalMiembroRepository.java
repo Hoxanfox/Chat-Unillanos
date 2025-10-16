@@ -1,8 +1,8 @@
 package com.unillanos.server.repository.interfaces;
 
-import com.unillanos.server.repository.models.CanalEntity;
-import com.unillanos.server.repository.models.CanalMiembroEntity;
-import com.unillanos.server.repository.models.RolCanal;
+import com.unillanos.server.entity.CanalEntity;
+import com.unillanos.server.entity.CanalMiembroEntity;
+import com.unillanos.server.entity.RolCanal;
 
 import java.util.List;
 import java.util.Optional;

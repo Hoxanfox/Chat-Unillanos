@@ -1,4 +1,4 @@
-package com.unillanos.server.repository.models;
+package com.unillanos.server.entity;
 
 /**
  * Enum que representa los estados posibles de un mensaje.

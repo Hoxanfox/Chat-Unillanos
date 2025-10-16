@@ -1,4 +1,4 @@
-package com.unillanos.server.repository.models;
+package com.unillanos.server.entity;
 
 /**
  * Enum que representa los posibles estados de un usuario.
@@ -27,4 +27,3 @@ public enum EstadoUsuario {
         }
     }
 }
-

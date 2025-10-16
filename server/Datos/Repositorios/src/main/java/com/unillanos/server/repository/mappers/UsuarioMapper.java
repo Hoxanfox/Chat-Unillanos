@@ -1,7 +1,7 @@
 package com.unillanos.server.repository.mappers;
 
-import com.unillanos.server.repository.models.EstadoUsuario;
-import com.unillanos.server.repository.models.UsuarioEntity;
+import com.unillanos.server.entity.EstadoUsuario;
+import com.unillanos.server.entity.UsuarioEntity;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;

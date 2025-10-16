@@ -1,4 +1,4 @@
-package com.unillanos.server.repository.models;
+package com.unillanos.server.entity;
 
 import java.time.LocalDateTime;
 
@@ -67,4 +67,3 @@ public class CanalMiembroEntity {
                 '}';
     }
 }
-

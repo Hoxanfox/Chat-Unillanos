@@ -1,7 +1,7 @@
 package com.unillanos.server.repository.interfaces;
 
-import com.unillanos.server.repository.models.ArchivoEntity;
-import com.unillanos.server.repository.models.TipoArchivo;
+import com.unillanos.server.entity.ArchivoEntity;
+import com.unillanos.server.entity.TipoArchivo;
 
 import java.util.List;
 import java.util.Optional;

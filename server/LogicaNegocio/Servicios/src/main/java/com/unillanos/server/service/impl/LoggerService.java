@@ -1,7 +1,7 @@
 package com.unillanos.server.service.impl;
 
 import com.unillanos.server.repository.interfaces.ILogRepository;
-import com.unillanos.server.repository.models.LogEntity;
+import com.unillanos.server.entity.LogEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;

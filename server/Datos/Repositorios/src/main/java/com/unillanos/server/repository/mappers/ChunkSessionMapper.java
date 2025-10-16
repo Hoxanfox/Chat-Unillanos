@@ -2,8 +2,8 @@ package com.unillanos.server.repository.mappers;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import com.unillanos.server.repository.models.ChunkSessionEntity;
-import com.unillanos.server.repository.models.EstadoSesion;
+import com.unillanos.server.entity.ChunkSessionEntity;
+import com.unillanos.server.entity.EstadoSesion;
 
 import java.lang.reflect.Type;
 import java.sql.ResultSet;

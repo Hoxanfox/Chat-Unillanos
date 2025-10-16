@@ -2,8 +2,8 @@ package com.unillanos.server.service.impl;
 
 import com.unillanos.server.dto.DTOUsuario;
 import com.unillanos.server.repository.interfaces.IUsuarioRepository;
-import com.unillanos.server.repository.models.EstadoUsuario;
-import com.unillanos.server.repository.models.UsuarioEntity;
+import com.unillanos.server.entity.EstadoUsuario;
+import com.unillanos.server.entity.UsuarioEntity;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;

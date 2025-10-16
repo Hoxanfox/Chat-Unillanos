@@ -7,10 +7,10 @@ import com.unillanos.server.exception.ValidationException;
 import com.unillanos.server.repository.interfaces.IArchivoRepository;
 import com.unillanos.server.repository.interfaces.IChunkSessionRepository;
 import com.unillanos.server.repository.interfaces.IUsuarioRepository;
-import com.unillanos.server.repository.models.ArchivoEntity;
-import com.unillanos.server.repository.models.ChunkSessionEntity;
-import com.unillanos.server.repository.models.EstadoSesion;
-import com.unillanos.server.repository.models.TipoArchivo;
+import com.unillanos.server.entity.ArchivoEntity;
+import com.unillanos.server.entity.ChunkSessionEntity;
+import com.unillanos.server.entity.EstadoSesion;
+import com.unillanos.server.entity.TipoArchivo;
 import com.unillanos.server.validation.ChunkValidator;
 import com.unillanos.server.validation.TipoArchivoValidator;
 import org.slf4j.Logger;
@@ -61,109 +61,58 @@ public class ChunkingService {
      * @param dto Datos para iniciar la subida
      * @return Respuesta con sessionId y configuración
      */
-    public DTOResponse iniciarSubida(DTOIniciarSubida dto) {
+    public DTOResponse iniciarSubida(com.unillanos.server.dto.DTOIniciarSubida dto) {
         try {
             // 1. Validar datos
-            ChunkValidator.validateIniciarSubida(dto, config);
+            com.unillanos.server.validation.ChunkValidator.validateIniciarSubida(dto, config);
             
             // 2. Verificar usuario
             if (usuarioRepository.findById(dto.getUsuarioId()).isEmpty()) {
-                throw new NotFoundException("Usuario no encontrado", "USER_NOT_FOUND");
+                throw new com.unillanos.server.exception.NotFoundException("Usuario no encontrado", "USER_NOT_FOUND");
             }
             
             // 3. Crear sesión
-            String sessionId = UUID.randomUUID().toString();
-            ChunkSessionEntity session = new ChunkSessionEntity(
+            String sessionId = java.util.UUID.randomUUID().toString();
+            com.unillanos.server.entity.ChunkSessionEntity session = new com.unillanos.server.entity.ChunkSessionEntity(
                 sessionId,
                 dto.getUsuarioId(),
                 dto.getNombreArchivo(),
                 dto.getTipoMime(),
                 dto.getTamanoTotal(),
                 dto.getTotalChunks(),
-                new HashSet<>(),
-                LocalDateTime.now(),
-                LocalDateTime.now(),
-                EstadoSesion.ACTIVA
+                new java.util.HashSet<>(),
+                java.time.LocalDateTime.now(),
+                java.time.LocalDateTime.now(),
+                com.unillanos.server.entity.EstadoSesion.ACTIVA
             );
             
-            ChunkSessionEntity sessionGuardada = chunkSessionRepository.iniciarSesion(session);
+            com.unillanos.server.entity.ChunkSessionEntity sessionGuardada = chunkSessionRepository.iniciarSesion(session);
             
             // 4. Crear directorio temporal para la sesión
             crearDirectorioSesion(sessionId);
             
             // 5. Preparar respuesta
-            DTOIniciarSubidaResponse response = new DTOIniciarSubidaResponse(
+            com.unillanos.server.dto.DTOIniciarSubidaResponse response = new com.unillanos.server.dto.DTOIniciarSubidaResponse(
                 sessionId,
                 config.getArchivos().getChunkSize(),
-                new ArrayList<>()
+                new java.util.ArrayList<>()
             );
             
             loggerService.logInfo("iniciarSubida", 
                 String.format("Sesión de subida iniciada: %s para usuario %s", sessionId, dto.getUsuarioId()));
             
-            return DTOResponse.success("iniciar_subida", "Sesión de subida iniciada", response);
+            return com.unillanos.server.dto.DTOResponse.success("iniciar_subida", "Sesión de subida iniciada", response);
             
-        } catch (ValidationException | NotFoundException e) {
+        } catch (com.unillanos.server.exception.ValidationException | com.unillanos.server.exception.NotFoundException e) {
             logger.warn("Error al iniciar subida: {}", e.getMessage());
-            return DTOResponse.error("iniciar_subida", e.getMessage());
+            return com.unillanos.server.dto.DTOResponse.error("iniciar_subida", e.getMessage());
         } catch (Exception e) {
             logger.error("Error inesperado al iniciar subida: {}", e.getMessage(), e);
-            return DTOResponse.error("iniciar_subida", "Error interno del servidor al iniciar subida.");
+            return com.unillanos.server.dto.DTOResponse.error("iniciar_subida", "Error interno del servidor al iniciar subida.");
         }
     }
 
-    /**
-     * Inicia una nueva sesión de subida de archivo para el proceso de registro.
-     * Permite subir archivos sin validar que el usuario existe en la base de datos.
-     *
-     * @param dto Datos para iniciar la subida
-     * @return Respuesta con sessionId y configuración
-     */
-    public DTOResponse iniciarSubidaParaRegistro(DTOIniciarSubida dto) {
-        try {
-            // 1. Validar datos básicos (sin validar usuario)
-            ChunkValidator.validateIniciarSubidaParaRegistro(dto, config);
-            
-            // 2. Crear sesión (sin validar usuario)
-            String sessionId = UUID.randomUUID().toString();
-            ChunkSessionEntity session = new ChunkSessionEntity(
-                sessionId,
-                dto.getUsuarioId(),
-                dto.getNombreArchivo(),
-                dto.getTipoMime(),
-                dto.getTamanoTotal(),
-                dto.getTotalChunks(),
-                new HashSet<>(),
-                LocalDateTime.now(),
-                LocalDateTime.now(),
-                EstadoSesion.ACTIVA
-            );
-            
-            ChunkSessionEntity sessionGuardada = chunkSessionRepository.iniciarSesion(session);
-            
-            // 3. Crear directorio temporal para la sesión
-            crearDirectorioSesion(sessionId);
-            
-            // 4. Preparar respuesta específica para registro
-            DTOIniciarSubidaParaRegistroResponse response = new DTOIniciarSubidaParaRegistroResponse(
-                sessionId,
-                config.getArchivos().getChunkSize(),
-                new ArrayList<>()
-            );
-            
-            loggerService.logInfo("iniciarSubidaParaRegistro", 
-                String.format("Sesión de subida para registro iniciada: %s para usuario temporal %s", sessionId, dto.getUsuarioId()));
-            
-            return DTOResponse.success("uploadFileForRegistration", "Sesión de subida para registro iniciada", response);
-            
-        } catch (ValidationException e) {
-            logger.warn("Error al iniciar subida para registro: {}", e.getMessage());
-            return DTOResponse.error("uploadFileForRegistration", e.getMessage());
-        } catch (Exception e) {
-            logger.error("Error inesperado al iniciar subida para registro", e);
-            return DTOResponse.error("uploadFileForRegistration", "Error interno del servidor al iniciar subida para registro.");
-        }
-    }
+
 
     /**
      * Sube un chunk individual de un archivo.
@@ -228,66 +177,6 @@ public class ChunkingService {
         }
     }
 
-    /**
-     * Sube un chunk individual de un archivo durante el proceso de registro.
-     * Similar a subirChunk pero sin validar hash ni usuario.
-     *
-     * @param dto Datos del chunk a subir
-     * @return Respuesta de confirmación
-     */
-    public DTOResponse subirChunkParaRegistro(DTOSubirArchivoChunk dto) {
-        try {
-            // 1. Validar chunk (sin validar usuario ni hash)
-            ChunkValidator.validateSubirChunkParaRegistro(dto, config);
-            
-            // 2. Verificar sesión
-            Optional<ChunkSessionEntity> sessionOpt = chunkSessionRepository.obtenerSesion(dto.getSessionId());
-            if (sessionOpt.isEmpty()) {
-                throw new NotFoundException("Sesión no encontrada", "SESSION_NOT_FOUND");
-            }
-            
-            ChunkSessionEntity session = sessionOpt.get();
-            
-            // 3. Verificar que la sesión esté activa
-            if (session.getEstadoSesion() != EstadoSesion.ACTIVA) {
-                throw new ValidationException("La sesión no está activa", "sessionId");
-            }
-            
-            // 4. Verificar que el chunk no haya sido recibido previamente
-            if (session.getChunksRecibidos().contains(dto.getNumeroChunk())) {
-                logger.info("Chunk {} ya recibido para sesión {}", dto.getNumeroChunk(), dto.getSessionId());
-                return DTOResponse.success("subir_chunk_para_registro", "Chunk ya recibido", null);
-            }
-            
-            // 5. NO verificar hash del chunk para registro (se omite por simplicidad)
-            
-            // 6. Guardar chunk en disco
-            byte[] chunkData = Base64.getDecoder().decode(dto.getBase64ChunkData());
-            // Convertir de 1-based (cliente) a 0-based (servidor interno)
-            int chunkIndex = dto.getNumeroChunk() - 1;
-            Path chunkPath = Paths.get(config.getArchivos().getDirectorioTemp(), dto.getSessionId(), 
-                "chunk_" + chunkIndex);
-            Files.write(chunkPath, chunkData);
-            
-            // 7. Registrar chunk en la sesión
-            chunkSessionRepository.registrarChunk(dto.getSessionId(), dto.getNumeroChunk());
-            
-            logger.debug("Chunk {} guardado para sesión de registro {}",
-                dto.getNumeroChunk(), dto.getSessionId());
-            
-            return DTOResponse.success("subir_chunk_para_registro", "Chunk recibido exitosamente", null);
-            
-        } catch (ValidationException | NotFoundException e) {
-            logger.warn("Error al subir chunk para registro: {}", e.getMessage());
-            return DTOResponse.error("subir_chunk_para_registro", e.getMessage());
-        } catch (IOException e) {
-            logger.error("Error de E/S al guardar chunk para registro: {}", e.getMessage(), e);
-            return DTOResponse.error("subir_chunk_para_registro", "Error interno del servidor al guardar chunk.");
-        } catch (Exception e) {
-            logger.error("Error inesperado al subir chunk para registro: {}", e.getMessage(), e);
-            return DTOResponse.error("subir_chunk_para_registro", "Error inesperado al procesar chunk.");
-        }
-    }
 
     /**
      * Obtiene información básica de una sesión de chunking.
@@ -379,9 +268,13 @@ public class ChunkingService {
             String archivoId = UUID.randomUUID().toString();
             String extension = obtenerExtension(session.getNombreArchivo());
             String nombreAlmacenado = archivoId + (extension != null ? ("." + extension) : "");
-            Path rutaFinal = Paths.get(config.getArchivos().getDirectorioBase(), 
-                tipoLogico.toLowerCase(), nombreAlmacenado);
+            Path directorioDestino = Paths.get(config.getArchivos().getDirectorioBase(), tipoLogico.toLowerCase());
+            Path rutaFinal = directorioDestino.resolve(nombreAlmacenado);
             
+            // Crear directorio de destino si no existe
+            Files.createDirectories(directorioDestino);
+            
+            logger.info("Moviendo archivo de {} a {}", archivoCompleto, rutaFinal);
             Files.move(archivoCompleto, rutaFinal);
             
             // 8. Crear entrada en base de datos
@@ -492,28 +385,46 @@ public class ChunkingService {
      * Ensambla un archivo completo a partir de sus chunks.
      */
     private Path ensamblarArchivo(ChunkSessionEntity session) throws IOException {
-        Path archivoCompleto = Paths.get(config.getArchivos().getDirectorioTemp(), 
-            session.getSessionId(), "archivo_completo");
+        Path sessionDir = Paths.get(config.getArchivos().getDirectorioTemp(), session.getSessionId());
+        Path archivoCompleto = sessionDir.resolve("archivo_completo");
+        
+        // Asegurar que el directorio de sesión existe
+        if (!Files.exists(sessionDir)) {
+            logger.error("Directorio de sesión no existe: {}", sessionDir);
+            throw new IOException("Directorio de sesión no encontrado: " + sessionDir);
+        }
         
         List<Path> chunkPaths = new ArrayList<>();
         for (int i = 0; i < session.getTotalChunks(); i++) {
-            chunkPaths.add(Paths.get(config.getArchivos().getDirectorioTemp(), 
-                session.getSessionId(), "chunk_" + i));
+            chunkPaths.add(sessionDir.resolve("chunk_" + i));
         }
         
         // Verificar que todos los chunks existan
         for (Path chunkPath : chunkPaths) {
             if (!Files.exists(chunkPath)) {
+                logger.error("Chunk faltante: {} (sesión: {})", chunkPath, session.getSessionId());
                 throw new IOException("Chunk faltante: " + chunkPath.getFileName());
             }
         }
         
+        logger.info("Ensamblando archivo de {} chunks para sesión {}", session.getTotalChunks(), session.getSessionId());
+        
         // Concatenar chunks
         try (var outputStream = Files.newOutputStream(archivoCompleto)) {
             for (Path chunkPath : chunkPaths) {
+                logger.debug("Copiando chunk: {}", chunkPath);
                 Files.copy(chunkPath, outputStream);
             }
         }
+        
+        // Verificar que el archivo se creó correctamente
+        if (!Files.exists(archivoCompleto)) {
+            logger.error("No se pudo crear archivo completo: {}", archivoCompleto);
+            throw new IOException("Error al ensamblar archivo completo");
+        }
+        
+        long fileSize = Files.size(archivoCompleto);
+        logger.info("Archivo ensamblado exitosamente: {} ({} bytes)", archivoCompleto, fileSize);
         
         return archivoCompleto;
     }
@@ -587,6 +498,260 @@ public class ChunkingService {
             
         } catch (IOException e) {
             logger.error("Error al crear directorios de chunking", e);
+        }
+    }
+
+    // --- MÉTODOS PARA REGISTRO DE USUARIOS (SIN AUTENTICACIÓN) ---
+
+    /**
+     * Inicia una sesión de subida de archivo durante el proceso de registro.
+     * Similar a iniciarSubida pero sin verificar que el usuario existe.
+     *
+     * @param dto DTO con los datos de inicio de subida
+     * @return DTOResponse con el resultado de la operación
+     */
+    public DTOResponse iniciarSubidaParaRegistro(DTOIniciarSubida dto) {
+        try {
+            // 1. Validar datos (sin verificar usuario)
+            com.unillanos.server.validation.ChunkValidator.validateIniciarSubidaParaRegistro(dto, config);
+            
+            // 2. Crear sesión (el usuarioId puede ser temporal)
+            String sessionId = java.util.UUID.randomUUID().toString();
+            com.unillanos.server.entity.ChunkSessionEntity session = new com.unillanos.server.entity.ChunkSessionEntity(
+                sessionId,
+                dto.getUsuarioId(), // Puede ser un ID temporal
+                dto.getNombreArchivo(),
+                dto.getTipoMime(),
+                dto.getTamanoTotal(),
+                dto.getTotalChunks(),
+                new java.util.HashSet<>(),
+                java.time.LocalDateTime.now(),
+                java.time.LocalDateTime.now(),
+                com.unillanos.server.entity.EstadoSesion.ACTIVA
+            );
+            
+            com.unillanos.server.entity.ChunkSessionEntity sessionGuardada = chunkSessionRepository.iniciarSesion(session);
+            
+            // 3. Crear directorio temporal para la sesión
+            crearDirectorioSesion(sessionId);
+            
+            // 4. Preparar respuesta
+            com.unillanos.server.dto.DTOIniciarSubidaResponse response = new com.unillanos.server.dto.DTOIniciarSubidaResponse(
+                sessionId,
+                config.getArchivos().getChunkSize(),
+                new java.util.ArrayList<>()
+            );
+            
+            loggerService.logInfo("iniciarSubidaParaRegistro", 
+                String.format("Sesión de subida para registro iniciada: %s", sessionId));
+            
+            return com.unillanos.server.dto.DTOResponse.success("uploadFileForRegistration", "Sesión de subida para registro iniciada", response);
+            
+        } catch (com.unillanos.server.exception.ValidationException e) {
+            logger.warn("Error de validación al iniciar subida para registro: {}", e.getMessage());
+            return com.unillanos.server.dto.DTOResponse.error("uploadFileForRegistration", e.getMessage());
+        } catch (Exception e) {
+            logger.error("Error inesperado al iniciar subida para registro: {}", e.getMessage(), e);
+            return com.unillanos.server.dto.DTOResponse.error("uploadFileForRegistration", "Error interno del servidor al iniciar subida para registro.");
+        }
+    }
+
+    /**
+     * Sube un chunk de archivo durante el proceso de registro.
+     * Similar a subirChunk pero sin verificar autenticación del usuario.
+     *
+     * @param dto DTO con los datos del chunk
+     * @return DTOResponse con el resultado de la operación
+     */
+    public DTOResponse subirChunkParaRegistro(DTOSubirArchivoChunk dto) {
+        try {
+            // 1. Validar datos (sin verificar usuario)
+            com.unillanos.server.validation.ChunkValidator.validateSubirChunkParaRegistro(dto, config);
+            
+            // 2. Buscar sesión
+            Optional<com.unillanos.server.entity.ChunkSessionEntity> sessionOpt = 
+                chunkSessionRepository.obtenerSesion(dto.getSessionId());
+            
+            if (sessionOpt.isEmpty()) {
+                throw new com.unillanos.server.exception.NotFoundException("Sesión no encontrada", "SESSION_NOT_FOUND");
+            }
+            
+            com.unillanos.server.entity.ChunkSessionEntity session = sessionOpt.get();
+            
+            // 3. Verificar que la sesión esté activa
+            if (session.getEstadoSesion() != com.unillanos.server.entity.EstadoSesion.ACTIVA) {
+                throw new com.unillanos.server.exception.ValidationException("La sesión no está activa", "session");
+            }
+            
+            // 4. Verificar que el chunk no haya sido subido ya
+            if (session.getChunksRecibidos().contains(dto.getNumeroChunk())) {
+                logger.warn("Chunk {} ya fue subido para sesión {}", dto.getNumeroChunk(), dto.getSessionId());
+                return com.unillanos.server.dto.DTOResponse.success("uploadFileChunkForRegistration", "Chunk ya fue subido", null);
+            }
+            
+            // 5. Crear directorio de sesión si no existe
+            Path sessionDir = Paths.get(config.getArchivos().getDirectorioTemp(), dto.getSessionId());
+            if (!Files.exists(sessionDir)) {
+                Files.createDirectories(sessionDir);
+            }
+            
+            // 6. Decodificar y guardar chunk
+            byte[] chunkData = Base64.getDecoder().decode(dto.getBase64ChunkData());
+            Path chunkPath = sessionDir.resolve("chunk_" + (dto.getNumeroChunk() - 1)); // Convertir a 0-based
+            
+            Files.write(chunkPath, chunkData);
+            
+            // 7. Actualizar sesión
+            session.getChunksRecibidos().add(dto.getNumeroChunk());
+            session.setUltimaActividad(java.time.LocalDateTime.now());
+            
+            chunkSessionRepository.actualizarSesion(session);
+            
+            // 8. Preparar respuesta
+            com.unillanos.server.dto.DTOSubirArchivoChunkResponse response = new com.unillanos.server.dto.DTOSubirArchivoChunkResponse(
+                dto.getNumeroChunk(),
+                dto.getTotalChunks(),
+                session.getChunksRecibidos().size(),
+                session.getChunksRecibidos().size() == dto.getTotalChunks()
+            );
+            
+            loggerService.logInfo("subirChunkParaRegistro", 
+                String.format("Chunk %d/%d subido para sesión %s", dto.getNumeroChunk(), dto.getTotalChunks(), dto.getSessionId()));
+            
+            return com.unillanos.server.dto.DTOResponse.success("uploadFileChunkForRegistration", "Chunk subido exitosamente", response);
+            
+        } catch (com.unillanos.server.exception.ValidationException | com.unillanos.server.exception.NotFoundException e) {
+            logger.warn("Error al subir chunk para registro: {}", e.getMessage());
+            return com.unillanos.server.dto.DTOResponse.error("uploadFileChunkForRegistration", e.getMessage());
+        } catch (IOException e) {
+            logger.error("Error de E/S al subir chunk para registro: {}", e.getMessage(), e);
+            return com.unillanos.server.dto.DTOResponse.error("uploadFileChunkForRegistration", "Error interno del servidor al guardar chunk.");
+        } catch (Exception e) {
+            logger.error("Error inesperado al subir chunk para registro: {}", e.getMessage(), e);
+            return com.unillanos.server.dto.DTOResponse.error("uploadFileChunkForRegistration", "Error inesperado al procesar chunk.");
+        }
+    }
+
+    /**
+     * Finaliza la subida de archivo durante el proceso de registro.
+     * Similar a finalizarSubida pero sin verificar autenticación del usuario.
+     *
+     * @param dto DTO con los datos de finalización
+     * @return DTOResponse con el resultado de la operación
+     */
+    public DTOResponse finalizarSubidaParaRegistro(DTOEndUpload dto) {
+        try {
+            // 1. Validar datos
+            if (dto.getSessionId() == null || dto.getSessionId().trim().isEmpty()) {
+                throw new com.unillanos.server.exception.ValidationException("El ID de sesión es requerido", "sessionId");
+            }
+            
+            // 2. Buscar sesión
+            Optional<com.unillanos.server.entity.ChunkSessionEntity> sessionOpt = 
+                chunkSessionRepository.obtenerSesion(dto.getSessionId());
+            
+            if (sessionOpt.isEmpty()) {
+                throw new com.unillanos.server.exception.NotFoundException("Sesión no encontrada", "SESSION_NOT_FOUND");
+            }
+            
+            com.unillanos.server.entity.ChunkSessionEntity session = sessionOpt.get();
+            
+            // 3. Verificar que la sesión esté activa
+            if (session.getEstadoSesion() != com.unillanos.server.entity.EstadoSesion.ACTIVA) {
+                throw new com.unillanos.server.exception.ValidationException("La sesión no está activa", "session");
+            }
+            
+            // 4. Verificar que todos los chunks hayan sido recibidos
+            if (session.getChunksRecibidos().size() != session.getTotalChunks()) {
+                throw new com.unillanos.server.exception.ValidationException(
+                    String.format("Faltan chunks. Recibidos: %d, Esperados: %d", 
+                        session.getChunksRecibidos().size(), session.getTotalChunks()), 
+                    "chunks"
+                );
+            }
+            
+            // 5. Ensamblar archivo completo
+            Path archivoCompleto = ensamblarArchivo(session);
+            
+            // 6. Calcular hash del archivo completo
+            byte[] archivoData = Files.readAllBytes(archivoCompleto);
+            String hashCompleto = calculateSha256(archivoData);
+            
+            // 7. Verificar si el archivo ya existe (deduplicación)
+            Optional<com.unillanos.server.entity.ArchivoEntity> archivoExistente = 
+                archivoRepository.findByHash(hashCompleto);
+            
+            String archivoId;
+            if (archivoExistente.isPresent()) {
+                // Archivo duplicado - usar el existente
+                archivoId = archivoExistente.get().getId();
+                loggerService.logInfo("finalizarSubidaParaRegistro", 
+                    String.format("Archivo duplicado reutilizado: %s", archivoId));
+            } else {
+                // Archivo nuevo - crear entidad y mover a directorio final
+                archivoId = java.util.UUID.randomUUID().toString();
+                String extension = obtenerExtension(session.getNombreArchivo());
+                String nombreAlmacenado = archivoId + (extension != null ? ("." + extension) : "");
+                
+                Path directorioDestino = Paths.get(config.getArchivos().getDirectorioFinal());
+                Files.createDirectories(directorioDestino);
+                Path archivoFinal = directorioDestino.resolve(nombreAlmacenado);
+                
+                Files.move(archivoCompleto, archivoFinal);
+                
+                // Crear entidad de archivo
+                com.unillanos.server.entity.ArchivoEntity archivo = new com.unillanos.server.entity.ArchivoEntity(
+                    archivoId,
+                    session.getNombreArchivo(),
+                    nombreAlmacenado,
+                    session.getTipoMime(),
+                    com.unillanos.server.entity.TipoArchivo.fromString(
+                        com.unillanos.server.validation.TipoArchivoValidator.detectarTipo(session.getTipoMime())
+                    ),
+                    hashCompleto,
+                    archivoData.length,
+                    archivoFinal.toString(),
+                    session.getUsuarioId(), // Puede ser un ID temporal
+                    java.time.LocalDateTime.now()
+                );
+                
+                archivoRepository.save(archivo);
+                
+                loggerService.logInfo("finalizarSubidaParaRegistro", 
+                    String.format("Archivo nuevo creado: %s", archivoId));
+            }
+            
+            // 8. Actualizar sesión como completada
+            session.setEstadoSesion(com.unillanos.server.entity.EstadoSesion.COMPLETADA);
+            session.setUltimaActividad(java.time.LocalDateTime.now());
+            chunkSessionRepository.actualizarSesion(session);
+            
+            // 9. Limpiar archivos temporales
+            eliminarDirectorioSesion(dto.getSessionId());
+            
+            // 10. Preparar respuesta
+            com.unillanos.server.dto.DTOEndUploadResponse response = new com.unillanos.server.dto.DTOEndUploadResponse(
+                archivoId,
+                session.getNombreArchivo(),
+                archivoData.length,
+                hashCompleto,
+                session.getTipoMime()
+            );
+            
+            loggerService.logInfo("finalizarSubidaParaRegistro", 
+                String.format("Subida para registro finalizada: %s", archivoId));
+            
+            return com.unillanos.server.dto.DTOResponse.success("endFileUploadForRegistration", "Archivo subido exitosamente para registro", response);
+            
+        } catch (com.unillanos.server.exception.ValidationException | com.unillanos.server.exception.NotFoundException e) {
+            logger.warn("Error al finalizar subida para registro: {}", e.getMessage());
+            return com.unillanos.server.dto.DTOResponse.error("endFileUploadForRegistration", e.getMessage());
+        } catch (IOException e) {
+            logger.error("Error de E/S al finalizar subida para registro: {}", e.getMessage(), e);
+            return com.unillanos.server.dto.DTOResponse.error("endFileUploadForRegistration", "Error interno del servidor al procesar archivo.");
+        } catch (Exception e) {
+            logger.error("Error inesperado al finalizar subida para registro: {}", e.getMessage(), e);
+            return com.unillanos.server.dto.DTOResponse.error("endFileUploadForRegistration", "Error inesperado al finalizar subida.");
         }
     }
 }

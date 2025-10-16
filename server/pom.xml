@@ -46,6 +46,7 @@
         <module>LogicaNegocio/Validadores</module>
         
         <!-- Capa de Datos -->
+        <module>Datos/Entidades</module>
         <module>Datos/Repositorios</module>
         
         <!-- Capa de Infraestructura -->
@@ -58,6 +59,11 @@
     <dependencyManagement>
         <dependencies>
             <!-- Módulos internos -->
+            <dependency>
+                <groupId>com.unillanos</groupId>
+                <artifactId>entidades</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.unillanos</groupId>
                 <artifactId>dtos</artifactId>

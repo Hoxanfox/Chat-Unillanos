@@ -3,8 +3,8 @@ package com.unillanos.server.repository.impl;
 import com.unillanos.server.exception.RepositoryException;
 import com.unillanos.server.repository.interfaces.IUsuarioRepository;
 import com.unillanos.server.repository.mappers.UsuarioMapper;
-import com.unillanos.server.repository.models.EstadoUsuario;
-import com.unillanos.server.repository.models.UsuarioEntity;
+import com.unillanos.server.entity.EstadoUsuario;
+import com.unillanos.server.entity.UsuarioEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
@@ -112,6 +112,34 @@ public class UsuarioRepositoryImpl implements IUsuarioRepository {
         } catch (SQLException e) {
             logger.error("Error al verificar existencia de email: {}", email, e);
             throw new RepositoryException("Error al verificar existencia de email", "existsByEmail", e);
+        } finally {
+            closeResources(conn, stmt, rs);
+        }
+    }
+
+    @Override
+    public boolean existsById(String id) {
+        String sql = "SELECT COUNT(*) FROM usuarios WHERE id = ?";
+        
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+        
+        try {
+            conn = dataSource.getConnection();
+            stmt = conn.prepareStatement(sql);
+            stmt.setString(1, id);
+            
+            rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return rs.getInt(1) > 0;
+            }
+            return false;
+            
+        } catch (SQLException e) {
+            logger.error("Error al verificar existencia de usuario por ID: {}", id, e);
+            throw new RepositoryException("Error al verificar existencia de usuario por ID", "existsById", e);
         } finally {
             closeResources(conn, stmt, rs);
         }
