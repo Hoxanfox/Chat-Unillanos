@@ -1,11 +1,18 @@
 package interfazEscritorio.dashboard;
 
+import controlador.canales.ControladorCanalesImpl;
+import controlador.canales.IControladorCanales;
 import controlador.chat.ControladorChat;
 import controlador.chat.IControladorChat;
+import controlador.conexion.ControladorConexion;
+import controlador.conexion.IControladorConexion;
 import controlador.contactos.ControladorContactos;
 import controlador.contactos.IControladorContactos;
+import controlador.notificaciones.ControladorNotificaciones;
+import controlador.notificaciones.IControladorNotificaciones;
 import controlador.usuario.ControladorUsuario;
 import controlador.usuario.IControladorUsuario;
+import dto.canales.DTOCanalCreado;
 import dto.featureContactos.DTOContacto;
 import dto.vistaLobby.DTOUsuario;
 import interfazEscritorio.dashboard.featureCanales.FeatureCanales;
@@ -28,6 +35,9 @@ public class VistaLobby extends BorderPane {
     private final IControladorContactos controladorContactos;
     private final IControladorChat controladorChat;
     private final IControladorUsuario controladorUsuario;
+    private final IControladorCanales controladorCanales;
+    private final IControladorNotificaciones controladorNotificaciones;
+    private final IControladorConexion controladorConexion;
     private DTOUsuario usuarioLogueado;
 
     public VistaLobby() {
@@ -35,16 +45,19 @@ public class VistaLobby extends BorderPane {
         this.controladorContactos = new ControladorContactos();
         this.controladorChat = new ControladorChat();
         this.controladorUsuario = new ControladorUsuario();
+        this.controladorCanales = new ControladorCanalesImpl();
+        this.controladorNotificaciones = new ControladorNotificaciones();
+        this.controladorConexion = new ControladorConexion();
 
         // Cargar información del usuario logueado
         cargarInformacionUsuario();
 
-        // Crear componentes (FeatureHeader ahora recibe el callback de cerrar sesión)
-        FeatureHeader header = new FeatureHeader(this::cerrarSesion);
+        // Crear componentes con sus controladores
+        FeatureHeader header = new FeatureHeader(this::cerrarSesion, this.controladorNotificaciones);
         FeatureContactos contactos = new FeatureContactos(this::mostrarChatPrivado, this.controladorContactos);
-        FeatureCanales canales = new FeatureCanales(this::mostrarVistaCanal, this::mostrarVistaCrearCanal);
-        this.panelNotificaciones = new FeatureNotificaciones();
-        FeatureConexion barraEstado = new FeatureConexion();
+        FeatureCanales canales = new FeatureCanales(this::mostrarVistaCanal, this::mostrarVistaCrearCanal, this.controladorCanales);
+        this.panelNotificaciones = new FeatureNotificaciones(this.controladorNotificaciones);
+        FeatureConexion barraEstado = new FeatureConexion(this.controladorConexion);
 
         VBox panelIzquierdo = new VBox(20);
         panelIzquierdo.setStyle("-fx-background-color: #2c3e50;");
@@ -55,6 +68,9 @@ public class VistaLobby extends BorderPane {
         this.setLeft(panelIzquierdo);
         this.setCenter(panelNotificaciones);
         this.setBottom(barraEstado);
+
+        // Inicializar manejadores de mensajes de canal
+        controladorCanales.inicializarManejadoresMensajes();
     }
 
     private void cargarInformacionUsuario() {
@@ -91,23 +107,35 @@ public class VistaLobby extends BorderPane {
         this.setCenter(chatView);
     }
 
-    private void mostrarVistaCanal(String nombreCanal) {
-        VistaCanal vistaCanal = new VistaCanal(nombreCanal, this::mostrarNotificaciones, this::mostrarVistaMiembros);
+    private void mostrarVistaCanal(DTOCanalCreado canal) {
+        VistaCanal vistaCanal = new VistaCanal(canal, this::mostrarNotificaciones, this::mostrarVistaMiembros, this.controladorCanales);
         this.setCenter(vistaCanal);
     }
 
-    private void mostrarVistaMiembros(String nombreCanal) {
-        VistaMiembrosCanal vistaMiembros = new VistaMiembrosCanal(nombreCanal, () -> this.mostrarVistaCanal(nombreCanal), this::mostrarVistaInvitar);
+    private void mostrarVistaMiembros(DTOCanalCreado canal) {
+        VistaMiembrosCanal vistaMiembros = new VistaMiembrosCanal(
+            canal.getId(),
+            canal.getNombre(),
+            () -> this.mostrarVistaCanal(canal),
+            (canalId) -> this.mostrarVistaInvitar(canal),
+            this.controladorCanales
+        );
         this.setCenter(vistaMiembros);
     }
 
-    private void mostrarVistaInvitar(String nombreCanal) {
-        VistaInvitarMiembro vistaInvitar = new VistaInvitarMiembro(nombreCanal, () -> this.mostrarVistaMiembros(nombreCanal));
+    private void mostrarVistaInvitar(DTOCanalCreado canal) {
+        VistaInvitarMiembro vistaInvitar = new VistaInvitarMiembro(
+            canal.getId(),
+            canal.getNombre(),
+            () -> this.mostrarVistaMiembros(canal),
+            this.controladorContactos,
+            this.controladorCanales
+        );
         this.setCenter(vistaInvitar);
     }
 
     private void mostrarVistaCrearCanal() {
-        VistaCrearCanal vistaCrearCanal = new VistaCrearCanal(this::mostrarNotificaciones);
+        VistaCrearCanal vistaCrearCanal = new VistaCrearCanal(this::mostrarNotificaciones, this.controladorCanales);
         this.setCenter(vistaCrearCanal);
     }
 

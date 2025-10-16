@@ -4,6 +4,7 @@ import dto.vistaLogin.DTOAutenticacion;
 import dto.vistaRegistro.DTORegistro;
 import fachada.FachadaGeneralImpl;
 import fachada.gestionUsuarios.autenticacion.IFachadaAutenticacionUsuario;
+import observador.IObservador;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -29,5 +30,16 @@ public class ServicioAutenticacion implements IServicioAutenticacion {
     public CompletableFuture<Boolean> registrar(DTORegistro datos, byte[] fotoBytes) {
         return fachadaAutenticacion.registrarUsuario(datos, fotoBytes);
     }
-}
 
+    @Override
+    public void registrarObservadorAutenticacion(IObservador observador) {
+        System.out.println("🔔 [ServicioAutenticacion]: Registrando observador en Autenticación");
+        fachadaAutenticacion.registrarObservadorAutenticacion(observador);
+    }
+
+    @Override
+    public void registrarObservadorRegistro(IObservador observador) {
+        System.out.println("🔔 [ServicioAutenticacion]: Registrando observador en Registro");
+        fachadaAutenticacion.registrarObservadorRegistro(observador);
+    }
+}

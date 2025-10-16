@@ -1,13 +1,15 @@
 package gestionCanales.nuevoCanal;
 
 import dominio.Canal;
+import observador.ISujeto;
 import java.util.concurrent.CompletableFuture;
 
 /**
  * Contrato para la lógica de creación de un nuevo canal.
  * Devuelve un objeto del Dominio.
+ * Implementa ISujeto para notificar eventos de creación.
  */
-public interface ICreadorCanal {
+public interface ICreadorCanal extends ISujeto {
 
     /**
      * Inicia el proceso de creación de un nuevo canal.
@@ -21,4 +23,3 @@ public interface ICreadorCanal {
      */
     CompletableFuture<Canal> crearCanal(String nombre, String descripcion);
 }
-

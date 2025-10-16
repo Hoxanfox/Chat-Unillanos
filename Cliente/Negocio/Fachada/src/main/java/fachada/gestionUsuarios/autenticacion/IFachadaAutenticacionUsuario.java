@@ -2,6 +2,7 @@ package fachada.gestionUsuarios.autenticacion;
 
 import dto.vistaLogin.DTOAutenticacion;
 import dto.vistaRegistro.DTORegistro;
+import observador.IObservador;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -18,5 +19,14 @@ public interface IFachadaAutenticacionUsuario {
      * @return Una promesa que se resolverá con el resultado del registro.
      */
     CompletableFuture<Boolean> registrarUsuario(DTORegistro dto, byte[] fotoBytes);
-}
 
+    /**
+     * Registra un observador para eventos de autenticación.
+     */
+    void registrarObservadorAutenticacion(IObservador observador);
+
+    /**
+     * Registra un observador para eventos de registro.
+     */
+    void registrarObservadorRegistro(IObservador observador);
+}

@@ -7,6 +7,8 @@ import fachada.gestionUsuarios.autenticacion.IFachadaAutenticacionUsuario;
 import fachada.gestionUsuarios.insercionDB.IFachadaUsuarios;
 import fachada.gestionContactos.contactos.IFachadaContactos;
 import fachada.gestionUsuarios.session.IFachadaLobby;
+import fachada.gestionCanales.IFachadaCanales;
+import fachada.gestionNotificaciones.IFachadaNotificaciones;
 
 /**
  * Contrato para la Fachada General que centraliza el acceso
@@ -20,4 +22,6 @@ public interface IFachadaGeneral {
     IFachadaContactos getFachadaContactos();
     IFachadaUsuarios getFachadaUsuarios();
     IFachadaLobby getFachadaLobby();
+    IFachadaCanales getFachadaCanales();
+    IFachadaNotificaciones getFachadaNotificaciones();
 }

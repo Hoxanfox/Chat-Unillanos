@@ -1,14 +1,17 @@
 package gestionCanales.listarMiembros;
 
 import dto.canales.DTOMiembroCanal;
+import observador.ISujeto;
+
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
  * Contrato para el componente encargado de solicitar y gestionar
  * la lista de miembros de un canal específico.
+ * AHORA extiende ISujeto para poder notificar cambios a los observadores.
  */
-public interface IListadorMiembros {
+public interface IListadorMiembros extends ISujeto {
 
     /**
      * Inicia el proceso para solicitar la lista de miembros de un canal al servidor.

@@ -14,6 +14,10 @@ import fachada.gestionUsuarios.insercionDB.IFachadaUsuarios;
 import fachada.gestionUsuarios.insercionDB.FachadaUsuariosImpl;
 import fachada.gestionUsuarios.session.IFachadaLobby;
 import fachada.gestionUsuarios.session.FachadaLobby;
+import fachada.gestionCanales.FachadaCanalesImpl;
+import fachada.gestionCanales.IFachadaCanales;
+import fachada.gestionNotificaciones.FachadaNotificacionesImpl;
+import fachada.gestionNotificaciones.IFachadaNotificaciones;
 
 /**
  * Implementación del Singleton de la Fachada General.
@@ -29,6 +33,8 @@ public class FachadaGeneralImpl implements IFachadaGeneral {
     private final IFachadaChat fachadaChat;
     private final IFachadaContactos fachadaContactos;
     private final IFachadaUsuarios fachadaUsuarios;
+    private final IFachadaCanales fachadaCanales;
+    private final IFachadaNotificaciones fachadaNotificaciones;
     private IFachadaLobby fachadaLobby;
 
     private FachadaGeneralImpl() {
@@ -39,6 +45,8 @@ public class FachadaGeneralImpl implements IFachadaGeneral {
         this.fachadaChat = new FachadaChatImpl();
         this.fachadaContactos = new FachadaContactosImpl();
         this.fachadaUsuarios = new FachadaUsuariosImpl();
+        this.fachadaCanales = new FachadaCanalesImpl();
+        this.fachadaNotificaciones = new FachadaNotificacionesImpl();
     }
 
     public static synchronized IFachadaGeneral getInstancia() {
@@ -84,5 +92,15 @@ public class FachadaGeneralImpl implements IFachadaGeneral {
     @Override
     public IFachadaUsuarios getFachadaUsuarios() {
         return fachadaUsuarios;
+    }
+
+    @Override
+    public IFachadaCanales getFachadaCanales() {
+        return fachadaCanales;
+    }
+
+    @Override
+    public IFachadaNotificaciones getFachadaNotificaciones() {
+        return fachadaNotificaciones;
     }
 }
