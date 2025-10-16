@@ -56,6 +56,18 @@ public class ControladorCanalesImpl implements IControladorCanales {
     }
 
     @Override
+    public CompletableFuture<Void> enviarMensajeAudio(String canalId, String audioFileId) {
+        System.out.println("🎤 [ControladorCanales]: Delegando envío de audio al servicio");
+        return servicioCanales.enviarMensajeAudio(canalId, audioFileId);
+    }
+
+    @Override
+    public CompletableFuture<Void> enviarArchivo(String canalId, String fileId) {
+        System.out.println("📎 [ControladorCanales]: Delegando envío de archivo al servicio");
+        return servicioCanales.enviarArchivo(canalId, fileId);
+    }
+
+    @Override
     public void registrarObservadorMensajes(IObservador observador) {
         servicioCanales.registrarObservadorMensajes(observador);
     }

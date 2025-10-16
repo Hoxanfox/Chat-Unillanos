@@ -1,6 +1,5 @@
 package gestionNotificaciones;
 
-<<<<<<< HEAD
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -20,11 +19,6 @@ import repositorio.notificacion.RepositorioNotificacionImpl;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-=======
-import dto.featureNotificaciones.DTONotificacion;
-
-import java.time.LocalDateTime;
->>>>>>> refs/remotes/origin/develop
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -32,14 +26,13 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Gestor de notificaciones del sistema.
  * Maneja la lógica de negocio relacionada con las notificaciones.
-<<<<<<< HEAD
  *
  * <p>Este gestor se encarga de:
  * <ul>
- *   <li>Comunicación con el servidor para solicitar/responder notificaciones</li>
- *   <li>Usar el repositorio para almacenamiento en caché local</li>
- *   <li>Implementar el patrón Observer para notificar cambios</li>
- *   <li>Aceptar/rechazar solicitudes de amistad e invitaciones a canales</li>
+ * <li>Comunicación con el servidor para solicitar/responder notificaciones</li>
+ * <li>Usar el repositorio para almacenamiento en caché local</li>
+ * <li>Implementar el patrón Observer para notificar cambios</li>
+ * <li>Aceptar/rechazar solicitudes de amistad e invitaciones a canales</li>
  * </ul>
  */
 public class GestorNotificaciones implements ISujeto {
@@ -61,7 +54,7 @@ public class GestorNotificaciones implements ISujeto {
 
         System.out.println("✅ [GestorNotificaciones]: Gestor inicializado con comunicación y repositorio");
     }
-    
+
     /**
      * Obtiene la lista de notificaciones del usuario actual desde el servidor.
      */
@@ -106,36 +99,13 @@ public class GestorNotificaciones implements ISujeto {
      */
     public List<DTONotificacion> obtenerNotificacionesCache() {
         return repositorioNotificacion.obtenerTodas();
-=======
- * POR AHORA trabaja con datos de ejemplo hasta que se implemente la comunicación con el servidor.
- */
-public class GestorNotificaciones {
-    
-    public GestorNotificaciones() {
-        System.out.println("✅ [GestorNotificaciones]: Gestor inicializado");
     }
-    
-    /**
-     * Obtiene la lista de notificaciones del usuario actual.
-     * POR AHORA devuelve notificaciones de ejemplo para desarrollo.
-     */
-    public CompletableFuture<List<DTONotificacion>> obtenerNotificaciones() {
-        System.out.println("📡 [GestorNotificaciones]: Obteniendo notificaciones...");
 
-        return CompletableFuture.supplyAsync(() -> {
-            // TODO: Implementar comunicación real con el servidor
-            System.out.println("ℹ️ [GestorNotificaciones]: Usando notificaciones de ejemplo");
-            return crearNotificacionesEjemplo();
-        });
->>>>>>> refs/remotes/origin/develop
-    }
-    
     /**
      * Marca una notificación específica como leída.
      */
     public CompletableFuture<Void> marcarComoLeida(String notificacionId) {
         System.out.println("📝 [GestorNotificaciones]: Marcando notificación como leída: " + notificacionId);
-<<<<<<< HEAD
 
         CompletableFuture<Void> future = new CompletableFuture<>();
         JsonObject payload = new JsonObject();
@@ -159,21 +129,13 @@ public class GestorNotificaciones {
 
         enviadorPeticiones.enviar(request);
         return future;
-=======
-        
-        return CompletableFuture.runAsync(() -> {
-            // TODO: Implementar comunicación real con el servidor
-            System.out.println("✅ [GestorNotificaciones]: Notificación marcada como leída (simulado)");
-        });
->>>>>>> refs/remotes/origin/develop
     }
-    
+
     /**
      * Marca todas las notificaciones como leídas.
      */
     public CompletableFuture<Void> marcarTodasComoLeidas() {
         System.out.println("📝 [GestorNotificaciones]: Marcando todas las notificaciones como leídas");
-<<<<<<< HEAD
 
         CompletableFuture<Void> future = new CompletableFuture<>();
         String usuarioId = gestorSesion.getUserId();
@@ -210,7 +172,7 @@ public class GestorNotificaciones {
 
         if (solicitudId == null || solicitudId.trim().isEmpty()) {
             return CompletableFuture.failedFuture(
-                new IllegalArgumentException("ID de solicitud inválido")
+                    new IllegalArgumentException("ID de solicitud inválido")
             );
         }
 
@@ -254,7 +216,7 @@ public class GestorNotificaciones {
 
         if (solicitudId == null || solicitudId.trim().isEmpty()) {
             return CompletableFuture.failedFuture(
-                new IllegalArgumentException("ID de solicitud inválido")
+                    new IllegalArgumentException("ID de solicitud inválido")
             );
         }
 
@@ -296,13 +258,13 @@ public class GestorNotificaciones {
 
         if (invitacionId == null || invitacionId.trim().isEmpty()) {
             return CompletableFuture.failedFuture(
-                new IllegalArgumentException("ID de invitación inválido")
+                    new IllegalArgumentException("ID de invitación inválido")
             );
         }
 
         if (canalId == null || canalId.trim().isEmpty()) {
             return CompletableFuture.failedFuture(
-                new IllegalArgumentException("ID de canal inválido")
+                    new IllegalArgumentException("ID de canal inválido")
             );
         }
 
@@ -341,7 +303,7 @@ public class GestorNotificaciones {
         enviadorPeticiones.enviar(request);
         return future;
     }
-    
+
     /**
      * Rechaza una invitación a un canal.
      */
@@ -350,7 +312,7 @@ public class GestorNotificaciones {
 
         if (invitacionId == null || invitacionId.trim().isEmpty()) {
             return CompletableFuture.failedFuture(
-                new IllegalArgumentException("ID de invitación inválido")
+                    new IllegalArgumentException("ID de invitación inválido")
             );
         }
 
@@ -486,51 +448,4 @@ public class GestorNotificaciones {
             observador.actualizar(tipoDeDato, datos);
         }
     }
-=======
-        
-        return CompletableFuture.runAsync(() -> {
-            // TODO: Implementar comunicación real con el servidor
-            System.out.println("✅ [GestorNotificaciones]: Todas las notificaciones marcadas como leídas (simulado)");
-        });
-    }
-    
-    /**
-     * Crea notificaciones de ejemplo para desarrollo y testing.
-     */
-    private List<DTONotificacion> crearNotificacionesEjemplo() {
-        List<DTONotificacion> notificaciones = new ArrayList<>();
-        
-        notificaciones.add(new DTONotificacion(
-            "notif1",
-            "MENCION",
-            "NEW (3)",
-            "alice123 mentioned you in Team Alpha",
-            LocalDateTime.now().minusMinutes(2),
-            false,
-            "alice123"
-        ));
-        
-        notificaciones.add(new DTONotificacion(
-            "notif2",
-            "MENSAJE",
-            "bob_smith sent you a message",
-            "Do you have time to chat?",
-            LocalDateTime.now().minusMinutes(16),
-            false,
-            "bob_smith"
-        ));
-        
-        notificaciones.add(new DTONotificacion(
-            "notif3",
-            "SOLICITUD_AMISTAD",
-            "emma_j sends a friend request",
-            "Review 'Project Beta' again!",
-            LocalDateTime.now().minusHours(5),
-            true,
-            "emma_j"
-        ));
-        
-        return notificaciones;
-    }
->>>>>>> refs/remotes/origin/develop
 }

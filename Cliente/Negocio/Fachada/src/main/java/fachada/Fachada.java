@@ -10,36 +10,35 @@ import java.util.concurrent.CompletableFuture;
  * Delega a la fachada general.
  */
 public class Fachada implements IFachada {
-    
+
     private static Fachada instancia;
     private final IFachadaGeneral fachadaGeneral;
-    
+
     private Fachada() {
         this.fachadaGeneral = FachadaGeneralImpl.getInstancia();
     }
-    
+
     public static synchronized Fachada obtenerInstancia() {
         if (instancia == null) {
             instancia = new Fachada();
         }
         return instancia;
     }
-    
+
     @Override
     public CompletableFuture<List<DTONotificacion>> obtenerNotificaciones() {
         return fachadaGeneral.getFachadaNotificaciones().obtenerNotificaciones();
     }
-    
+
     @Override
     public CompletableFuture<Void> marcarNotificacionLeida(String notificacionId) {
         return fachadaGeneral.getFachadaNotificaciones().marcarNotificacionLeida(notificacionId);
     }
-    
+
     @Override
     public CompletableFuture<Void> marcarTodasNotificacionesLeidas() {
         return fachadaGeneral.getFachadaNotificaciones().marcarTodasNotificacionesLeidas();
     }
-<<<<<<< HEAD
 
     @Override
     public CompletableFuture<Void> aceptarInvitacionCanal(String invitacionId, String canalId) {
@@ -50,6 +49,4 @@ public class Fachada implements IFachada {
     public CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId) {
         return fachadaGeneral.getFachadaNotificaciones().rechazarInvitacionCanal(invitacionId);
     }
-=======
->>>>>>> refs/remotes/origin/develop
 }

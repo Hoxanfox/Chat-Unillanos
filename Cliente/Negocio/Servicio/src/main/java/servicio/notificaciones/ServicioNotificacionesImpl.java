@@ -26,65 +26,64 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
     @Override
     public void solicitarActualizacionNotificaciones() {
         System.out.println("📡 [ServicioNotificaciones]: Solicitando lista de notificaciones a la Fachada...");
-        
+
         fachada.obtenerNotificaciones()
-            .thenAccept(notificaciones -> {
-                System.out.println("✅ [ServicioNotificaciones]: Recibidas " + notificaciones.size() + " notificaciones");
-                notificarObservadores("ACTUALIZAR_NOTIFICACIONES", notificaciones);
-            })
-            .exceptionally(ex -> {
-                System.err.println("❌ [ServicioNotificaciones]: Error al obtener notificaciones: " + ex.getMessage());
-                notificarObservadores("ERROR_NOTIFICACIONES", ex.getMessage());
-                return null;
-            });
+                .thenAccept(notificaciones -> {
+                    System.out.println("✅ [ServicioNotificaciones]: Recibidas " + notificaciones.size() + " notificaciones");
+                    notificarObservadores("ACTUALIZAR_NOTIFICACIONES", notificaciones);
+                })
+                .exceptionally(ex -> {
+                    System.err.println("❌ [ServicioNotificaciones]: Error al obtener notificaciones: " + ex.getMessage());
+                    notificarObservadores("ERROR_NOTIFICACIONES", ex.getMessage());
+                    return null;
+                });
     }
 
     @Override
     public CompletableFuture<Void> marcarComoLeida(String notificacionId) {
         System.out.println("📝 [ServicioNotificaciones]: Marcando notificación como leída: " + notificacionId);
-        
+
         return fachada.marcarNotificacionLeida(notificacionId)
-            .thenRun(() -> {
-                System.out.println("✅ [ServicioNotificaciones]: Notificación marcada como leída");
-                solicitarActualizacionNotificaciones(); // Actualizar la lista
-            })
-            .exceptionally(ex -> {
-                System.err.println("❌ [ServicioNotificaciones]: Error al marcar como leída: " + ex.getMessage());
-                return null;
-            });
+                .thenRun(() -> {
+                    System.out.println("✅ [ServicioNotificaciones]: Notificación marcada como leída");
+                    solicitarActualizacionNotificaciones(); // Actualizar la lista
+                })
+                .exceptionally(ex -> {
+                    System.err.println("❌ [ServicioNotificaciones]: Error al marcar como leída: " + ex.getMessage());
+                    return null;
+                });
     }
 
     @Override
     public CompletableFuture<Void> marcarTodasComoLeidas() {
         System.out.println("📝 [ServicioNotificaciones]: Marcando todas las notificaciones como leídas");
-        
+
         return fachada.marcarTodasNotificacionesLeidas()
-            .thenRun(() -> {
-                System.out.println("✅ [ServicioNotificaciones]: Todas las notificaciones marcadas como leídas");
-                solicitarActualizacionNotificaciones(); // Actualizar la lista
-            })
-            .exceptionally(ex -> {
-                System.err.println("❌ [ServicioNotificaciones]: Error al marcar todas como leídas: " + ex.getMessage());
-                return null;
-            });
+                .thenRun(() -> {
+                    System.out.println("✅ [ServicioNotificaciones]: Todas las notificaciones marcadas como leídas");
+                    solicitarActualizacionNotificaciones(); // Actualizar la lista
+                })
+                .exceptionally(ex -> {
+                    System.err.println("❌ [ServicioNotificaciones]: Error al marcar todas como leídas: " + ex.getMessage());
+                    return null;
+                });
     }
 
     @Override
-<<<<<<< HEAD
     public CompletableFuture<Void> aceptarInvitacionCanal(String invitacionId, String canalId) {
         System.out.println("✅ [ServicioNotificaciones]: Aceptando invitación a canal: " + canalId);
 
         return fachada.aceptarInvitacionCanal(invitacionId, canalId)
-            .thenRun(() -> {
-                System.out.println("✅ [ServicioNotificaciones]: Invitación aceptada exitosamente");
-                solicitarActualizacionNotificaciones(); // Actualizar la lista
-                notificarObservadores("INVITACION_ACEPTADA", canalId);
-            })
-            .exceptionally(ex -> {
-                System.err.println("❌ [ServicioNotificaciones]: Error al aceptar invitación: " + ex.getMessage());
-                notificarObservadores("ERROR_NOTIFICACIONES", "Error al aceptar invitación: " + ex.getMessage());
-                return null;
-            });
+                .thenRun(() -> {
+                    System.out.println("✅ [ServicioNotificaciones]: Invitación aceptada exitosamente");
+                    solicitarActualizacionNotificaciones(); // Actualizar la lista
+                    notificarObservadores("INVITACION_ACEPTADA", canalId);
+                })
+                .exceptionally(ex -> {
+                    System.err.println("❌ [ServicioNotificaciones]: Error al aceptar invitación: " + ex.getMessage());
+                    notificarObservadores("ERROR_NOTIFICACIONES", "Error al aceptar invitación: " + ex.getMessage());
+                    return null;
+                });
     }
 
     @Override
@@ -92,21 +91,19 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
         System.out.println("❌ [ServicioNotificaciones]: Rechazando invitación: " + invitacionId);
 
         return fachada.rechazarInvitacionCanal(invitacionId)
-            .thenRun(() -> {
-                System.out.println("✅ [ServicioNotificaciones]: Invitación rechazada exitosamente");
-                solicitarActualizacionNotificaciones(); // Actualizar la lista
-                notificarObservadores("INVITACION_RECHAZADA", invitacionId);
-            })
-            .exceptionally(ex -> {
-                System.err.println("❌ [ServicioNotificaciones]: Error al rechazar invitación: " + ex.getMessage());
-                notificarObservadores("ERROR_NOTIFICACIONES", "Error al rechazar invitación: " + ex.getMessage());
-                return null;
-            });
+                .thenRun(() -> {
+                    System.out.println("✅ [ServicioNotificaciones]: Invitación rechazada exitosamente");
+                    solicitarActualizacionNotificaciones(); // Actualizar la lista
+                    notificarObservadores("INVITACION_RECHAZADA", invitacionId);
+                })
+                .exceptionally(ex -> {
+                    System.err.println("❌ [ServicioNotificaciones]: Error al rechazar invitación: " + ex.getMessage());
+                    notificarObservadores("ERROR_NOTIFICACIONES", "Error al rechazar invitación: " + ex.getMessage());
+                    return null;
+                });
     }
 
     @Override
-=======
->>>>>>> refs/remotes/origin/develop
     public void registrarObservador(IObservador observador) {
         if (!observadores.contains(observador)) {
             observadores.add(observador);
@@ -127,7 +124,3 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
         }
     }
 }
-<<<<<<< HEAD
-=======
-
->>>>>>> refs/remotes/origin/develop

@@ -25,10 +25,7 @@
             <groupId>appMain</groupId>
             <artifactId>DTO</artifactId>
             <version>1.0-SNAPSHOT</version>
-<<<<<<< HEAD
             <scope>compile</scope>
-=======
->>>>>>> refs/remotes/origin/develop
         </dependency>
 
         <!-- Dominio para objetos de dominio -->
@@ -36,10 +33,7 @@
             <groupId>appMain</groupId>
             <artifactId>Dominio</artifactId>
             <version>1.0-SNAPSHOT</version>
-<<<<<<< HEAD
             <scope>compile</scope>
-=======
->>>>>>> refs/remotes/origin/develop
         </dependency>
 
         <!-- Comunicación para enviar peticiones -->
@@ -47,27 +41,30 @@
             <groupId>appMain</groupId>
             <artifactId>Comunicacion</artifactId>
             <version>1.0-SNAPSHOT</version>
-<<<<<<< HEAD
             <scope>compile</scope>
         </dependency>
+
         <dependency>
             <groupId>appMain</groupId>
             <artifactId>Observador</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
+
         <dependency>
             <groupId>appMain</groupId>
             <artifactId>Repositorio</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
+
         <dependency>
             <groupId>appMain</groupId>
             <artifactId>GestionUsuario</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
+
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
@@ -75,9 +72,3 @@
         </dependency>
     </dependencies>
 </project>
-=======
-        </dependency>
-    </dependencies>
-</project>
-
->>>>>>> refs/remotes/origin/develop

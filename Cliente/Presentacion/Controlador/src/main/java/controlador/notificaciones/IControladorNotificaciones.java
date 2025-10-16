@@ -26,7 +26,6 @@ public interface IControladorNotificaciones extends ISujeto {
      * @return CompletableFuture que se completa cuando todas están marcadas.
      */
     CompletableFuture<Void> marcarTodasComoLeidas();
-<<<<<<< HEAD
 
     /**
      * Acepta una invitación a un canal.
@@ -43,7 +42,3 @@ public interface IControladorNotificaciones extends ISujeto {
      */
     CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId);
 }
-=======
-}
-
->>>>>>> refs/remotes/origin/develop

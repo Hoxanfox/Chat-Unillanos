@@ -38,7 +38,6 @@ public class ControladorNotificaciones implements IControladorNotificaciones {
     }
 
     @Override
-<<<<<<< HEAD
     public CompletableFuture<Void> aceptarInvitacionCanal(String invitacionId, String canalId) {
         System.out.println("➡️ [ControladorNotificaciones]: Delegando aceptar invitación al servicio");
         return servicioNotificaciones.aceptarInvitacionCanal(invitacionId, canalId);
@@ -51,8 +50,6 @@ public class ControladorNotificaciones implements IControladorNotificaciones {
     }
 
     @Override
-=======
->>>>>>> refs/remotes/origin/develop
     public void registrarObservador(IObservador observador) {
         System.out.println("➡️ [ControladorNotificaciones]: Delegando registro de observador al servicio");
         servicioNotificaciones.registrarObservador(observador);
