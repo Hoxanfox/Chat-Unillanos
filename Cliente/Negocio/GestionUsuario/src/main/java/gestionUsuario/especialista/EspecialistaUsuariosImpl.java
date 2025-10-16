@@ -1,6 +1,7 @@
 package gestionUsuario.especialista;
 
 import dominio.Usuario;
+import dto.vistaLobby.DTOUsuario;
 import repositorio.usuario.IRepositorioUsuario;
 import repositorio.usuario.RepositorioUsuarioImpl;
 
@@ -18,6 +19,32 @@ public class EspecialistaUsuariosImpl implements IEspecialistaUsuarios {
     public EspecialistaUsuariosImpl() {
         this.repositorioUsuario = new RepositorioUsuarioImpl();
         System.out.println("✅ [EspecialistaUsuarios]: Inicializado con RepositorioUsuario.");
+    }
+    // En EspecialistaUsuariosImpl.java
+    public DTOUsuario obtenerUsuarioPorIdComoDTO(UUID idUsuario) {
+        System.out.println("🔍 [EspecialistaUsuarios]: Buscando usuario por ID como DTO: " + idUsuario);
+
+        if (idUsuario == null) {
+            throw new IllegalArgumentException("El ID del usuario no puede ser nulo");
+        }
+
+        Usuario usuario = repositorioUsuario.obtenerPorId(idUsuario);
+
+        if (usuario == null) {
+            System.out.println("⚠️ [EspecialistaUsuarios]: Usuario no encontrado.");
+            return null;
+        }
+
+        // Conversión de Dominio -> DTO
+        DTOUsuario dto = new DTOUsuario(
+                usuario.getIdUsuario().toString(),
+                usuario.getNombre(),
+                usuario.getEmail(),
+                usuario.getPhotoIdServidor() // o el campo que corresponda en Usuario
+        );
+
+        System.out.println("✅ [EspecialistaUsuarios]: Usuario convertido a DTO: " + usuario.getNombre());
+        return dto;
     }
 
     @Override

@@ -26,6 +26,7 @@
         <module>Negocio/GestionContactos</module>
         <module>Negocio/GestionArchivos</module>
         <module>Negocio/GestionConexion</module>
+        <module>Negocio/GestionCanales</module>
     </modules>
 
     <properties>

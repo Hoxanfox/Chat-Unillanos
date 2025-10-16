@@ -13,6 +13,8 @@
     <file url="file://$PROJECT_DIR$/Negocio/Fachada/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Negocio/GestionArchivos/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Negocio/GestionArchivos/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/GestionCanales/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/Negocio/GestionCanales/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Negocio/GestionConexion/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Negocio/GestionConexion/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/Negocio/GestionContactos/src/main/java" charset="UTF-8" />

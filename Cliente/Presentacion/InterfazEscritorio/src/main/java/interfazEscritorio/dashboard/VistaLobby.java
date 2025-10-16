@@ -4,7 +4,10 @@ import controlador.chat.ControladorChat;
 import controlador.chat.IControladorChat;
 import controlador.contactos.ControladorContactos;
 import controlador.contactos.IControladorContactos;
+import controlador.usuario.ControladorUsuario;
+import controlador.usuario.IControladorUsuario;
 import dto.featureContactos.DTOContacto;
+import dto.vistaLobby.DTOUsuario;
 import interfazEscritorio.dashboard.featureCanales.FeatureCanales;
 import interfazEscritorio.dashboard.featureCanales.canal.VistaCanal;
 import interfazEscritorio.dashboard.featureCanales.canal.miembrosCanal.VistaInvitarMiembro;
@@ -15,26 +18,29 @@ import interfazEscritorio.dashboard.featureContactos.FeatureContactos;
 import interfazEscritorio.dashboard.featureContactos.chatContacto.VistaContactoChat;
 import interfazEscritorio.dashboard.featureHeader.FeatureHeader;
 import interfazEscritorio.dashboard.featureNotificaciones.FeatureNotificaciones;
+import javafx.application.Platform;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
 
-/**
- * Vista principal que ensambla los features y gestiona la navegación interna.
- */
 public class VistaLobby extends BorderPane {
 
     private final FeatureNotificaciones panelNotificaciones;
-    // CORRECCIÓN 1: Los controladores ahora son campos de la clase.
     private final IControladorContactos controladorContactos;
     private final IControladorChat controladorChat;
+    private final IControladorUsuario controladorUsuario;
+    private DTOUsuario usuarioLogueado;
 
     public VistaLobby() {
-        // Se instancian los controladores en el constructor.
+        // Instanciar controladores
         this.controladorContactos = new ControladorContactos();
         this.controladorChat = new ControladorChat();
+        this.controladorUsuario = new ControladorUsuario();
 
-        FeatureHeader header = new FeatureHeader();
-        // Se pasa la instancia del controlador correcta al constructor de FeatureContactos.
+        // Cargar información del usuario logueado
+        cargarInformacionUsuario();
+
+        // Crear componentes (FeatureHeader ahora recibe el callback de cerrar sesión)
+        FeatureHeader header = new FeatureHeader(this::cerrarSesion);
         FeatureContactos contactos = new FeatureContactos(this::mostrarChatPrivado, this.controladorContactos);
         FeatureCanales canales = new FeatureCanales(this::mostrarVistaCanal, this::mostrarVistaCrearCanal);
         this.panelNotificaciones = new FeatureNotificaciones();
@@ -51,17 +57,40 @@ public class VistaLobby extends BorderPane {
         this.setBottom(barraEstado);
     }
 
-    /**
-     * CORRECCIÓN 2: El método ahora recibe el objeto DTOContacto completo
-     * y llama al constructor correcto de VistaContactoChat.
-     * @param contacto El DTO del contacto seleccionado.
-     */
+    private void cargarInformacionUsuario() {
+        System.out.println("🔄 [VistaLobby]: Cargando información del usuario logueado...");
+
+        controladorUsuario.cargarInformacionUsuarioLogueado()
+                .thenAccept(usuario -> {
+                    Platform.runLater(() -> {
+                        this.usuarioLogueado = usuario;
+                        System.out.println("✅ [VistaLobby]: Usuario cargado: " + usuario.getNombre());
+                    });
+                })
+                .exceptionally(error -> {
+                    Platform.runLater(() -> {
+                        System.err.println("❌ [VistaLobby]: Error al cargar usuario: " + error.getMessage());
+                    });
+                    return null;
+                });
+    }
+
+    private void cerrarSesion() {
+        System.out.println("🚪 [VistaLobby]: Cerrando sesión...");
+        controladorUsuario.cerrarSesion();
+        // Aquí puedes navegar de vuelta al login
+        System.out.println("✅ [VistaLobby]: Sesión cerrada. Redirigir al login.");
+    }
+
+    public DTOUsuario getUsuarioLogueado() {
+        return usuarioLogueado;
+    }
+
     private void mostrarChatPrivado(DTOContacto contacto) {
         VistaContactoChat chatView = new VistaContactoChat(contacto, this.controladorChat, this::mostrarNotificaciones);
         this.setCenter(chatView);
     }
 
-    // ... el resto de los métodos de navegación no necesitan cambios ...
     private void mostrarVistaCanal(String nombreCanal) {
         VistaCanal vistaCanal = new VistaCanal(nombreCanal, this::mostrarNotificaciones, this::mostrarVistaMiembros);
         this.setCenter(vistaCanal);
@@ -86,4 +115,3 @@ public class VistaLobby extends BorderPane {
         this.setCenter(panelNotificaciones);
     }
 }
-

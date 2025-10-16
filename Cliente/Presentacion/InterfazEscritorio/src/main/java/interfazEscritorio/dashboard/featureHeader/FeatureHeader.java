@@ -2,6 +2,7 @@ package interfazEscritorio.dashboard.featureHeader;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
@@ -9,12 +10,9 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.text.Font;
 
-/**
- * Representa el header de la aplicación, incluyendo el menú y los iconos de estado.
- */
 public class FeatureHeader extends BorderPane {
 
-    public FeatureHeader() {
+    public FeatureHeader(Runnable onCerrarSesion) {
         this.setPadding(new Insets(5, 10, 5, 10));
         this.setStyle("-fx-background-color: #f4f4f4; -fx-border-color: #d0d0d0; -fx-border-width: 0 0 1 0;");
 
@@ -31,13 +29,18 @@ public class FeatureHeader extends BorderPane {
         HBox iconosLayout = new HBox(15);
         iconosLayout.setAlignment(Pos.CENTER);
 
-        Label notificacionesIcono = new Label("🔔 9"); // Placeholder para icono
+        Label notificacionesIcono = new Label("🔔 9");
         notificacionesIcono.setFont(Font.font(14));
 
-        Label perfilIcono = new Label("👤"); // Placeholder para icono
+        Label perfilIcono = new Label("👤");
         perfilIcono.setFont(Font.font(14));
 
-        iconosLayout.getChildren().addAll(notificacionesIcono, perfilIcono);
+        // Botón de cerrar sesión
+        Button btnCerrarSesion = new Button("Cerrar Sesión");
+        btnCerrarSesion.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-size: 12px;");
+        btnCerrarSesion.setOnAction(e -> onCerrarSesion.run());
+
+        iconosLayout.getChildren().addAll(notificacionesIcono, perfilIcono, btnCerrarSesion);
 
         this.setLeft(menuBar);
         this.setRight(iconosLayout);

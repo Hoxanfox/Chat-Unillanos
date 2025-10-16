@@ -3,7 +3,6 @@ package fachada;
 import fachada.gestionContactos.chat.FachadaChatImpl;
 import fachada.gestionContactos.contactos.FachadaContactosImpl;
 import fachada.gestionContactos.chat.IFachadaChat;
-
 import fachada.gestionConexion.FachadaConexionImpl;
 import fachada.gestionConexion.IFachadaConexion;
 import fachada.gestionArchivos.FachadaArchivosImpl;
@@ -13,10 +12,12 @@ import fachada.gestionUsuarios.autenticacion.FachadaAutenticacionUsuario;
 import fachada.gestionUsuarios.autenticacion.IFachadaAutenticacionUsuario;
 import fachada.gestionUsuarios.insercionDB.IFachadaUsuarios;
 import fachada.gestionUsuarios.insercionDB.FachadaUsuariosImpl;
+import fachada.gestionUsuarios.session.IFachadaLobby;
+import fachada.gestionUsuarios.session.FachadaLobby;
 
 /**
  * Implementación del Singleton de la Fachada General.
- * AHORA crea y gestiona las instancias de TODAS las fachadas específicas.
+ * Crea y gestiona las instancias de TODAS las fachadas específicas.
  */
 public class FachadaGeneralImpl implements IFachadaGeneral {
 
@@ -28,9 +29,10 @@ public class FachadaGeneralImpl implements IFachadaGeneral {
     private final IFachadaChat fachadaChat;
     private final IFachadaContactos fachadaContactos;
     private final IFachadaUsuarios fachadaUsuarios;
+    private IFachadaLobby fachadaLobby;
 
     private FachadaGeneralImpl() {
-        // Al crearse, se instancian todas las fachadas específicas.
+        // Inicializar todas las fachadas
         this.fachadaAutenticacion = new FachadaAutenticacionUsuario();
         this.fachadaArchivos = new FachadaArchivosImpl();
         this.fachadaConexion = new FachadaConexionImpl();
@@ -44,6 +46,14 @@ public class FachadaGeneralImpl implements IFachadaGeneral {
             instancia = new FachadaGeneralImpl();
         }
         return instancia;
+    }
+
+    @Override
+    public IFachadaLobby getFachadaLobby() {
+        if (fachadaLobby == null) {
+            fachadaLobby = new FachadaLobby();
+        }
+        return fachadaLobby;
     }
 
     @Override

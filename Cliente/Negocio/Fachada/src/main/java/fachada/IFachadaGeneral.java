@@ -6,6 +6,7 @@ import fachada.gestionArchivos.IFachadaArchivos;
 import fachada.gestionUsuarios.autenticacion.IFachadaAutenticacionUsuario;
 import fachada.gestionUsuarios.insercionDB.IFachadaUsuarios;
 import fachada.gestionContactos.contactos.IFachadaContactos;
+import fachada.gestionUsuarios.session.IFachadaLobby;
 
 /**
  * Contrato para la Fachada General que centraliza el acceso
@@ -16,16 +17,7 @@ public interface IFachadaGeneral {
     IFachadaArchivos getFachadaArchivos();
     IFachadaConexion getFachadaConexion();
     IFachadaChat getFachadaChat();
-
-    /**
-     * Devuelve la instancia de la fachada que gestiona la lógica de contactos.
-     * @return una instancia de IFachadaContactos.
-     */
     IFachadaContactos getFachadaContactos();
-
-    /**
-     * Devuelve la instancia de la fachada que gestiona la lógica de usuarios.
-     * @return una instancia de IFachadaUsuarios.
-     */
     IFachadaUsuarios getFachadaUsuarios();
+    IFachadaLobby getFachadaLobby();
 }

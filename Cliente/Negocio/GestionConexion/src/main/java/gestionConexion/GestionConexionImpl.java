@@ -5,6 +5,7 @@ import conexion.GestorConexion;
 import dto.gestionConexion.transporte.DTOConexion;
 import dto.gestionConexion.conexion.DTOSesion;
 import transporte.FabricaTransporte;
+import gestionCanales.inicializador.InicializadorGestionCanales;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -13,8 +14,7 @@ import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Su única responsabilidad es conectar y guardar la sesión.
- * YA NO inicializa la capa de negocio.
+ * Su única responsabilidad es conectar, guardar la sesión e inicializar el sistema.
  */
 public class GestionConexionImpl implements IGestionConexion {
 
@@ -33,7 +33,15 @@ public class GestionConexionImpl implements IGestionConexion {
             if (sesion != null && sesion.estaActiva()) {
                 gestorConexion.setSesion(sesion);
                 GestorRespuesta.getInstancia().iniciarEscucha();
-                // La llamada al inicializador ha sido eliminada de aquí.
+
+                // Inicializar el sistema de gestión de canales
+                try {
+                    InicializadorGestionCanales.getInstancia().inicializar();
+                    System.out.println("✓ Sistema de gestión de canales inicializado correctamente");
+                } catch (Exception e) {
+                    System.err.println("✗ Error al inicializar sistema de canales: " + e.getMessage());
+                }
+
                 return true;
             }
             return false;

@@ -1,5 +1,6 @@
 package gestionArchivos;
 
+import observador.ISujeto;
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
 
@@ -7,7 +8,7 @@ import java.util.concurrent.CompletableFuture;
  * Contrato para el componente de negocio que gestiona toda la lógica
  * relacionada con la manipulación y transferencia de archivos.
  */
-public interface IGestionArchivos {
+public interface IGestionArchivos extends ISujeto {
 
     /**
      * Orquesta el proceso completo de subir un archivo al servidor,
@@ -27,4 +28,14 @@ public interface IGestionArchivos {
      * @return CompletableFuture que se completa con el ID del archivo subido
      */
     CompletableFuture<String> subirArchivoParaRegistro(File archivo);
+
+    /**
+     * Solicita al servidor la descarga de un archivo específico.
+     * El archivo se descarga por chunks y se guarda en el directorio especificado.
+     *
+     * @param fileId El identificador único del archivo en el servidor
+     * @param directorioDestino El directorio donde se guardará el archivo descargado
+     * @return CompletableFuture que se completa con el File descargado
+     */
+    CompletableFuture<File> descargarArchivo(String fileId, File directorioDestino);
 }

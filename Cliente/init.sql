@@ -120,3 +120,39 @@ CREATE TABLE canal_contacto (
                                 FOREIGN KEY (id_canal) REFERENCES canales(id_canal) ON DELETE CASCADE,
                                 FOREIGN KEY (id_contacto) REFERENCES contactos(id_contacto) ON DELETE CASCADE
 );
+-- Tabla para relacionar usuarios con canales (miembros del canal)
+CREATE TABLE canal_usuario (
+    id_canal_usuario UUID PRIMARY KEY DEFAULT RANDOM_UUID(),
+    id_canal UUID NOT NULL,
+    id_usuario UUID NOT NULL,
+    fecha_union TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_canal) REFERENCES canales(id_canal) ON DELETE CASCADE,
+    FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
+    UNIQUE (id_canal, id_usuario)
+);
+
+-- Agregar campo rol a la tabla canal_usuario
+ALTER TABLE canal_usuario ADD COLUMN IF NOT EXISTS rol VARCHAR(50) DEFAULT 'miembro';
+
+
+-- =====================================================================
+-- TABLA DE ARCHIVOS (Para almacenar archivos localmente con Base64)
+-- =====================================================================
+CREATE TABLE archivos (
+    id_archivo UUID PRIMARY KEY DEFAULT RANDOM_UUID(),
+    file_id_servidor VARCHAR(255) NOT NULL UNIQUE,
+    nombre_archivo VARCHAR(500) NOT NULL,
+    mime_type VARCHAR(100),
+    tamanio_bytes BIGINT,
+    contenido_base64 CLOB,
+    hash_sha256 VARCHAR(64),
+    fecha_descarga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fecha_ultima_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    asociado_a VARCHAR(50),  -- 'perfil', 'mensaje', 'canal', etc.
+    id_asociado UUID,  -- ID de la entidad asociada
+    estado VARCHAR(20) DEFAULT 'completo' CHECK (estado IN ('descargando', 'completo', 'error'))
+);
+-- Índices para búsquedas rápidas
+CREATE INDEX idx_archivos_file_id_servidor ON archivos(file_id_servidor);
+CREATE INDEX idx_archivos_asociado ON archivos(asociado_a, id_asociado);
+
