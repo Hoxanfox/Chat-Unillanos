@@ -2,6 +2,7 @@ package servicio.autenticacion;
 
 import dto.vistaLogin.DTOAutenticacion;
 import dto.vistaRegistro.DTORegistro;
+import observador.IObservador;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -20,5 +21,14 @@ public interface IServicioAutenticacion {
      * @return Una promesa que se resolverá con el resultado del registro.
      */
     CompletableFuture<Boolean> registrar(DTORegistro datos, byte[] fotoBytes);
-}
 
+    /**
+     * Registra un observador para eventos de autenticación.
+     */
+    void registrarObservadorAutenticacion(IObservador observador);
+
+    /**
+     * Registra un observador para eventos de registro.
+     */
+    void registrarObservadorRegistro(IObservador observador);
+}

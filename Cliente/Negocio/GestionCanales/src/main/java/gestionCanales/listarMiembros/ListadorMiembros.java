@@ -10,6 +10,7 @@ import dto.canales.DTOMiembroCanal;
 import dto.comunicacion.DTORequest;
 import dto.peticion.DTOListarMiembros;
 import gestionUsuario.sesion.GestorSesionUsuario;
+import observador.IObservador;
 import repositorio.canal.IRepositorioCanal;
 
 import java.lang.reflect.Type;
@@ -28,6 +29,7 @@ public class ListadorMiembros implements IListadorMiembros {
     private final IRepositorioCanal repositorioCanal;
     private final GestorSesionUsuario gestorSesion;
     private final Gson gson;
+    private final List<IObservador> observadores;
 
     public ListadorMiembros(IRepositorioCanal repositorioCanal) {
         this.repositorioCanal = repositorioCanal;
@@ -35,6 +37,7 @@ public class ListadorMiembros implements IListadorMiembros {
         this.gestorRespuesta = GestorRespuesta.getInstancia();
         this.gestorSesion = GestorSesionUsuario.getInstancia();
         this.gson = new Gson();
+        this.observadores = new ArrayList<>();
     }
 
     @Override
@@ -64,6 +67,7 @@ public class ListadorMiembros implements IListadorMiembros {
                 repositorioCanal.sincronizarMiembros(canalId, miembros)
                         .thenAccept(v -> {
                             future.complete(miembros); // Completar el futuro con la lista de miembros
+                            notificarObservadores("MIEMBROS_ACTUALIZADOS", miembros);
                             System.out.println("Lista de miembros del canal " + canalId + " sincronizada.");
                         })
                         .exceptionally(ex -> {
@@ -78,5 +82,27 @@ public class ListadorMiembros implements IListadorMiembros {
 
         enviadorPeticiones.enviar(peticion);
         return future;
+    }
+
+    @Override
+    public void registrarObservador(IObservador observador) {
+        if (!observadores.contains(observador)) {
+            observadores.add(observador);
+            System.out.println("✅ [ListadorMiembros]: Observador registrado. Total: " + observadores.size());
+        }
+    }
+
+    @Override
+    public void removerObservador(IObservador observador) {
+        observadores.remove(observador);
+        System.out.println("🗑️ [ListadorMiembros]: Observador removido. Total: " + observadores.size());
+    }
+
+    @Override
+    public void notificarObservadores(String tipoDeDato, Object datos) {
+        System.out.println("📢 [ListadorMiembros]: Notificando a " + observadores.size() + " observadores. Tipo: " + tipoDeDato);
+        for (IObservador observador : observadores) {
+            observador.actualizar(tipoDeDato, datos);
+        }
     }
 }

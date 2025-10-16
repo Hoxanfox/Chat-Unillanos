@@ -4,10 +4,10 @@ package dto.canales;
  * DTO que representa a un miembro de un canal, usado para listar miembros.
  */
 public class DTOMiembroCanal {
-    private String usuarioId;
-    private String nombreUsuario;
-    private String rol;
-    private String fechaUnion;
+    private final String usuarioId;
+    private final String nombreUsuario;
+    private final String rol;
+    private final String fechaUnion;
 
     public DTOMiembroCanal(String usuarioId, String nombreUsuario, String rol, String fechaUnion) {
         this.usuarioId = usuarioId;

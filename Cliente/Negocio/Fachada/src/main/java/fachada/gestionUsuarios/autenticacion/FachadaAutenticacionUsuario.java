@@ -6,6 +6,7 @@ import gestionUsuario.autenticacion.AutenticarUsuario;
 import gestionUsuario.autenticacion.IAutenticarUsuario;
 import gestionUsuario.registro.IRegistroUsuario;
 import gestionUsuario.registro.RegistroUsuarioImpl;
+import observador.IObservador;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -36,5 +37,16 @@ public class FachadaAutenticacionUsuario implements IFachadaAutenticacionUsuario
         // Delega el registro a su especialista.
         return gestionRegistro.registrar(dto, fotoBytes);
     }
-}
 
+    @Override
+    public void registrarObservadorAutenticacion(IObservador observador) {
+        System.out.println("🔔 [FachadaAutenticacionUsuario]: Registrando observador en Autenticación");
+        gestionAutenticacion.registrarObservador(observador);
+    }
+
+    @Override
+    public void registrarObservadorRegistro(IObservador observador) {
+        System.out.println("🔔 [FachadaAutenticacionUsuario]: Registrando observador en Registro");
+        gestionRegistro.registrarObservador(observador);
+    }
+}

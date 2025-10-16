@@ -3,6 +3,7 @@ package controlador.autenticacion;
 import dto.vistaLogin.DTOAutenticacion;
 import dto.vistaRegistro.DTOFormularioRegistro;
 import dto.vistaRegistro.DTORegistro;
+import observador.IObservador;
 import servicio.archivos.IServicioArchivos;
 import servicio.archivos.ServicioArchivosImpl;
 import servicio.autenticacion.IServicioAutenticacion;
@@ -64,5 +65,16 @@ public class ControladorAutenticacion implements IControladorAutenticacion {
             return CompletableFuture.failedFuture(e);
         }
     }
-}
 
+    @Override
+    public void registrarObservadorAutenticacion(IObservador observador) {
+        System.out.println("🔔 [ControladorAutenticacion]: Registrando observador en Autenticación");
+        servicioAutenticacion.registrarObservadorAutenticacion(observador);
+    }
+
+    @Override
+    public void registrarObservadorRegistro(IObservador observador) {
+        System.out.println("🔔 [ControladorAutenticacion]: Registrando observador en Registro");
+        servicioAutenticacion.registrarObservadorRegistro(observador);
+    }
+}

@@ -12,25 +12,35 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
+import observador.IObservador;
 
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
 
 /**
  * Vista para el formulario de registro de nuevos usuarios.
+ * Implementa IObservador para recibir notificaciones de eventos de registro.
  */
-public class VistaRegistro extends VBox {
+public class VistaRegistro extends VBox implements IObservador {
 
     private final IControladorAutenticacion controlador;
     private File archivoFotoSeleccionada;
     private final Label etiquetaNombreArchivo;
+    private final Label etiquetaError;
+    private final Button btnRegistro;
+    private Runnable onRegistroExitoso;
 
     public VistaRegistro(Runnable onRegistroExitoso, Runnable onIrALogin, IControladorAutenticacion controlador) {
         super(15);
         this.controlador = controlador;
+        this.onRegistroExitoso = onRegistroExitoso;
         this.setAlignment(Pos.CENTER);
         this.setPadding(new Insets(20));
         this.setStyle("-fx-background-color: #ecf0f1;");
+
+        // Registrarse como observador
+        controlador.registrarObservadorRegistro(this);
+        System.out.println("✅ [VistaRegistro]: Registrada como observador de registro");
 
         Label titulo = new Label("Crear Cuenta");
         titulo.setFont(Font.font("Arial", FontWeight.BOLD, 28));
@@ -64,14 +74,13 @@ public class VistaRegistro extends VBox {
         layoutFoto.setAlignment(Pos.CENTER_LEFT);
         layoutFoto.setMaxWidth(300);
 
-
-        Button btnRegistro = new Button("Registrarse");
+        btnRegistro = new Button("Registrarse");
         btnRegistro.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-size: 14px;");
 
         Hyperlink linkLogin = new Hyperlink("¿Ya tienes cuenta? Inicia Sesión");
         linkLogin.setOnAction(e -> onIrALogin.run());
 
-        Label etiquetaError = new Label();
+        etiquetaError = new Label();
         etiquetaError.setTextFill(Color.RED);
 
         btnRegistro.setOnAction(e -> {
@@ -92,17 +101,57 @@ public class VistaRegistro extends VBox {
                 Platform.runLater(() -> {
                     if (fueExitoso) {
                         System.out.println("Registro exitoso para: " + email);
-                        onRegistroExitoso.run();
+                        // No navegamos aquí, esperamos la notificación del observador
                     } else {
                         etiquetaError.setText("No se pudo completar el registro. El email ya podría estar en uso.");
+                        btnRegistro.setDisable(false);
                     }
-                    btnRegistro.setDisable(false);
                 });
             });
         });
 
-
         this.getChildren().addAll(titulo, campoNombre, campoEmail, campoPassword, layoutFoto, btnRegistro, linkLogin, etiquetaError);
     }
-}
 
+    @Override
+    public void actualizar(String tipoDeDato, Object datos) {
+        System.out.println("🔔 [VistaRegistro]: Notificación recibida - Tipo: " + tipoDeDato);
+
+        Platform.runLater(() -> {
+            switch (tipoDeDato) {
+                case "REGISTRO_INICIADO":
+                    System.out.println("🔄 [VistaRegistro]: Registro iniciado...");
+                    etiquetaError.setText("");
+                    break;
+
+                case "REGISTRO_EXITOSO":
+                    System.out.println("✅ [VistaRegistro]: Registro exitoso");
+                    etiquetaError.setTextFill(Color.GREEN);
+                    etiquetaError.setText("¡Registro exitoso! Redirigiendo al login...");
+                    // Navegar al login después de un registro exitoso
+                    if (onRegistroExitoso != null) {
+                        // Pequeño delay para que el usuario vea el mensaje
+                        new Thread(() -> {
+                            try {
+                                Thread.sleep(1500);
+                                Platform.runLater(onRegistroExitoso);
+                            } catch (InterruptedException ex) {
+                                ex.printStackTrace();
+                            }
+                        }).start();
+                    }
+                    break;
+
+                case "REGISTRO_ERROR":
+                    System.out.println("❌ [VistaRegistro]: Error en registro");
+                    etiquetaError.setTextFill(Color.RED);
+                    etiquetaError.setText("Error: " + datos);
+                    btnRegistro.setDisable(false);
+                    break;
+
+                default:
+                    System.out.println("⚠️ [VistaRegistro]: Tipo de notificación desconocido: " + tipoDeDato);
+            }
+        });
+    }
+}
