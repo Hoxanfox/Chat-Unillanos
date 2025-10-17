@@ -23,8 +23,11 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Implementación de la Fachada que gestiona todas las operaciones de canales.
  * Orquesta los diferentes gestores de negocio relacionados con canales.
+ * PATRÓN SINGLETON para mantener los observadores registrados.
  */
 public class FachadaCanalesImpl implements IFachadaCanales {
+
+    private static FachadaCanalesImpl instancia;
 
     private final ICreadorCanal creadorCanal;
     private final IListadorCanales listadorCanales;
@@ -32,7 +35,7 @@ public class FachadaCanalesImpl implements IFachadaCanales {
     private final IInvitadorMiembro invitadorMiembro;
     private final IListadorMiembros listadorMiembros;
 
-    public FachadaCanalesImpl() {
+    private FachadaCanalesImpl() {
         IRepositorioCanal repositorioCanal = new RepositorioCanalImpl();
         IRepositorioMensajeCanal repositorioMensajes = new RepositorioMensajeCanalImpl();
 
@@ -42,7 +45,17 @@ public class FachadaCanalesImpl implements IFachadaCanales {
         this.invitadorMiembro = new InvitadorMiembro(repositorioCanal);
         this.listadorMiembros = new ListadorMiembros(repositorioCanal);
 
-        System.out.println("✅ [FachadaCanales]: Inicializada con todos los gestores");
+        // ✅ SOLUCIÓN: Configurar la referencia para actualizaciones automáticas
+        ((CreadorCanal) this.creadorCanal).setListadorCanales(this.listadorCanales);
+
+        System.out.println("✅ [FachadaCanales]: Inicializada con todos los gestores (SINGLETON)");
+    }
+
+    public static synchronized FachadaCanalesImpl getInstancia() {
+        if (instancia == null) {
+            instancia = new FachadaCanalesImpl();
+        }
+        return instancia;
     }
 
     @Override

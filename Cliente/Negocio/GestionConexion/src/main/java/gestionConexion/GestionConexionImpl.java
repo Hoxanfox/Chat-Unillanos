@@ -5,7 +5,6 @@ import conexion.GestorConexion;
 import dto.gestionConexion.transporte.DTOConexion;
 import dto.gestionConexion.conexion.DTOSesion;
 import transporte.FabricaTransporte;
-import gestionCanales.inicializador.InicializadorGestionCanales;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -33,14 +32,6 @@ public class GestionConexionImpl implements IGestionConexion {
             if (sesion != null && sesion.estaActiva()) {
                 gestorConexion.setSesion(sesion);
                 GestorRespuesta.getInstancia().iniciarEscucha();
-
-                // Inicializar el sistema de gestión de canales
-                try {
-                    InicializadorGestionCanales.getInstancia().inicializar();
-                    System.out.println("✓ Sistema de gestión de canales inicializado correctamente");
-                } catch (Exception e) {
-                    System.err.println("✗ Error al inicializar sistema de canales: " + e.getMessage());
-                }
 
                 return true;
             }

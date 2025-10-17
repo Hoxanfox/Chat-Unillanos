@@ -17,5 +17,5 @@ public interface IFachadaContactos extends ISujeto {
     // Métodos para el chat
     void solicitarHistorial(String contactoId);
     CompletableFuture<Void> enviarMensajeTexto(String destinatarioId, String contenido);
+    CompletableFuture<Void> enviarMensajeAudio(String destinatarioId, String audioFileId);
 }
-

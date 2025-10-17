@@ -263,9 +263,13 @@ public class GestionArchivosImpl implements IGestionArchivos {
         gestorRespuesta.registrarManejador(ACCION, (DTOResponse res) -> {
             System.out.println("[GestionArchivos] Respuesta recibida para " + ACCION + " - Exitoso: " + res.fueExitoso());
             if (res.fueExitoso()) {
-                String fileName = gson.fromJson(gson.toJson(res.getData()), FileNameResponse.class).fileName;
-                System.out.println("[GestionArchivos] Subida finalizada. Nombre del archivo: " + fileName);
-                futuroFinal.complete(fileName);
+                // ✅ CORRECCIÓN: Retornar fileId en lugar de fileName
+                FileUploadResponse response = gson.fromJson(gson.toJson(res.getData()), FileUploadResponse.class);
+                System.out.println("[GestionArchivos] Subida finalizada exitosamente");
+                System.out.println("   → FileId: " + response.fileId);
+                System.out.println("   → FileName: " + response.fileName);
+                System.out.println("   → Size: " + response.size + " bytes");
+                futuroFinal.complete(response.fileId); // ← Retornar fileId, no fileName
             } else {
                 System.err.println("[GestionArchivos] ERROR al finalizar subida: " + res.getMessage());
                 futuroFinal.completeExceptionally(new RuntimeException(res.getMessage()));
@@ -312,6 +316,13 @@ public class GestionArchivosImpl implements IGestionArchivos {
 
     private static class UploadIdResponse { String uploadId; }
     private static class FileNameResponse { String fileName; }
+    private static class FileUploadResponse {
+        String fileId;
+        String fileName;
+        long size;
+        String mimeType;
+        String hash;
+    }
 
     @Override
     public CompletableFuture<File> descargarArchivo(String fileId, File directorioDestino) {
@@ -513,5 +524,132 @@ public class GestionArchivosImpl implements IGestionArchivos {
         enviadorPeticiones.enviar(new DTORequest(ACCION, payload));
 
         return futuroInfo;
+    }
+
+    @Override
+    public CompletableFuture<byte[]> descargarArchivoEnMemoria(String fileId) {
+        System.out.println("[GestionArchivos] Iniciando descarga EN MEMORIA de archivo con ID: " + fileId);
+        CompletableFuture<byte[]> futuroDescarga = new CompletableFuture<>();
+
+        // Verificar si ya existe en BD local para usar caché
+        repositorioArchivo.existe(fileId)
+                .thenCompose(existe -> {
+                    if (existe) {
+                        System.out.println("[GestionArchivos] Archivo existe en BD local, usando caché...");
+                        return repositorioArchivo.buscarPorFileIdServidor(fileId)
+                                .thenApply(archivo -> {
+                                    if (archivo != null && archivo.getEstado().equals("completo")) {
+                                        // Archivo completo en BD, retornar bytes directamente
+                                        byte[] contenido = Base64.getDecoder().decode(archivo.getContenidoBase64());
+                                        System.out.println("[GestionArchivos] Archivo recuperado de caché - Tamaño: " + contenido.length + " bytes");
+                                        futuroDescarga.complete(contenido);
+                                        return contenido;
+                                    }
+                                    return null;
+                                });
+                    }
+                    return CompletableFuture.completedFuture(null);
+                })
+                .thenCompose(bytesExistentes -> {
+                    if (bytesExistentes != null) {
+                        // Ya se completó desde caché
+                        return CompletableFuture.completedFuture(bytesExistentes);
+                    }
+
+                    // Descargar desde servidor en memoria
+                    System.out.println("[GestionArchivos] Descargando desde servidor en memoria...");
+
+                    return solicitarInicioDescarga(fileId)
+                            .thenCompose(downloadInfo -> {
+                                System.out.println("[GestionArchivos] Info de descarga recibida - Archivo: " + downloadInfo.getFileName() +
+                                                 ", Total chunks: " + downloadInfo.getTotalChunks() +
+                                                 ", Tamaño: " + downloadInfo.getFileSize() + " bytes");
+
+                                return recibirChunksEnMemoria(downloadInfo, fileId);
+                            })
+                            .thenApply(bytes -> {
+                                System.out.println("[GestionArchivos] Descarga en memoria completada - Tamaño: " + bytes.length + " bytes");
+                                futuroDescarga.complete(bytes);
+                                return bytes;
+                            });
+                })
+                .exceptionally(ex -> {
+                    System.err.println("[GestionArchivos] ERROR en descarga en memoria: " + ex.getMessage());
+                    ex.printStackTrace();
+                    futuroDescarga.completeExceptionally(ex);
+                    return null;
+                });
+
+        return futuroDescarga;
+    }
+
+    /**
+     * Recibe los chunks del servidor y los ensambla en memoria (sin guardar en disco).
+     */
+    private CompletableFuture<byte[]> recibirChunksEnMemoria(DTODownloadInfo downloadInfo, String fileId) {
+        System.out.println("[GestionArchivos] Iniciando recepción de " + downloadInfo.getTotalChunks() +
+                         " chunks en memoria para: " + downloadInfo.getFileName());
+
+        CompletableFuture<byte[]> futuroBytes = new CompletableFuture<>();
+        List<byte[]> chunks = new ArrayList<>();
+        CompletableFuture<Void> futuroChunkActual = CompletableFuture.completedFuture(null);
+
+        for (int i = 0; i < downloadInfo.getTotalChunks(); i++) {
+            final int chunkNumber = i + 1;
+
+            futuroChunkActual = futuroChunkActual.thenCompose(v ->
+                solicitarChunk(downloadInfo.getDownloadId(), chunkNumber)
+                    .thenAccept(chunkData -> {
+                        chunks.add(chunkData);
+
+                        // Calcular progreso
+                        int progreso = (chunkNumber * 100) / downloadInfo.getTotalChunks();
+                        System.out.println("[GestionArchivos] Chunk " + chunkNumber + "/" +
+                                         downloadInfo.getTotalChunks() + " recibido en memoria (" + progreso + "%)");
+                    })
+            );
+        }
+
+        futuroChunkActual.thenRun(() -> {
+            try {
+                // Ensamblar todos los chunks en un solo array de bytes
+                int totalSize = chunks.stream().mapToInt(chunk -> chunk.length).sum();
+                byte[] contenidoCompleto = new byte[totalSize];
+
+                int offset = 0;
+                for (byte[] chunk : chunks) {
+                    System.arraycopy(chunk, 0, contenidoCompleto, offset, chunk.length);
+                    offset += chunk.length;
+                }
+
+                System.out.println("[GestionArchivos] Archivo ensamblado en memoria - Tamaño total: " + contenidoCompleto.length + " bytes");
+
+                // Opcional: Guardar en caché local para futuros usos
+                String contenidoBase64 = Base64.getEncoder().encodeToString(contenidoCompleto);
+                String hashCalculado = calcularHashSHA256(contenidoCompleto);
+
+                // Crear entrada en BD para caché
+                Archivo archivo = new Archivo(fileId, downloadInfo.getFileName(),
+                                             downloadInfo.getMimeType(), downloadInfo.getFileSize());
+                archivo.setEstado("completo");
+                archivo.setContenidoBase64(contenidoBase64);
+                archivo.setHashSHA256(hashCalculado);
+                repositorioArchivo.guardar(archivo);
+
+                System.out.println("[GestionArchivos] Archivo guardado en caché local");
+
+                futuroBytes.complete(contenidoCompleto);
+
+            } catch (Exception e) {
+                System.err.println("[GestionArchivos] ERROR al ensamblar chunks en memoria: " + e.getMessage());
+                futuroBytes.completeExceptionally(e);
+            }
+        }).exceptionally(ex -> {
+            System.err.println("[GestionArchivos] ERROR durante recepción de chunks: " + ex.getMessage());
+            futuroBytes.completeExceptionally(ex);
+            return null;
+        });
+
+        return futuroBytes;
     }
 }

@@ -139,6 +139,9 @@ public class InicializadorGestionCanales {
         
         gestorNotificacionesCanal.inicializarManejadores();
         System.out.println("  ✓ Manejadores de notificaciones registrados");
+
+        listadorMiembros.inicializarManejadores();
+        System.out.println("  ✓ Manejadores de cambios de miembros registrados");
     }
 
     /**
@@ -213,4 +216,3 @@ public class InicializadorGestionCanales {
         }
     }
 }
-

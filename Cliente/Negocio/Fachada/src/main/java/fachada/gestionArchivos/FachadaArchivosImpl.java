@@ -31,4 +31,17 @@ public class FachadaArchivosImpl implements IFachadaArchivos {
         // Simplemente delega la llamada.
         return gestionArchivos.subirArchivoParaRegistro(archivo);
     }
+
+    @Override
+    public CompletableFuture<File> descargarArchivo(String fileId, File directorioDestino) {
+        // Delega la descarga al componente de gestión
+        return gestionArchivos.descargarArchivo(fileId, directorioDestino);
+    }
+
+    @Override
+    public CompletableFuture<byte[]> descargarArchivoEnMemoria(String fileId) {
+        System.out.println("➡️ [FachadaArchivos]: Delegando descarga en memoria al gestor - FileId: " + fileId);
+        // Delega la descarga en memoria al componente de gestión
+        return gestionArchivos.descargarArchivoEnMemoria(fileId);
+    }
 }

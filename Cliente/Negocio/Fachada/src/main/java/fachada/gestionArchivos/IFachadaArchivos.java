@@ -23,4 +23,22 @@ public interface IFachadaArchivos {
      * @return CompletableFuture que se completa con el ID del archivo subido
      */
     CompletableFuture<String> subirArchivoParaRegistro(File archivo);
+
+    /**
+     * Descarga un archivo desde el servidor.
+     *
+     * @param fileId El ID del archivo en el servidor
+     * @param directorioDestino El directorio donde se guardará el archivo descargado
+     * @return CompletableFuture que se completa con el archivo descargado
+     */
+    CompletableFuture<File> descargarArchivo(String fileId, File directorioDestino);
+
+    /**
+     * Descarga un archivo en memoria (como array de bytes) sin guardarlo en disco.
+     * Útil para reproducir audio directamente.
+     *
+     * @param fileId El ID del archivo en el servidor
+     * @return CompletableFuture que se completa con los bytes del archivo
+     */
+    CompletableFuture<byte[]> descargarArchivoEnMemoria(String fileId);
 }

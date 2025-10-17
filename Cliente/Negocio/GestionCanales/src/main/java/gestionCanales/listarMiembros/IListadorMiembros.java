@@ -14,6 +14,11 @@ import java.util.concurrent.CompletableFuture;
 public interface IListadorMiembros extends ISujeto {
 
     /**
+     * Inicializa los manejadores de respuestas del servidor.
+     */
+    void inicializarManejadores();
+
+    /**
      * Inicia el proceso para solicitar la lista de miembros de un canal al servidor.
      * La operación es asíncrona y el resultado se obtiene a través del CompletableFuture.
      *

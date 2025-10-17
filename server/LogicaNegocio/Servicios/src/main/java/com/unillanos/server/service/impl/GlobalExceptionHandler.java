@@ -30,13 +30,31 @@ public class GlobalExceptionHandler {
      * @return DTOResponse con el error apropiado
      */
     public DTOResponse handleException(Exception exception, String action, String userId, String ipAddress) {
-        logger.error("Manejando excepción para acción: {}", action, exception);
-        
+        // Determinar el nivel de log según el tipo de excepción
+        boolean isBusinessValidation = exception instanceof ValidationException
+                || exception instanceof AuthenticationException
+                || exception instanceof NotFoundException
+                || exception instanceof DuplicateResourceException;
+
+        if (isBusinessValidation) {
+            // Para excepciones de negocio esperadas, solo log WARN sin stack trace
+            logger.warn("Validación de negocio para acción '{}': {}", action, exception.getMessage());
+        } else {
+            // Para errores reales del sistema, log ERROR con stack trace
+            logger.error("Manejando excepción para acción: {}", action, exception);
+        }
+
         // Registrar el error en el sistema de logging
-        String detalles = String.format("Exception: %s, Message: %s, UserId: %s, IP: %s", 
-                exception.getClass().getSimpleName(), exception.getMessage(), 
+        String logLevel = isBusinessValidation ? "WARN" : "ERROR";
+        String detalles = String.format("%s - Exception: %s, Message: %s, UserId: %s, IP: %s",
+                logLevel, exception.getClass().getSimpleName(), exception.getMessage(),
                 userId != null ? userId : "anonymous", ipAddress);
-        loggerService.logError(action, detalles);
+
+        if (isBusinessValidation) {
+            loggerService.logWarning(action, detalles);
+        } else {
+            loggerService.logError(action, detalles);
+        }
 
         // Convertir la excepción a DTOResponse según su tipo
         if (exception instanceof ValidationException) {
@@ -92,4 +110,3 @@ public class GlobalExceptionHandler {
         return DTOResponse.error(action, "Error interno del servidor");
     }
 }
-

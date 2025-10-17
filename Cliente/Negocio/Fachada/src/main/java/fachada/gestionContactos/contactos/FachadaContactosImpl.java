@@ -4,6 +4,8 @@ import dto.featureContactos.DTOContacto;
 import observador.IObservador;
 import gestionContactos.actualizacion.GestionContactosImpl;
 import gestionContactos.actualizacion.IGestionContactos;
+import gestionContactos.mensajes.GestionMensajesImpl;
+import gestionContactos.mensajes.IGestionMensajes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,22 +18,33 @@ public class FachadaContactosImpl implements IFachadaContactos, IObservador {
 
     private final List<IObservador> observadores = new ArrayList<>(); // Sus observadores (el Servicio)
     private final IGestionContactos gestionContactos;
+    private final IGestionMensajes gestionMensajes;
 
     public FachadaContactosImpl() {
-        // La fachada específica crea su propio componente de gestión.
+        System.out.println("🔧 [FachadaContactos]: Inicializando fachada de contactos...");
+
+        // La fachada específica crea sus propios componentes de gestión.
         this.gestionContactos = new GestionContactosImpl();
-        // La fachada se suscribe como observador del gestor para recibir notificaciones.
+        this.gestionMensajes = new GestionMensajesImpl();
+
+        // La fachada se suscribe como observador de ambos gestores para recibir notificaciones.
         this.gestionContactos.registrarObservador(this);
+        this.gestionMensajes.registrarObservador(this);
+
+        System.out.println("✅ [FachadaContactos]: Fachada inicializada con gestores de contactos y mensajes");
     }
 
     @Override
     public void solicitarActualizacionContactos() {
+        System.out.println("➡️ [FachadaContactos]: Solicitando actualización de contactos al gestor");
         gestionContactos.solicitarActualizacionContactos();
     }
 
     @Override
     public List<DTOContacto> getContactos() {
-        return gestionContactos.getContactos();
+        List<DTOContacto> contactos = gestionContactos.getContactos();
+        System.out.println("📋 [FachadaContactos]: Obteniendo lista de contactos - Total: " + contactos.size());
+        return contactos;
     }
 
     /**
@@ -39,41 +52,51 @@ public class FachadaContactosImpl implements IFachadaContactos, IObservador {
      */
     @Override
     public void actualizar(String tipoDeDato, Object datos) {
+        System.out.println("📢 [FachadaContactos]: Recibida notificación - Tipo: " + tipoDeDato);
         // La fachada simplemente pasa la notificación hacia arriba a sus propios observadores.
         notificarObservadores(tipoDeDato, datos);
     }
 
-    // --- MÉTODOS AÑADIDOS PARA CUMPLIR CON LA INTERFAZ ---
+    // --- MÉTODOS DE CHAT ---
 
     @Override
     public void solicitarHistorial(String contactoId) {
-        System.out.println("➡️ [FachadaContactos]: Delegando solicitud de historial al gestor.");
-        // gestionContactos.solicitarHistorial(contactoId); // Se delegará cuando el método exista en IGestionContactos
+        System.out.println("➡️ [FachadaContactos]: Delegando solicitud de historial al gestor de mensajes - ContactoId: " + contactoId);
+        gestionMensajes.solicitarHistorial(contactoId);
     }
 
     @Override
     public CompletableFuture<Void> enviarMensajeTexto(String destinatarioId, String contenido) {
-        System.out.println("➡️ [FachadaContactos]: Delegando envío de mensaje de texto al gestor.");
-        // return gestionContactos.enviarMensajeTexto(destinatarioId, contenido); // Se delegará cuando el método exista
-        return CompletableFuture.completedFuture(null); // Retorno temporal
+        System.out.println("➡️ [FachadaContactos]: Delegando envío de mensaje de texto al gestor - DestinatarioId: " + destinatarioId);
+        return gestionMensajes.enviarMensajeTexto(destinatarioId, contenido);
+    }
+
+    @Override
+    public CompletableFuture<Void> enviarMensajeAudio(String destinatarioId, String audioFileId) {
+        System.out.println("➡️ [FachadaContactos]: Delegando envío de mensaje de audio al gestor - DestinatarioId: " + destinatarioId);
+        return gestionMensajes.enviarMensajeAudio(destinatarioId, audioFileId);
     }
 
     // --- Métodos del Patrón Sujeto ---
     @Override
     public void registrarObservador(IObservador observador) {
-        if (!observadores.contains(observador)) observadores.add(observador);
+        if (!observadores.contains(observador)) {
+            observadores.add(observador);
+            System.out.println("🔔 [FachadaContactos]: Observador registrado - Total: " + observadores.size());
+        }
     }
 
     @Override
     public void removerObservador(IObservador observador) {
         observadores.remove(observador);
+        System.out.println("🔕 [FachadaContactos]: Observador removido - Total: " + observadores.size());
     }
 
     @Override
     public void notificarObservadores(String tipoDeDato, Object datos) {
+        System.out.println("📣 [FachadaContactos]: Notificando a " + observadores.size() + " observadores - Tipo: " + tipoDeDato);
         for (IObservador observador : observadores) {
             observador.actualizar(tipoDeDato, datos);
         }
     }
 }
-

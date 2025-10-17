@@ -7,6 +7,7 @@ import comunicacion.IGestorRespuesta;
 import dto.comunicacion.DTORequest;
 import dto.peticion.DTOCrearCanal;
 import dominio.Canal;
+import gestionCanales.listarCanales.IListadorCanales;
 import gestionUsuario.sesion.GestorSesionUsuario;
 import observador.IObservador;
 import repositorio.canal.IRepositorioCanal;
@@ -27,6 +28,7 @@ public class CreadorCanal implements ICreadorCanal {
     private final GestorSesionUsuario gestorSesion;
     private final IEnviadorPeticiones enviadorPeticiones;
     private final IGestorRespuesta gestorRespuesta;
+    private IListadorCanales listadorCanales; // Referencia al listador
 
     // Patrón Observador
     private final List<IObservador> observadores;
@@ -43,6 +45,15 @@ public class CreadorCanal implements ICreadorCanal {
         this.gestorRespuesta = GestorRespuesta.getInstancia();
         this.observadores = new ArrayList<>();
         System.out.println("✅ [CreadorCanal]: Inicializado con Observador");
+    }
+
+    /**
+     * Establece la referencia al listador de canales para solicitar actualización automática.
+     * @param listadorCanales El listador de canales
+     */
+    public void setListadorCanales(IListadorCanales listadorCanales) {
+        this.listadorCanales = listadorCanales;
+        System.out.println("✅ [CreadorCanal]: ListadorCanales configurado para actualizaciones automáticas");
     }
 
     // Implementación del patrón Observador
@@ -110,6 +121,15 @@ public class CreadorCanal implements ICreadorCanal {
                             if (guardado) {
                                 System.out.println("✅ [CreadorCanal]: Canal creado y guardado: " + canalDeDominio.getNombre());
                                 notificarObservadores("CANAL_CREADO_EXITOSAMENTE", canalDeDominio);
+
+                                // ✅ SOLUCIÓN: Solicitar actualización automática de la lista de canales
+                                if (listadorCanales != null) {
+                                    System.out.println("🔄 [CreadorCanal]: Solicitando actualización de lista de canales...");
+                                    listadorCanales.solicitarCanalesUsuario();
+                                } else {
+                                    System.err.println("⚠️ [CreadorCanal]: ListadorCanales no está configurado. La lista no se actualizará automáticamente.");
+                                }
+
                                 future.complete(canalDeDominio);
                             } else {
                                 String mensajeError = "El canal se creó en el servidor, pero falló al guardarse localmente.";

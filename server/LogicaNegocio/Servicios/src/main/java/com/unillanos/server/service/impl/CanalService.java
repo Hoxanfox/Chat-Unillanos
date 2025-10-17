@@ -141,10 +141,27 @@ public class CanalService {
                 String.format("Usuario %s se unió al canal %s", usuario.getNombre(), canal.getNombre()));
             
             // 7. Notificar a todos los miembros del canal sobre el nuevo miembro
-            notificarMiembrosCanal(dto.getCanalId(), "nuevoMiembro", 
-                String.format("%s se ha unido al canal", usuario.getNombre()), 
-                Map.of("usuarioId", usuario.getId(), "nombreUsuario", usuario.getNombre()));
-            
+            Map<String, Object> nuevoMiembroData = Map.of(
+                "canalId", dto.getCanalId(),
+                "usuarioId", usuario.getId(),
+                "nombre", usuario.getNombre(),
+                "rol", RolCanal.MEMBER.name()
+            );
+
+            DTOResponse notificacion = DTOResponse.success(
+                "nuevoMiembro",
+                String.format("%s se ha unido al canal", usuario.getNombre()),
+                nuevoMiembroData
+            );
+
+            // Obtener todos los miembros del canal para notificarlos
+            List<CanalMiembroEntity> miembros = canalMiembroRepository.findMiembrosByCanal(dto.getCanalId());
+            Set<String> idsUsuarios = miembros.stream()
+                .map(CanalMiembroEntity::getUsuarioId)
+                .collect(Collectors.toSet());
+
+            connectionManager.notifyChannel(dto.getCanalId(), notificacion, idsUsuarios);
+
             // 8. Retornar DTOResponse.success
             logger.info("Usuario {} se unió al canal {}", usuario.getNombre(), canal.getNombre());
             return DTOResponse.success("unirseCanal", "Te has unido al canal exitosamente", null);

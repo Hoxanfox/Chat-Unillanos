@@ -118,7 +118,7 @@ public class ActionDispatcherImpl implements IActionDispatcher {
                 // Adaptaciones para coincidir con el cliente
                 case "enviarMensajePrivado" -> handleEnviarMensajeDirecto(request);
                 case "obtenerHistorial" -> handleObtenerHistorial(request);
-                case "solicitarHistorialPrivado" -> handleSolicitarHistorialPrivado(request);
+                case "solicitarHistorialPrivado" -> handleSolicitarHistorialPrivado(request, ctx);
                 case "solicitarHistorialCanal" -> handleSolicitarHistorialCanal(request);
                 case "marcar_mensaje_leido" -> handleMarcarMensajeLeido(request);
                 
@@ -421,6 +421,7 @@ public class ActionDispatcherImpl implements IActionDispatcher {
             Map<String, Object> payload = (Map<String, Object>) request.getPayload();
             
             String canalId = (String) payload.get("canalId");
+            String usuarioId = (String) payload.get("usuarioId");
             Object limiteObj = payload.get("limite");
             int limite = 50; // Valor por defecto
             
@@ -434,8 +435,13 @@ public class ActionDispatcherImpl implements IActionDispatcher {
                 return DTOResponse.error("solicitarHistorialCanal", "canalId es requerido");
             }
             
+            if (usuarioId == null || usuarioId.trim().isEmpty()) {
+                return DTOResponse.error("solicitarHistorialCanal", "usuarioId es requerido");
+            }
+
             // Crear DTOHistorial para el servicio existente
             DTOHistorial dto = new DTOHistorial();
+            dto.setUsuarioId(usuarioId);
             dto.setCanalId(canalId);
             dto.setLimit(limite);
             dto.setOffset(0);
@@ -476,18 +482,34 @@ public class ActionDispatcherImpl implements IActionDispatcher {
 
     /**
      * Maneja la solicitud de historial privado.
-     * El cliente envía solo el contactoId como string
+     * El cliente envía: { "usuarioId": "uuid", "contactoId": "uuid" }
      */
-    private DTOResponse handleSolicitarHistorialPrivado(DTORequest request) {
+    private DTOResponse handleSolicitarHistorialPrivado(DTORequest request, ChannelHandlerContext ctx) {
         try {
-            String contactoId = (String) request.getPayload();
-            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = (Map<String, Object>) request.getPayload();
+
+            String usuarioId = (String) payload.get("usuarioId");
+            String contactoId = (String) payload.get("contactoId");
+
+            // Validar campos requeridos
+            if (usuarioId == null || usuarioId.trim().isEmpty()) {
+                return DTOResponse.error("solicitarHistorialPrivado", "usuarioId es requerido");
+            }
+
             if (contactoId == null || contactoId.trim().isEmpty()) {
                 return DTOResponse.error("solicitarHistorialPrivado", "contactoId es requerido");
             }
             
+            // Validar que el usuario esté autenticado y coincida con la sesión
+            String sessionUserId = connectionManager.getUserIdByContext(ctx);
+            if (sessionUserId != null && !sessionUserId.equals(usuarioId)) {
+                return DTOResponse.error("solicitarHistorialPrivado", "El usuarioId no coincide con la sesión actual");
+            }
+
             // Crear DTOHistorial para el servicio existente
             DTOHistorial dto = new DTOHistorial();
+            dto.setUsuarioId(usuarioId);
             dto.setDestinatarioId(contactoId);
             dto.setLimit(50); // Valor por defecto
             dto.setOffset(0);

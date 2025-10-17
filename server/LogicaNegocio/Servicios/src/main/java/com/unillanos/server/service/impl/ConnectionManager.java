@@ -197,6 +197,42 @@ public class ConnectionManager {
     }
 
     /**
+     * Envía una notificación a TODOS los usuarios conectados EXCEPTO uno.
+     * Útil para notificar cambios de estado de un usuario a los demás.
+     * El envío es paralelo usando hilos virtuales.
+     *
+     * @param excludeUserId ID del usuario a excluir
+     * @param notification DTO de respuesta a enviar
+     */
+    public void notifyAllExcept(String excludeUserId, DTOResponse notification) {
+        logger.debug("Notificando a todos excepto userId: {}, total destinatarios: {}",
+                    excludeUserId, activeConnections.size() - 1);
+
+        for (Map.Entry<String, ChannelHandlerContext> entry : activeConnections.entrySet()) {
+            String userId = entry.getKey();
+
+            // Saltar al usuario excluido
+            if (userId.equals(excludeUserId)) {
+                continue;
+            }
+
+            ChannelHandlerContext ctx = entry.getValue();
+
+            if (ctx.channel().isActive()) {
+                virtualThreadExecutor.submit(() -> {
+                    try {
+                        String json = gson.toJson(notification);
+                        ctx.writeAndFlush(json + "\n");
+                        logger.trace("Notificación enviada a userId: {} (excluido: {})", userId, excludeUserId);
+                    } catch (Exception e) {
+                        logger.error("Error al enviar notificación a userId: {}", userId, e);
+                    }
+                });
+            }
+        }
+    }
+
+    /**
      * Obtiene todas las conexiones activas.
      * Útil para la GUI de administración.
      *

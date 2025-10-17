@@ -41,6 +41,45 @@ public class ListadorMiembros implements IListadorMiembros {
     }
 
     @Override
+    public void inicializarManejadores() {
+        // Manejador para notificaciones de cambio de miembros (agregar/remover)
+        gestorRespuesta.registrarManejador("cambioMiembro", this::manejarCambioMiembro);
+        System.out.println("✓ Manejador de cambios de miembros inicializado");
+    }
+
+    /**
+     * Maneja las notificaciones del servidor sobre cambios en los miembros del canal.
+     */
+    private void manejarCambioMiembro(dto.comunicacion.DTOResponse respuesta) {
+        if (!respuesta.fueExitoso()) {
+            System.err.println("Error en notificación de cambio de miembro: " + respuesta.getMessage());
+            return;
+        }
+
+        try {
+            Map<String, Object> data = (Map<String, Object>) respuesta.getData();
+            String accion = getString(data, "accion");
+            String nombreUsuario = getString(data, "nombreUsuario");
+            String usuarioId = getString(data, "usuarioId");
+
+            System.out.println("📢 [ListadorMiembros]: Cambio de miembro - Acción: " + accion +
+                             ", Usuario: " + nombreUsuario + " (" + usuarioId + ")");
+
+            // Notificar a los observadores sobre el cambio
+            notificarObservadores("CAMBIO_MIEMBRO", data);
+
+        } catch (Exception e) {
+            System.err.println("✗ Error procesando cambio de miembro: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private String getString(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        return value != null ? value.toString() : null;
+    }
+
+    @Override
     public CompletableFuture<List<DTOMiembroCanal>> solicitarMiembros(String canalId) {
         CompletableFuture<List<DTOMiembroCanal>> future = new CompletableFuture<>();
 

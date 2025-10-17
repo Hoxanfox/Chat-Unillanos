@@ -7,6 +7,7 @@ import comunicacion.GestorRespuesta;
 import comunicacion.IEnviadorPeticiones;
 import comunicacion.IGestorRespuesta;
 import dominio.Canal;
+import dto.canales.DTOCanalCreado;
 import dto.comunicacion.DTORequest;
 import dto.peticion.DTOListarCanales;
 import gestionUsuario.sesion.GestorSesionUsuario;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 /**
  * Implementación de la lógica para listar los canales de un usuario.
@@ -56,35 +58,55 @@ public class ListadorCanales implements IListadorCanales {
     }
 
     private void manejarRespuestaListado(dto.comunicacion.DTOResponse respuesta) {
+        System.out.println("📥 [ListadorCanales]: Respuesta recibida - Status: " + respuesta.getStatus());
+
         if (!"success".equals(respuesta.getStatus())) {
             System.err.println("Error del servidor al listar canales: " + respuesta.getMessage());
             return;
         }
 
         try {
+            System.out.println("📋 [ListadorCanales]: Parseando datos de la respuesta...");
             Type tipoLista = new TypeToken<ArrayList<Map<String, Object>>>() {}.getType();
             List<Map<String, Object>> listaDeMapas = gson.fromJson(gson.toJson(respuesta.getData()), tipoLista);
+            System.out.println("✅ [ListadorCanales]: Se encontraron " + listaDeMapas.size() + " canales en la respuesta");
 
             List<Canal> canalesDelServidor = new ArrayList<>();
             for (Map<String, Object> mapa : listaDeMapas) {
+                System.out.println("🔄 [ListadorCanales]: Convirtiendo canal - ID: " + mapa.get("id") + ", Nombre: " + mapa.get("nombre"));
                 canalesDelServidor.add(convertirMapaACanal(mapa));
             }
+            System.out.println("✅ [ListadorCanales]: Convertidos " + canalesDelServidor.size() + " canales a objetos de dominio");
 
             // Sincronizar con la base de datos local
             repositorioCanal.sincronizarCanales(canalesDelServidor)
                     .thenAccept(v -> {
-                        // Actualizar caché y notificar a la UI
+                        System.out.println("✅ [ListadorCanales]: Sincronización completada");
+                        // Actualizar caché
                         this.canalesCache = canalesDelServidor;
-                        notificarObservadores("CANALES_ACTUALIZADOS", new ArrayList<>(this.canalesCache));
+
+                        // ✅ SOLUCIÓN: Convertir Canal (dominio) a DTOCanalCreado para la UI
+                        List<DTOCanalCreado> canalesDTO = canalesDelServidor.stream()
+                                .map(canal -> new DTOCanalCreado(
+                                        canal.getIdCanal().toString(),
+                                        canal.getNombre()
+                                ))
+                                .collect(Collectors.toList());
+
+                        System.out.println("✅ [ListadorCanales]: Convertidos " + canalesDTO.size() + " canales a DTOs");
+                        System.out.println("📢 [ListadorCanales]: Notificando " + canalesDTO.size() + " canales a " + observadores.size() + " observadores");
+                        notificarObservadores("CANALES_ACTUALIZADOS", canalesDTO);
                         System.out.println("Lista de canales sincronizada y UI notificada.");
                     })
                     .exceptionally(ex -> {
-                        System.err.println("Fallo al sincronizar los canales con la DB local: " + ex.getMessage());
+                        System.err.println("❌ [ListadorCanales]: Fallo al sincronizar los canales con la DB local: " + ex.getMessage());
+                        ex.printStackTrace();
                         return null;
                     });
 
         } catch (Exception e) {
-            System.err.println("Error al procesar la respuesta de la lista de canales: " + e.getMessage());
+            System.err.println("❌ [ListadorCanales]: Error al procesar la respuesta de la lista de canales: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -106,18 +128,24 @@ public class ListadorCanales implements IListadorCanales {
         return new ArrayList<>(canalesCache);
     }
 
+    // --- Métodos del Patrón Observador ---
     @Override
     public void registrarObservador(IObservador observador) {
-        if (!observadores.contains(observador)) observadores.add(observador);
+        if (!observadores.contains(observador)) {
+            observadores.add(observador);
+            System.out.println("✅ [ListadorCanales]: Observador registrado. Total: " + observadores.size());
+        }
     }
 
     @Override
     public void removerObservador(IObservador observador) {
         observadores.remove(observador);
+        System.out.println("🗑️ [ListadorCanales]: Observador removido. Total: " + observadores.size());
     }
 
     @Override
     public void notificarObservadores(String tipoDeDato, Object datos) {
+        System.out.println("📢 [ListadorCanales]: Notificando a " + observadores.size() + " observadores. Tipo: " + tipoDeDato);
         for (IObservador observador : observadores) {
             observador.actualizar(tipoDeDato, datos);
         }

@@ -56,14 +56,21 @@ public class VistaLobby extends BorderPane {
             this::redirigirAlLogin // Callback para logout como Runnable
         );
         FeatureContactos contactos = new FeatureContactos(this::mostrarChatPrivado, this.controladorContactos);
+
+        System.out.println("🔧 [VistaLobby]: Creando FeatureCanales...");
         FeatureCanales canales = new FeatureCanales(this::mostrarVistaCanal, this::mostrarVistaCrearCanal, this.controladorCanales);
+        System.out.println("✅ [VistaLobby]: FeatureCanales creado");
+
         this.panelNotificaciones = new FeatureNotificaciones(this.controladorNotificaciones);
         FeatureConexion barraEstado = new FeatureConexion(this.controladorConexion);
 
         VBox panelIzquierdo = new VBox(20);
         panelIzquierdo.setStyle("-fx-background-color: #2c3e50;");
         panelIzquierdo.setMinWidth(200);
+
+        System.out.println("🔧 [VistaLobby]: Agregando componentes al panel izquierdo...");
         panelIzquierdo.getChildren().addAll(contactos, canales);
+        System.out.println("✅ [VistaLobby]: Panel izquierdo configurado con " + panelIzquierdo.getChildren().size() + " componentes");
 
         this.setTop(header);
         this.setLeft(panelIzquierdo);

@@ -134,10 +134,30 @@ public class AutenticacionService {
             // 6. Registrar conexión en ConnectionManager
             connectionManager.registerConnection(usuario.getId(), ctx);
             
-            // 7. Registrar login en logs
+            // 7. Notificar a todos los usuarios conectados sobre el cambio de estado
+            DTOUsuario usuarioDTO = new DTOUsuario(
+                usuario.getId(),
+                usuario.getNombre(),
+                usuario.getEmail(),
+                usuario.getPhotoId(),
+                EstadoUsuario.ONLINE.name(), // Estado actualizado
+                usuario.getFechaRegistro() != null ? usuario.getFechaRegistro().toString() : null
+            );
+
+            DTOResponse notificacion = DTOResponse.success(
+                "cambioEstadoUsuario",
+                "Usuario cambió su estado a ONLINE",
+                usuarioDTO
+            );
+
+            // Notificar a todos los usuarios conectados (excepto el que acaba de conectarse)
+            connectionManager.notifyAllExcept(usuario.getId(), notificacion);
+            logger.debug("Notificación de conexión enviada a todos los usuarios conectados");
+
+            // 8. Registrar login en logs
             loggerService.logLogin(usuario.getId(), ipAddress);
             
-            // 8. Retornar DTOResponse.success con DTOUsuario
+            // 9. Retornar DTOResponse.success con DTOUsuario
             logger.info("Usuario autenticado: {} ({})", usuario.getNombre(), usuario.getEmail());
             return DTOResponse.success("login", 
                 "Autenticación exitosa", 
@@ -171,13 +191,33 @@ public class AutenticacionService {
             // 2. Actualizar estado a OFFLINE
             usuarioRepository.updateEstado(userId, EstadoUsuario.OFFLINE);
             
-            // 3. Eliminar del ConnectionManager
+            // 3. Notificar a todos los usuarios conectados sobre el cambio de estado
+            DTOUsuario usuarioDTO = new DTOUsuario(
+                usuario.getId(),
+                usuario.getNombre(),
+                usuario.getEmail(),
+                usuario.getPhotoId(),
+                EstadoUsuario.OFFLINE.name(), // Estado actualizado
+                usuario.getFechaRegistro() != null ? usuario.getFechaRegistro().toString() : null
+            );
+
+            DTOResponse notificacion = DTOResponse.success(
+                "cambioEstadoUsuario",
+                "Usuario cambió su estado a OFFLINE",
+                usuarioDTO
+            );
+
+            // Notificar a todos los usuarios conectados (excepto el que se desconectó)
+            connectionManager.notifyAllExcept(userId, notificacion);
+            logger.debug("Notificación de desconexión enviada a todos los usuarios conectados");
+
+            // 4. Eliminar del ConnectionManager
             connectionManager.removeConnection(userId);
             
-            // 4. Registrar logout en logs
+            // 5. Registrar logout en logs
             loggerService.logLogout(userId, ipAddress);
             
-            // 5. Retornar DTOResponse.success
+            // 6. Retornar DTOResponse.success
             logger.info("Usuario desconectado: {} ({})", usuario.getNombre(), usuario.getEmail());
             return DTOResponse.success("logout", 
                 "Sesión cerrada exitosamente", 

@@ -94,6 +94,17 @@ public class LoggerService {
     }
 
     /**
+     * Registra una advertencia.
+     *
+     * @param accion Acción que causó la advertencia
+     * @param detalles Detalles de la advertencia
+     */
+    public void logWarning(String accion, String detalles) {
+        logger.warn("WARN - Acción: {}, Detalles: {}", accion, detalles);
+        persistLogAsync("WARN", null, null, accion, detalles);
+    }
+
+    /**
      * Registra un evento del sistema.
      *
      * @param accion Acción del sistema
@@ -159,4 +170,3 @@ public class LoggerService {
         }
     }
 }
-

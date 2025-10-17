@@ -66,6 +66,7 @@ public class FeatureCanales extends VBox implements IObservador {
     @Override
     public void actualizar(String tipoDeDato, Object datos) {
         System.out.println("🔔 [FeatureCanales]: Notificación recibida - Tipo: " + tipoDeDato);
+        System.out.println("🔔 [FeatureCanales]: Tipo de datos: " + (datos != null ? datos.getClass().getName() : "null"));
 
         Platform.runLater(() -> {
             switch (tipoDeDato) {
@@ -73,7 +74,16 @@ public class FeatureCanales extends VBox implements IObservador {
                     if (datos instanceof List) {
                         List<DTOCanalCreado> canales = (List<DTOCanalCreado>) datos;
                         System.out.println("✅ [FeatureCanales]: Actualizando lista con " + canales.size() + " canales");
+
+                        // Log detallado de cada canal
+                        for (int i = 0; i < canales.size(); i++) {
+                            DTOCanalCreado canal = canales.get(i);
+                            System.out.println("   Canal " + (i + 1) + ": ID=" + canal.getId() + ", Nombre=" + canal.getNombre());
+                        }
+
                         actualizarListaCanales(canales);
+                    } else {
+                        System.err.println("❌ [FeatureCanales]: Los datos no son una lista. Tipo: " + (datos != null ? datos.getClass().getName() : "null"));
                     }
                     break;
 
@@ -90,21 +100,41 @@ public class FeatureCanales extends VBox implements IObservador {
     }
 
     private void actualizarListaCanales(List<DTOCanalCreado> canales) {
+        System.out.println("🎨 [FeatureCanales]: Iniciando actualización de UI - Limpiando container...");
+        System.out.println("🎨 [FeatureCanales]: Container visible: " + canalesContainer.isVisible());
+        System.out.println("🎨 [FeatureCanales]: Container manejado: " + canalesContainer.isManaged());
+        System.out.println("🎨 [FeatureCanales]: Tamaño container: " + canalesContainer.getWidth() + "x" + canalesContainer.getHeight());
+
         canalesContainer.getChildren().clear();
+        System.out.println("🎨 [FeatureCanales]: Container limpiado. Canales a dibujar: " + canales.size());
 
         if (canales.isEmpty()) {
+            System.out.println("⚠️ [FeatureCanales]: Lista vacía, mostrando mensaje");
             Label sinCanales = new Label("No hay canales disponibles");
             sinCanales.setTextFill(Color.LIGHTGRAY);
+            sinCanales.setStyle("-fx-font-size: 12px;");
             canalesContainer.getChildren().add(sinCanales);
+            System.out.println("✅ [FeatureCanales]: Mensaje 'sin canales' agregado");
         } else {
-            for (DTOCanalCreado canal : canales) {
+            System.out.println("✏️ [FeatureCanales]: Dibujando " + canales.size() + " canales...");
+            for (int i = 0; i < canales.size(); i++) {
+                DTOCanalCreado canal = canales.get(i);
+                System.out.println("   Dibujando canal " + (i + 1) + ": " + canal.getNombre());
                 HBox canalEntry = crearEntradaCanal(canal);
                 canalesContainer.getChildren().add(canalEntry);
+                System.out.println("   ✓ Canal agregado al container. Total en container: " + canalesContainer.getChildren().size());
             }
+            System.out.println("✅ [FeatureCanales]: Todos los canales dibujados. Total final en container: " + canalesContainer.getChildren().size());
+
+            // Forzar actualización del layout
+            canalesContainer.requestLayout();
+            this.requestLayout();
+            System.out.println("🔄 [FeatureCanales]: Layout actualizado");
         }
     }
 
     private HBox crearEntradaCanal(DTOCanalCreado canal) {
+        System.out.println("🔨 [FeatureCanales]: Creando HBox para canal: " + canal.getNombre());
         HBox channelEntry = new HBox(10);
         channelEntry.setAlignment(Pos.CENTER_LEFT);
         channelEntry.setCursor(Cursor.HAND);
@@ -120,6 +150,7 @@ public class FeatureCanales extends VBox implements IObservador {
         nameLabel.setTextFill(Color.WHITE);
 
         channelEntry.getChildren().addAll(statusIndicator, nameLabel);
+        System.out.println("✅ [FeatureCanales]: HBox creado para: " + canal.getNombre());
         return channelEntry;
     }
 }

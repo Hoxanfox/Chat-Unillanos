@@ -105,7 +105,14 @@ public class MensajeriaService {
             mensaje.setDestinatarioId(dto.getDestinatarioId());
             mensaje.setCanalId(null);  // No es mensaje de canal
             mensaje.setTipo(TipoMensaje.DIRECT);
-            mensaje.setContenido(dto.getContenido());
+
+            // Si no hay contenido pero hay archivo, usar placeholder
+            String contenido = dto.getContenido();
+            if ((contenido == null || contenido.trim().isEmpty()) && dto.getFileId() != null) {
+                contenido = fileName != null ? fileName : "Archivo adjunto";
+            }
+            mensaje.setContenido(contenido);
+
             mensaje.setFileId(dto.getFileId());
             mensaje.setFechaEnvio(LocalDateTime.now());
             mensaje.setEstado(EstadoMensaje.ENVIADO); // Estado inicial
@@ -196,20 +203,7 @@ public class MensajeriaService {
                 );
             }
             
-            // 5. Crear MensajeEntity con tipo CHANNEL
-            MensajeEntity mensaje = new MensajeEntity();
-            mensaje.setRemitenteId(dto.getRemitenteId());
-            mensaje.setDestinatarioId(null);  // No es mensaje directo
-            mensaje.setCanalId(dto.getCanalId());
-            mensaje.setTipo(TipoMensaje.CHANNEL);
-            mensaje.setContenido(dto.getContenido());
-            mensaje.setFileId(dto.getFileId());
-            mensaje.setFechaEnvio(LocalDateTime.now());
-            
-            // 6. Guardar mensaje en BD (recuperar ID generado)
-            MensajeEntity mensajeGuardado = mensajeRepository.save(mensaje);
-            
-            // 4. Validar archivo adjunto si existe
+            // 5. Validar archivo adjunto si existe (ANTES de guardar el mensaje)
             String fileName = null;
             if (dto.getFileId() != null && !dto.getFileId().trim().isEmpty()) {
                 var archivoOpt = archivoRepository.findById(dto.getFileId());
@@ -223,12 +217,32 @@ public class MensajeriaService {
                 fileName = archivo.getNombreOriginal();
             }
 
-            // 7. Registrar en logs
-            loggerService.logInfo("enviarMensajeCanal", 
+            // 6. Crear MensajeEntity con tipo CHANNEL
+            MensajeEntity mensaje = new MensajeEntity();
+            mensaje.setRemitenteId(dto.getRemitenteId());
+            mensaje.setDestinatarioId(null);  // No es mensaje directo
+            mensaje.setCanalId(dto.getCanalId());
+            mensaje.setTipo(TipoMensaje.CHANNEL);
+
+            // Si no hay contenido pero hay archivo, usar placeholder
+            String contenido = dto.getContenido();
+            if ((contenido == null || contenido.trim().isEmpty()) && dto.getFileId() != null) {
+                contenido = fileName != null ? fileName : "Archivo adjunto";
+            }
+            mensaje.setContenido(contenido);
+
+            mensaje.setFileId(dto.getFileId());
+            mensaje.setFechaEnvio(LocalDateTime.now());
+
+            // 7. Guardar mensaje en BD (recuperar ID generado)
+            MensajeEntity mensajeGuardado = mensajeRepository.save(mensaje);
+
+            // 8. Registrar en logs
+            loggerService.logInfo("enviarMensajeCanal",
                 String.format("Usuario %s envió mensaje al canal %s. ID: %d", 
                     remitente.getNombre(), canal.getNombre(), mensajeGuardado.getId()));
             
-            // 8. Notificar a todos los miembros del canal (excepto remitente)
+            // 9. Notificar a todos los miembros del canal (excepto remitente)
             List<CanalMiembroEntity> miembros = canalMiembroRepository.findMiembrosByCanal(dto.getCanalId());
             Set<String> miembrosIds = miembros.stream()
                 .map(CanalMiembroEntity::getUsuarioId)
@@ -251,7 +265,7 @@ public class MensajeriaService {
                 logger.debug("Notificación enviada a {} miembros del canal {}", miembrosIds.size(), canal.getNombre());
             }
             
-            // 9. Retornar DTOResponse.success con DTOMensaje
+            // 10. Retornar DTOResponse.success con DTOMensaje
             DTOMensaje mensajeDTO = mensajeGuardado.toDTO(
                 remitente.getNombre(),
                 null,
@@ -475,4 +489,3 @@ public class MensajeriaService {
         }
     }
 }
-

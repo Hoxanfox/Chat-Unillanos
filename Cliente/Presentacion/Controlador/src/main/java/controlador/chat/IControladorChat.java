@@ -41,9 +41,21 @@ public interface IControladorChat {
     void cancelarGrabacion();
 
     /**
+     * Descarga y reproduce un archivo de audio (guarda en disco temporal).
+     * @param fileId El ID del archivo de audio en el servidor.
+     */
+    void reproducirAudio(String fileId);
+
+    /**
+     * Descarga y reproduce un archivo de audio EN MEMORIA (sin guardar en disco).
+     * @param fileId El ID del archivo de audio en el servidor.
+     * @return CompletableFuture que se completa cuando la reproducción inicia
+     */
+    CompletableFuture<Void> reproducirAudioEnMemoria(String fileId);
+
+    /**
      * Permite que la vista se registre como observador de nuevos mensajes.
      * @param observador La vista que desea ser notificada.
      */
     void registrarObservador(IObservador observador);
 }
-

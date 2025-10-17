@@ -24,7 +24,7 @@ public class RepositorioCanalImpl implements IRepositorioCanal {
     @Override
     public CompletableFuture<Boolean> guardar(Canal canal) {
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "INSERT INTO canales (id, nombre, id_administrador) VALUES (?, ?, ?)";
+            String sql = "INSERT INTO canales (id_canal, nombre, id_administrador) VALUES (?, ?, ?)";
             try (Connection conn = gestorConexion.getConexion();
                  PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
@@ -44,7 +44,7 @@ public class RepositorioCanalImpl implements IRepositorioCanal {
     @Override
     public CompletableFuture<Canal> buscarPorId(String id) {
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "SELECT id, nombre, id_administrador FROM canales WHERE id = ?";
+            String sql = "SELECT id_canal, nombre, id_administrador FROM canales WHERE id_canal = ?";
             try (Connection conn = gestorConexion.getConexion();
                  PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
@@ -53,7 +53,7 @@ public class RepositorioCanalImpl implements IRepositorioCanal {
 
                 if (rs.next()) {
                     Canal canal = new Canal(
-                            UUID.fromString(rs.getString("id")),
+                            UUID.fromString(rs.getString("id_canal")),
                             rs.getString("nombre"),
                             UUID.fromString(rs.getString("id_administrador"))
                     );
@@ -88,7 +88,7 @@ public class RepositorioCanalImpl implements IRepositorioCanal {
     @Override
     public CompletableFuture<List<Canal>> obtenerTodos() {
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "SELECT id, nombre, id_administrador FROM canales";
+            String sql = "SELECT id_canal, nombre, id_administrador FROM canales";
             List<Canal> canales = new ArrayList<>();
             try (Connection conn = gestorConexion.getConexion();
                  PreparedStatement pstmt = conn.prepareStatement(sql);
@@ -96,7 +96,7 @@ public class RepositorioCanalImpl implements IRepositorioCanal {
 
                 while (rs.next()) {
                     Canal canal = new Canal(
-                            UUID.fromString(rs.getString("id")),
+                            UUID.fromString(rs.getString("id_canal")),
                             rs.getString("nombre"),
                             UUID.fromString(rs.getString("id_administrador"))
                     );
@@ -131,7 +131,7 @@ public class RepositorioCanalImpl implements IRepositorioCanal {
     @Override
     public CompletableFuture<Boolean> actualizar(Canal canal) {
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "UPDATE canales SET nombre = ?, id_administrador = ? WHERE id = ?";
+            String sql = "UPDATE canales SET nombre = ?, id_administrador = ? WHERE id_canal = ?";
             try (Connection conn = gestorConexion.getConexion();
                  PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
@@ -151,7 +151,7 @@ public class RepositorioCanalImpl implements IRepositorioCanal {
     @Override
     public CompletableFuture<Boolean> eliminar(String id) {
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "DELETE FROM canales WHERE id = ?";
+            String sql = "DELETE FROM canales WHERE id_canal = ?";
             try (Connection conn = gestorConexion.getConexion();
                  PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
@@ -215,7 +215,7 @@ public class RepositorioCanalImpl implements IRepositorioCanal {
                 try {
                     for (Canal canal : canalesDelServidor) {
                         // Verificar si el canal ya existe
-                        String sqlCheck = "SELECT COUNT(1) AS cnt FROM canales WHERE id = ?";
+                        String sqlCheck = "SELECT COUNT(1) AS cnt FROM canales WHERE id_canal = ?";
                         boolean existe = false;
 
                         try (PreparedStatement pstmt = conn.prepareStatement(sqlCheck)) {
@@ -229,7 +229,7 @@ public class RepositorioCanalImpl implements IRepositorioCanal {
 
                         if (existe) {
                             // Actualizar canal existente
-                            String sqlUpdate = "UPDATE canales SET nombre = ?, id_administrador = ? WHERE id = ?";
+                            String sqlUpdate = "UPDATE canales SET nombre = ?, id_administrador = ? WHERE id_canal = ?";
                             try (PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) {
                                 pstmt.setString(1, canal.getNombre());
                                 pstmt.setString(2, canal.getIdAdministrador() != null ? canal.getIdAdministrador().toString() : null);
@@ -238,7 +238,7 @@ public class RepositorioCanalImpl implements IRepositorioCanal {
                             }
                         } else {
                             // Insertar nuevo canal
-                            String sqlInsert = "INSERT INTO canales (id, nombre, id_administrador) VALUES (?, ?, ?)";
+                            String sqlInsert = "INSERT INTO canales (id_canal, nombre, id_administrador) VALUES (?, ?, ?)";
                             try (PreparedStatement pstmt = conn.prepareStatement(sqlInsert)) {
                                 pstmt.setString(1, canal.getIdCanal().toString());
                                 pstmt.setString(2, canal.getNombre());

@@ -38,4 +38,13 @@ public interface IGestionArchivos extends ISujeto {
      * @return CompletableFuture que se completa con el File descargado
      */
     CompletableFuture<File> descargarArchivo(String fileId, File directorioDestino);
+
+    /**
+     * Descarga un archivo desde el servidor en memoria (como array de bytes).
+     * Útil para reproducir audio sin guardar en disco.
+     *
+     * @param fileId El identificador único del archivo en el servidor
+     * @return CompletableFuture que se completa con los bytes del archivo
+     */
+    CompletableFuture<byte[]> descargarArchivoEnMemoria(String fileId);
 }

@@ -53,8 +53,8 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
         // Manejador para nuevos mensajes (notificación push del servidor)
         gestorRespuesta.registrarManejador("nuevoMensajeCanal", this::manejarNuevoMensaje);
 
-        // Manejador para historial de mensajes
-        gestorRespuesta.registrarManejador("respuestaHistorialCanal", this::manejarHistorial);
+        // Manejador para historial de mensajes (usando el nombre correcto de la acción)
+        gestorRespuesta.registrarManejador("solicitarHistorialCanal", this::manejarHistorial);
 
         // Manejador para confirmación de envío
         gestorRespuesta.registrarManejador("enviarMensajeCanal", this::manejarConfirmacionEnvio);
@@ -116,13 +116,20 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
         }
 
         try {
-            Type tipoLista = new TypeToken<ArrayList<Map<String, Object>>>() {}.getType();
-            List<Map<String, Object>> listaDeMapas = gson.fromJson(gson.toJson(respuesta.getData()), tipoLista);
+            // El servidor envía un objeto con estructura: { mensajes: [...], hayMasMensajes: bool, ... }
+            Map<String, Object> dataWrapper = (Map<String, Object>) respuesta.getData();
+            List<Map<String, Object>> mensajesData = (List<Map<String, Object>>) dataWrapper.get("mensajes");
+
+            if (mensajesData == null) {
+                System.err.println("✗ No se encontró el campo 'mensajes' en la respuesta");
+                notificarObservadores("HISTORIAL_CANAL_RECIBIDO", new ArrayList<>());
+                return;
+            }
 
             List<DTOMensajeCanal> historial = new ArrayList<>();
             String usuarioActual = gestorSesion.getUserId();
 
-            for (Map<String, Object> mapa : listaDeMapas) {
+            for (Map<String, Object> mapa : mensajesData) {
                 DTOMensajeCanal mensaje = construirDTOMensajeDesdeMap(mapa);
                 mensaje.setEsPropio(mensaje.getRemitenteId().equals(usuarioActual));
                 historial.add(mensaje);
@@ -302,15 +309,22 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
     private DTOMensajeCanal construirDTOMensajeDesdeMap(Map<String, Object> data) {
         DTOMensajeCanal mensaje = new DTOMensajeCanal();
 
-        mensaje.setMensajeId(getString(data, "mensajeId"));
+        // El servidor puede enviar 'id' o 'mensajeId'
+        mensaje.setMensajeId(getString(data, "id") != null ? getString(data, "id") : getString(data, "mensajeId"));
         mensaje.setCanalId(getString(data, "canalId"));
-        mensaje.setRemitenteId(getString(data, "remitenteId"));
-        mensaje.setNombreRemitente(getString(data, "nombreRemitente"));
+
+        // El servidor puede enviar 'usuarioId' o 'remitenteId'
+        mensaje.setRemitenteId(getString(data, "usuarioId") != null ? getString(data, "usuarioId") : getString(data, "remitenteId"));
+
+        // El servidor puede enviar 'nombreUsuario' o 'nombreRemitente'
+        mensaje.setNombreRemitente(getString(data, "nombreUsuario") != null ? getString(data, "nombreUsuario") : getString(data, "nombreRemitente"));
+
         mensaje.setTipo(getString(data, "tipo"));
         mensaje.setContenido(getString(data, "contenido"));
         mensaje.setFileId(getString(data, "fileId"));
 
-        String fechaStr = getString(data, "fechaEnvio");
+        // El servidor puede enviar 'timestamp' o 'fechaEnvio'
+        String fechaStr = getString(data, "timestamp") != null ? getString(data, "timestamp") : getString(data, "fechaEnvio");
         if (fechaStr != null) {
             try {
                 mensaje.setFechaEnvio(LocalDateTime.parse(fechaStr));
@@ -325,7 +339,16 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
     private MensajeRecibidoCanal convertirDTOAMensajeRecibido(DTOMensajeCanal dto) {
         MensajeRecibidoCanal mensaje = new MensajeRecibidoCanal();
 
-        mensaje.setIdMensaje(UUID.fromString(dto.getMensajeId()));
+        // Generar un UUID si el ID no es un UUID válido (puede ser un número secuencial del servidor)
+        UUID mensajeId;
+        try {
+            mensajeId = UUID.fromString(dto.getMensajeId());
+        } catch (IllegalArgumentException e) {
+            // Si no es un UUID válido, generar uno basado en un hash del ID
+            mensajeId = UUID.nameUUIDFromBytes(dto.getMensajeId().getBytes());
+        }
+        mensaje.setIdMensaje(mensajeId);
+
         mensaje.setIdRemitenteCanal(UUID.fromString(dto.getCanalId()));
         mensaje.setTipo(dto.getTipo());
         mensaje.setFechaEnvio(dto.getFechaEnvio());

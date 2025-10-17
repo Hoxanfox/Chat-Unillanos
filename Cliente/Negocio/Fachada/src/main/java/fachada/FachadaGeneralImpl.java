@@ -45,7 +45,7 @@ public class FachadaGeneralImpl implements IFachadaGeneral {
         this.fachadaChat = new FachadaChatImpl();
         this.fachadaContactos = new FachadaContactosImpl();
         this.fachadaUsuarios = new FachadaUsuariosImpl();
-        this.fachadaCanales = new FachadaCanalesImpl();
+        this.fachadaCanales = FachadaCanalesImpl.getInstancia(); // ✅ USAR SINGLETON
         this.fachadaNotificaciones = new FachadaNotificacionesImpl();
     }
 

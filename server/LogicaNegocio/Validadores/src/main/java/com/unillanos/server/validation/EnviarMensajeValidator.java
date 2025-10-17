@@ -43,10 +43,22 @@ public class EnviarMensajeValidator {
             );
         }
         
-        // Validar contenido
-        ContenidoMensajeValidator.validate(dto.getContenido());
-        
-        // fileId es opcional, no se valida
+        // Validar que haya contenido O fileId (al menos uno)
+        boolean tieneContenido = dto.getContenido() != null && !dto.getContenido().trim().isEmpty();
+        boolean tieneArchivo = dto.getFileId() != null && !dto.getFileId().trim().isEmpty();
+
+        if (!tieneContenido && !tieneArchivo) {
+            throw new ValidationException(
+                "El mensaje debe tener contenido de texto o un archivo adjunto",
+                "contenido"
+            );
+        }
+
+        // Si tiene contenido de texto, validarlo
+        if (tieneContenido) {
+            ContenidoMensajeValidator.validate(dto.getContenido());
+        }
+
+        // fileId se valida en el servicio (verifica que existe en BD)
     }
 }
-
