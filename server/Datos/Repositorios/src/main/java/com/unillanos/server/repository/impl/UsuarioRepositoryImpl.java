@@ -252,7 +252,7 @@ public class UsuarioRepositoryImpl implements IUsuarioRepository {
 
     @Override
     public UsuarioEntity save(UsuarioEntity usuario) {
-        String sql = "INSERT INTO usuarios (id, nombre, email, password_hash, photo_id, ip_address, fecha_registro, estado) " +
+        String sql = "INSERT INTO usuarios (id, nombre_usuario, email, password_hash, photo_id, ip_address, fecha_registro, estado) " +
                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         
         Connection conn = null;
@@ -286,7 +286,7 @@ public class UsuarioRepositoryImpl implements IUsuarioRepository {
 
     @Override
     public void update(UsuarioEntity usuario) {
-        String sql = "UPDATE usuarios SET nombre = ?, photo_id = ?, password_hash = ? WHERE id = ?";
+        String sql = "UPDATE usuarios SET nombre_usuario = ?, photo_id = ?, password_hash = ? WHERE id = ?";
         
         Connection conn = null;
         PreparedStatement stmt = null;

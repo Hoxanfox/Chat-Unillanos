@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
     <parent>
         <groupId>com.unillanos</groupId>
         <artifactId>chat-server</artifactId>
@@ -12,11 +10,17 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>servicios</artifactId>
+    <artifactId>gestor-archivos</artifactId>
     <packaging>jar</packaging>
 
-    <name>Servicios</name>
-    <description>Lógica de negocio y orquestación</description>
+    <name>Gestor de Archivos</name>
+    <description>Gestión de subida y descarga de archivos por chunks</description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
 
     <dependencies>
         <!-- Módulos internos -->
@@ -26,23 +30,11 @@
         </dependency>
         <dependency>
             <groupId>com.unillanos</groupId>
-            <artifactId>validadores</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.unillanos</groupId>
             <artifactId>repositorios</artifactId>
         </dependency>
         <dependency>
             <groupId>com.unillanos</groupId>
-            <artifactId>dtos</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.unillanos</groupId>
             <artifactId>logs</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.unillanos</groupId>
-            <artifactId>gestor-archivos</artifactId>
         </dependency>
 
         <!-- Spring Context -->
@@ -51,16 +43,11 @@
             <artifactId>spring-context</artifactId>
         </dependency>
 
-        <!-- Netty (para ChannelHandlerContext) -->
+        <!-- SLF4J API -->
         <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-all</artifactId>
-        </dependency>
-
-        <!-- BCrypt -->
-        <dependency>
-            <groupId>at.favre.lib</groupId>
-            <artifactId>bcrypt</artifactId>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
         </dependency>
     </dependencies>
+
 </project>

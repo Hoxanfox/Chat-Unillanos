@@ -6,7 +6,7 @@ package com.unillanos.server.dto;
 public class DTOListarArchivos {
     
     private String usuarioId;              // Requerido - Usuario que solicita
-    private String tipoArchivo;            // Opcional - Filtrar por tipo (IMAGEN, AUDIO, DOCUMENTO)
+    private String tipoArchivo;            // Opcional - Filtrar por tipo (IMAGE, AUDIO, DOCUMENT)
     private int limit;                     // Opcional - Por defecto 50
     private int offset;                    // Opcional - Por defecto 0
 
@@ -65,4 +65,3 @@ public class DTOListarArchivos {
                 '}';
     }
 }
-

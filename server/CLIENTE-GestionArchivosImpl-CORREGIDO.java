@@ -1,4 +1,5 @@
 package gestionArchivos;
+
 import com.google.gson.Gson;
 import comunicacion.EnviadorPeticiones;
 import comunicacion.GestorRespuesta;
@@ -23,9 +24,8 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Implementación del componente de negocio que gestiona la subida y descarga de archivos por chunks.
- * Implementa el patrón Observador para notificar a la UI sobre el progreso.
- * Almacena archivos descargados en la BD local con Base64 usando IDs del servidor.
+ * Implementación CORREGIDA del componente de negocio que gestiona la subida y descarga de archivos por chunks.
+ * Separa claramente las acciones para subidas autenticadas vs. subidas de registro.
  */
 public class GestionArchivosImpl implements IGestionArchivos {
 
@@ -33,7 +33,7 @@ public class GestionArchivosImpl implements IGestionArchivos {
     private final IGestorRespuesta gestorRespuesta;
     private final IRepositorioArchivo repositorioArchivo;
     private final Gson gson;
-    private static final int CHUNK_SIZE = 256;  // 1.5 MB
+    private static final int CHUNK_SIZE = 2097152;  // 2 MB (sincronizado con servidor)
 
     // Patrón Observador
     private final List<IObservador> observadores;
@@ -70,9 +70,24 @@ public class GestionArchivosImpl implements IGestionArchivos {
         }
     }
 
+    // ===== SUBIDA AUTENTICADA =====
+
     @Override
     public CompletableFuture<String> subirArchivo(File archivo) {
-        System.out.println("[GestionArchivos] Iniciando subida autenticada de archivo: " + archivo.getName());
+        System.out.println("[GestionArchivos] Iniciando subida AUTENTICADA de archivo: " + archivo.getName());
+        return procesarSubida(archivo, false);
+    }
+
+    // ===== SUBIDA PARA REGISTRO (SIN AUTENTICACIÓN) =====
+
+    public CompletableFuture<String> subirArchivoParaRegistro(File archivo) {
+        System.out.println("[GestionArchivos] Iniciando subida para REGISTRO (sin autenticación) de archivo: " + archivo.getName());
+        return procesarSubida(archivo, true);
+    }
+
+    // ===== MÉTODO UNIFICADO DE PROCESAMIENTO =====
+
+    private CompletableFuture<String> procesarSubida(File archivo, boolean esRegistro) {
         CompletableFuture<String> futuroSubida = new CompletableFuture<>();
 
         try {
@@ -80,27 +95,37 @@ public class GestionArchivosImpl implements IGestionArchivos {
             String fileHash = calcularHashSHA256(fileBytes);
             int totalChunks = (int) Math.ceil((double) fileBytes.length / CHUNK_SIZE);
 
-            System.out.println("[GestionArchivos] Archivo leído - Tamaño: " + fileBytes.length + " bytes, Hash: " + fileHash + ", Total chunks: " + totalChunks);
+            System.out.println("[GestionArchivos] Archivo leído - Tamaño: " + fileBytes.length + 
+                             " bytes, Hash: " + fileHash + ", Total chunks: " + totalChunks);
 
-            iniciarSubida(archivo, totalChunks)
-                    .thenCompose(uploadId -> {
-                        System.out.println("[GestionArchivos] Upload iniciado con ID: " + uploadId);
-                        return transferirChunks(uploadId, fileBytes, totalChunks);
-                    })
-                    .thenCompose(uploadId -> {
-                        System.out.println("[GestionArchivos] Chunks transferidos. Finalizando subida...");
-                        return finalizarSubida(uploadId, fileHash);
-                    })
-                    .thenAccept(fileName -> {
-                        System.out.println("[GestionArchivos] Subida completada exitosamente. Archivo final: " + fileName);
-                        futuroSubida.complete(fileName);
-                    })
-                    .exceptionally(ex -> {
-                        System.err.println("[GestionArchivos] ERROR en subida autenticada: " + ex.getMessage());
-                        ex.printStackTrace();
-                        futuroSubida.completeExceptionally(ex);
-                        return null;
-                    });
+            // Usar método de inicio apropiado
+            CompletableFuture<String> futuroInicio = esRegistro 
+                ? iniciarSubidaParaRegistro(archivo, totalChunks)
+                : iniciarSubida(archivo, totalChunks);
+
+            futuroInicio
+                .thenCompose(sessionId -> {
+                    System.out.println("[GestionArchivos] Sesión iniciada con ID: " + sessionId);
+                    // *** PUNTO CLAVE: Pasar el flag esRegistro a transferirChunks ***
+                    return transferirChunks(sessionId, fileBytes, totalChunks, esRegistro);
+                })
+                .thenCompose(sessionId -> {
+                    System.out.println("[GestionArchivos] Chunks transferidos. Finalizando subida...");
+                    // *** PUNTO CLAVE: Usar método de finalización apropiado ***
+                    return esRegistro 
+                        ? finalizarSubidaParaRegistro(sessionId, fileHash)
+                        : finalizarSubida(sessionId, fileHash);
+                })
+                .thenAccept(archivoId -> {
+                    System.out.println("[GestionArchivos] Subida completada exitosamente. ID: " + archivoId);
+                    futuroSubida.complete(archivoId);
+                })
+                .exceptionally(ex -> {
+                    System.err.println("[GestionArchivos] ERROR en subida: " + ex.getMessage());
+                    ex.printStackTrace();
+                    futuroSubida.completeExceptionally(ex);
+                    return null;
+                });
 
         } catch (Exception e) {
             System.err.println("[GestionArchivos] ERROR al leer archivo: " + e.getMessage());
@@ -111,98 +136,62 @@ public class GestionArchivosImpl implements IGestionArchivos {
         return futuroSubida;
     }
 
-    public CompletableFuture<String> subirArchivoParaRegistro(File archivo) {
-        System.out.println("[GestionArchivos] Iniciando subida para REGISTRO (sin autenticación) de archivo: " + archivo.getName());
-        CompletableFuture<String> futuroSubida = new CompletableFuture<>();
-
-        try {
-            byte[] fileBytes = Files.readAllBytes(archivo.toPath());
-            String fileHash = calcularHashSHA256(fileBytes);
-            int totalChunks = (int) Math.ceil((double) fileBytes.length / CHUNK_SIZE);
-
-            System.out.println("[GestionArchivos] Archivo leído para registro - Tamaño: " + fileBytes.length + " bytes, Hash: " + fileHash + ", Total chunks: " + totalChunks);
-
-            iniciarSubidaParaRegistro(archivo, totalChunks)
-                    .thenCompose(uploadId -> {
-                        System.out.println("[GestionArchivos] Upload para registro iniciado con ID: " + uploadId);
-                        return transferirChunks(uploadId, fileBytes, totalChunks);
-                    })
-                    .thenCompose(uploadId -> {
-                        System.out.println("[GestionArchivos] Chunks para registro transferidos. Finalizando subida...");
-                        return finalizarSubida(uploadId, fileHash);
-                    })
-                    .thenAccept(fileName -> {
-                        System.out.println("[GestionArchivos] Subida para registro completada exitosamente. Archivo final: " + fileName);
-                        futuroSubida.complete(fileName);
-                    })
-                    .exceptionally(ex -> {
-                        System.err.println("[GestionArchivos] ERROR en subida para registro: " + ex.getMessage());
-                        ex.printStackTrace();
-                        futuroSubida.completeExceptionally(ex);
-                        return null;
-                    });
-
-        } catch (Exception e) {
-            System.err.println("[GestionArchivos] ERROR al leer archivo para registro: " + e.getMessage());
-            e.printStackTrace();
-            futuroSubida.completeExceptionally(e);
-        }
-
-        return futuroSubida;
-    }
+    // ===== MÉTODOS DE INICIO =====
 
     private CompletableFuture<String> iniciarSubida(File archivo, int totalChunks) {
         final String ACCION = "startFileUpload";
         System.out.println("[GestionArchivos] Registrando manejador para acción: " + ACCION);
 
-        CompletableFuture<String> futuroUploadId = new CompletableFuture<>();
+        CompletableFuture<String> futuroSessionId = new CompletableFuture<>();
 
         gestorRespuesta.registrarManejador(ACCION, (DTOResponse res) -> {
             System.out.println("[GestionArchivos] Respuesta recibida para " + ACCION + " - Exitoso: " + res.fueExitoso());
             if (res.fueExitoso()) {
-                String uploadId = gson.fromJson(gson.toJson(res.getData()), UploadIdResponse.class).uploadId;
-                System.out.println("[GestionArchivos] UploadId obtenido: " + uploadId);
-                futuroUploadId.complete(uploadId);
+                String sessionId = gson.fromJson(gson.toJson(res.getData()), SessionIdResponse.class).sessionId;
+                System.out.println("[GestionArchivos] SessionId obtenido: " + sessionId);
+                futuroSessionId.complete(sessionId);
             } else {
                 System.err.println("[GestionArchivos] ERROR en " + ACCION + ": " + res.getMessage());
-                futuroUploadId.completeExceptionally(new RuntimeException(res.getMessage()));
+                futuroSessionId.completeExceptionally(new RuntimeException(res.getMessage()));
             }
         });
 
         DTOStartUpload payload = new DTOStartUpload(archivo.getName(), getMimeType(archivo), totalChunks);
-        System.out.println("[GestionArchivos] Enviando petición " + ACCION + " - Archivo: " + archivo.getName() + ", MIME: " + getMimeType(archivo) + ", Chunks: " + totalChunks);
+        System.out.println("[GestionArchivos] Enviando petición " + ACCION);
         enviadorPeticiones.enviar(new DTORequest(ACCION, payload));
 
-        return futuroUploadId;
+        return futuroSessionId;
     }
 
     private CompletableFuture<String> iniciarSubidaParaRegistro(File archivo, int totalChunks) {
         final String ACCION = "uploadFileForRegistration";
         System.out.println("[GestionArchivos] Registrando manejador para acción: " + ACCION);
 
-        CompletableFuture<String> futuroUploadId = new CompletableFuture<>();
+        CompletableFuture<String> futuroSessionId = new CompletableFuture<>();
 
         gestorRespuesta.registrarManejador(ACCION, (DTOResponse res) -> {
             System.out.println("[GestionArchivos] Respuesta recibida para " + ACCION + " - Exitoso: " + res.fueExitoso());
             if (res.fueExitoso()) {
-                String uploadId = gson.fromJson(gson.toJson(res.getData()), UploadIdResponse.class).uploadId;
-                System.out.println("[GestionArchivos] UploadId para registro obtenido: " + uploadId);
-                futuroUploadId.complete(uploadId);
+                String sessionId = gson.fromJson(gson.toJson(res.getData()), SessionIdResponse.class).sessionId;
+                System.out.println("[GestionArchivos] SessionId para registro obtenido: " + sessionId);
+                futuroSessionId.complete(sessionId);
             } else {
                 System.err.println("[GestionArchivos] ERROR en " + ACCION + ": " + res.getMessage());
-                futuroUploadId.completeExceptionally(new RuntimeException(res.getMessage()));
+                futuroSessionId.completeExceptionally(new RuntimeException(res.getMessage()));
             }
         });
 
         DTOStartUpload payload = new DTOStartUpload(archivo.getName(), getMimeType(archivo), totalChunks);
-        System.out.println("[GestionArchivos] Enviando petición " + ACCION + " - Archivo: " + archivo.getName() + ", MIME: " + getMimeType(archivo) + ", Chunks: " + totalChunks);
+        System.out.println("[GestionArchivos] Enviando petición " + ACCION);
         enviadorPeticiones.enviar(new DTORequest(ACCION, payload));
 
-        return futuroUploadId;
+        return futuroSessionId;
     }
 
-    private CompletableFuture<String> transferirChunks(String uploadId, byte[] fileBytes, int totalChunks) {
-        System.out.println("[GestionArchivos] Iniciando transferencia de " + totalChunks + " chunks para uploadId: " + uploadId);
+    // ===== MÉTODOS DE TRANSFERENCIA DE CHUNKS =====
+
+    private CompletableFuture<String> transferirChunks(String sessionId, byte[] fileBytes, int totalChunks, boolean esRegistro) {
+        System.out.println("[GestionArchivos] Iniciando transferencia de " + totalChunks + " chunks para sessionId: " + sessionId);
         CompletableFuture<String> futuroTransferencia = new CompletableFuture<>();
         CompletableFuture<Void> futuroChunkActual = CompletableFuture.completedFuture(null);
 
@@ -215,12 +204,16 @@ public class GestionArchivosImpl implements IGestionArchivos {
             String chunkBase64 = Base64.getEncoder().encodeToString(chunkData);
 
             System.out.println("[GestionArchivos] Preparando chunk " + chunkNumber + "/" + totalChunks + " - Tamaño: " + length + " bytes");
-            futuroChunkActual = futuroChunkActual.thenCompose(v -> enviarChunk(uploadId, chunkNumber, chunkBase64));
+            
+            // *** PUNTO CLAVE: Pasar el flag esRegistro a enviarChunk ***
+            futuroChunkActual = futuroChunkActual.thenCompose(v -> 
+                enviarChunk(sessionId, chunkNumber, totalChunks, fileBytes.length, chunkBase64, esRegistro)
+            );
         }
 
         futuroChunkActual.thenRun(() -> {
-            System.out.println("[GestionArchivos] Todos los chunks transferidos exitosamente para uploadId: " + uploadId);
-            futuroTransferencia.complete(uploadId);
+            System.out.println("[GestionArchivos] Todos los chunks transferidos exitosamente para sessionId: " + sessionId);
+            futuroTransferencia.complete(sessionId);
         }).exceptionally(ex -> {
             System.err.println("[GestionArchivos] ERROR durante transferencia de chunks: " + ex.getMessage());
             futuroTransferencia.completeExceptionally(ex);
@@ -230,8 +223,12 @@ public class GestionArchivosImpl implements IGestionArchivos {
         return futuroTransferencia;
     }
 
-    private CompletableFuture<Void> enviarChunk(String uploadId, int chunkNumber, String chunkBase64) {
-        final String ACCION_RESPUESTA = "uploadFileChunk_" + uploadId + "_" + chunkNumber;
+    private CompletableFuture<Void> enviarChunk(String sessionId, int chunkNumber, int totalChunks, 
+                                                 int tamanoTotal, String chunkBase64, boolean esRegistro) {
+        // *** CORRECCIÓN CRÍTICA: Usar acción diferente según el tipo de subida ***
+        final String ACCION = esRegistro ? "uploadFileChunkForRegistration" : "uploadFileChunk";
+        final String ACCION_RESPUESTA = ACCION + "_" + sessionId + "_" + chunkNumber;
+        
         System.out.println("[GestionArchivos] Registrando manejador para chunk: " + ACCION_RESPUESTA);
 
         CompletableFuture<Void> futuroChunk = new CompletableFuture<>();
@@ -247,14 +244,22 @@ public class GestionArchivosImpl implements IGestionArchivos {
             }
         });
 
-        DTOUploadChunk payload = new DTOUploadChunk(uploadId, chunkNumber, chunkBase64);
-        System.out.println("[GestionArchivos] Enviando chunk " + chunkNumber + " - UploadId: " + uploadId + ", Tamaño base64: " + chunkBase64.length());
-        enviadorPeticiones.enviar(new DTORequest("uploadFileChunk", payload));
+        // Crear DTO con todos los campos necesarios
+        DTOUploadChunk payload = new DTOUploadChunk(sessionId, chunkNumber, chunkBase64);
+        // Si tu DTO soporta más campos, agrégalos:
+        // payload.setTotalChunks(totalChunks);
+        // payload.setTamanoTotal(tamanoTotal);
+
+        System.out.println("[GestionArchivos] Enviando chunk " + chunkNumber + " con acción: " + ACCION + 
+                         " - SessionId: " + sessionId + ", Tamaño base64: " + chunkBase64.length());
+        enviadorPeticiones.enviar(new DTORequest(ACCION, payload));
 
         return futuroChunk;
     }
 
-    private CompletableFuture<String> finalizarSubida(String uploadId, String fileHash) {
+    // ===== MÉTODOS DE FINALIZACIÓN =====
+
+    private CompletableFuture<String> finalizarSubida(String sessionId, String fileHash) {
         final String ACCION = "endFileUpload";
         System.out.println("[GestionArchivos] Registrando manejador para finalizar subida: " + ACCION);
 
@@ -263,27 +268,54 @@ public class GestionArchivosImpl implements IGestionArchivos {
         gestorRespuesta.registrarManejador(ACCION, (DTOResponse res) -> {
             System.out.println("[GestionArchivos] Respuesta recibida para " + ACCION + " - Exitoso: " + res.fueExitoso());
             if (res.fueExitoso()) {
-                String fileName = gson.fromJson(gson.toJson(res.getData()), FileNameResponse.class).fileName;
-                System.out.println("[GestionArchivos] Subida finalizada. Nombre del archivo: " + fileName);
-                futuroFinal.complete(fileName);
+                String archivoId = gson.fromJson(gson.toJson(res.getData()), ArchivoIdResponse.class).archivoId;
+                System.out.println("[GestionArchivos] Subida finalizada. Archivo ID: " + archivoId);
+                futuroFinal.complete(archivoId);
             } else {
                 System.err.println("[GestionArchivos] ERROR al finalizar subida: " + res.getMessage());
                 futuroFinal.completeExceptionally(new RuntimeException(res.getMessage()));
             }
         });
 
-        DTOEndUpload payload = new DTOEndUpload(uploadId, fileHash);
-        System.out.println("[GestionArchivos] Enviando petición " + ACCION + " - UploadId: " + uploadId + ", Hash: " + fileHash);
+        DTOEndUpload payload = new DTOEndUpload(sessionId, fileHash);
+        System.out.println("[GestionArchivos] Enviando petición " + ACCION);
         enviadorPeticiones.enviar(new DTORequest(ACCION, payload));
 
         return futuroFinal;
     }
 
+    private CompletableFuture<String> finalizarSubidaParaRegistro(String sessionId, String fileHash) {
+        final String ACCION = "endFileUploadForRegistration";
+        System.out.println("[GestionArchivos] Registrando manejador para finalizar subida de registro: " + ACCION);
+
+        CompletableFuture<String> futuroFinal = new CompletableFuture<>();
+
+        gestorRespuesta.registrarManejador(ACCION, (DTOResponse res) -> {
+            System.out.println("[GestionArchivos] Respuesta recibida para " + ACCION + " - Exitoso: " + res.fueExitoso());
+            if (res.fueExitoso()) {
+                String archivoId = gson.fromJson(gson.toJson(res.getData()), ArchivoIdResponse.class).archivoId;
+                System.out.println("[GestionArchivos] Subida de registro finalizada. Archivo ID: " + archivoId);
+                futuroFinal.complete(archivoId);
+            } else {
+                System.err.println("[GestionArchivos] ERROR al finalizar subida de registro: " + res.getMessage());
+                futuroFinal.completeExceptionally(new RuntimeException(res.getMessage()));
+            }
+        });
+
+        DTOEndUpload payload = new DTOEndUpload(sessionId, fileHash);
+        System.out.println("[GestionArchivos] Enviando petición " + ACCION);
+        enviadorPeticiones.enviar(new DTORequest(ACCION, payload));
+
+        return futuroFinal;
+    }
+
+    // ===== MÉTODOS AUXILIARES =====
+
     private String getMimeType(File file) {
         try {
             String mimeType = Files.probeContentType(file.toPath());
-            System.out.println("[GestionArchivos] MIME type detectado: " + mimeType + " para archivo: " + file.getName());
-            return mimeType;
+            System.out.println("[GestionArchivos] MIME type detectado: " + mimeType);
+            return mimeType != null ? mimeType : "application/octet-stream";
         } catch (IOException e) {
             System.out.println("[GestionArchivos] No se pudo detectar MIME type, usando por defecto: application/octet-stream");
             return "application/octet-stream";
@@ -310,8 +342,20 @@ public class GestionArchivosImpl implements IGestionArchivos {
         }
     }
 
-    private static class UploadIdResponse { String uploadId; }
-    private static class FileNameResponse { String fileName; }
+    // ===== CLASES INTERNAS PARA RESPUESTAS =====
+
+    private static class SessionIdResponse { 
+        String sessionId; 
+        String uploadId; // Alias para compatibilidad
+    }
+    
+    private static class ArchivoIdResponse { 
+        String archivoId;
+        String id; // Alias para compatibilidad
+        String fileName; // Para backward compatibility
+    }
+
+    // ===== MÉTODOS DE DESCARGA (sin cambios) =====
 
     @Override
     public CompletableFuture<File> descargarArchivo(String fileId, File directorioDestino) {
@@ -326,7 +370,6 @@ public class GestionArchivosImpl implements IGestionArchivos {
                         return repositorioArchivo.buscarPorFileIdServidor(fileId)
                                 .thenApply(archivo -> {
                                     if (archivo != null && archivo.getEstado().equals("completo")) {
-                                        // Archivo completo en BD, crear archivo físico desde Base64
                                         try {
                                             File archivoFisico = new File(directorioDestino, archivo.getNombreArchivo());
                                             byte[] contenido = Base64.getDecoder().decode(archivo.getContenidoBase64());
@@ -337,7 +380,6 @@ public class GestionArchivosImpl implements IGestionArchivos {
                                             return archivoFisico;
                                         } catch (IOException e) {
                                             System.err.println("[GestionArchivos] Error al crear archivo desde BD: " + e.getMessage());
-                                            // Si falla, continuar con descarga normal
                                             return null;
                                         }
                                     }
@@ -348,11 +390,9 @@ public class GestionArchivosImpl implements IGestionArchivos {
                 })
                 .thenCompose(archivoExistente -> {
                     if (archivoExistente != null) {
-                        // Ya se completó desde BD local
                         return CompletableFuture.completedFuture(archivoExistente);
                     }
 
-                    // Descargar desde servidor
                     notificarObservadores("DESCARGA_INICIADA", fileId);
 
                     return solicitarInicioDescarga(fileId)
@@ -360,7 +400,6 @@ public class GestionArchivosImpl implements IGestionArchivos {
                                 System.out.println("[GestionArchivos] Info de descarga recibida - Archivo: " + downloadInfo.getFileName() +
                                                  ", Total chunks: " + downloadInfo.getTotalChunks());
 
-                                // Crear entrada en BD con estado "descargando"
                                 Archivo archivo = new Archivo(fileId, downloadInfo.getFileName(),
                                                              downloadInfo.getMimeType(), downloadInfo.getFileSize());
                                 archivo.setEstado("descargando");
@@ -381,8 +420,6 @@ public class GestionArchivosImpl implements IGestionArchivos {
                 .exceptionally(ex -> {
                     System.err.println("[GestionArchivos] ERROR en descarga: " + ex.getMessage());
                     ex.printStackTrace();
-
-                    // Actualizar estado a error en BD
                     repositorioArchivo.actualizarEstado(fileId, "error");
                     notificarObservadores("DESCARGA_ERROR", ex.getMessage());
                     futuroDescarga.completeExceptionally(ex);
@@ -409,12 +446,9 @@ public class GestionArchivosImpl implements IGestionArchivos {
                 solicitarChunk(downloadInfo.getDownloadId(), chunkNumber)
                     .thenAccept(chunkData -> {
                         chunks.add(chunkData);
-
-                        // Calcular progreso
                         int progreso = (chunkNumber * 100) / downloadInfo.getTotalChunks();
                         System.out.println("[GestionArchivos] Chunk " + chunkNumber + "/" +
                                          downloadInfo.getTotalChunks() + " recibido (" + progreso + "%)");
-
                         notificarObservadores("DESCARGA_PROGRESO", progreso);
                     })
             );
@@ -422,22 +456,18 @@ public class GestionArchivosImpl implements IGestionArchivos {
 
         futuroChunkActual.thenRun(() -> {
             try {
-                // Ensamblar todos los chunks en el archivo final
                 try (FileOutputStream fos = new FileOutputStream(archivoDestino)) {
                     for (byte[] chunk : chunks) {
                         fos.write(chunk);
                     }
                 }
 
-                // Calcular contenido completo en Base64 para la BD
                 byte[] contenidoCompleto = Files.readAllBytes(archivoDestino.toPath());
                 String contenidoBase64 = Base64.getEncoder().encodeToString(contenidoCompleto);
                 String hashCalculado = calcularHashSHA256(contenidoCompleto);
 
-                // Actualizar archivo en BD con contenido completo
                 repositorioArchivo.actualizarContenido(fileId, contenidoBase64)
                         .thenRun(() -> {
-                            // Actualizar hash
                             repositorioArchivo.buscarPorFileIdServidor(fileId)
                                     .thenAccept(archivo -> {
                                         archivo.setHashSHA256(hashCalculado);
@@ -465,7 +495,7 @@ public class GestionArchivosImpl implements IGestionArchivos {
 
     private CompletableFuture<byte[]> solicitarChunk(String downloadId, int chunkNumber) {
         final String ACCION_RESPUESTA = "downloadFileChunk_" + downloadId + "_" + chunkNumber;
-        System.out.println("[GestionArchivos] Solicitando chunk " + chunkNumber + " para downloadId: " + downloadId);
+        System.out.println("[GestionArchivos] Solicitando chunk " + chunkNumber);
 
         CompletableFuture<byte[]> futuroChunk = new CompletableFuture<>();
 
@@ -483,7 +513,6 @@ public class GestionArchivosImpl implements IGestionArchivos {
         });
 
         DTORequestChunk payload = new DTORequestChunk(downloadId, chunkNumber);
-        System.out.println("[GestionArchivos] Enviando petición requestFileChunk - Chunk: " + chunkNumber);
         enviadorPeticiones.enviar(new DTORequest("requestFileChunk", payload));
 
         return futuroChunk;
@@ -491,7 +520,7 @@ public class GestionArchivosImpl implements IGestionArchivos {
 
     private CompletableFuture<DTODownloadInfo> solicitarInicioDescarga(String fileId) {
         final String ACCION = "startFileDownload";
-        System.out.println("[GestionArchivos] Solicitando inicio de descarga para fileId: " + fileId);
+        System.out.println("[GestionArchivos] Solicitando inicio de descarga");
 
         CompletableFuture<DTODownloadInfo> futuroInfo = new CompletableFuture<>();
 
@@ -499,8 +528,7 @@ public class GestionArchivosImpl implements IGestionArchivos {
             System.out.println("[GestionArchivos] Respuesta recibida para " + ACCION + " - Exitoso: " + res.fueExitoso());
             if (res.fueExitoso()) {
                 DTODownloadInfo downloadInfo = gson.fromJson(gson.toJson(res.getData()), DTODownloadInfo.class);
-                System.out.println("[GestionArchivos] DownloadInfo obtenido - ID: " + downloadInfo.getDownloadId() +
-                                 ", Archivo: " + downloadInfo.getFileName());
+                System.out.println("[GestionArchivos] DownloadInfo obtenido - ID: " + downloadInfo.getDownloadId());
                 futuroInfo.complete(downloadInfo);
             } else {
                 System.err.println("[GestionArchivos] ERROR en " + ACCION + ": " + res.getMessage());
@@ -509,9 +537,9 @@ public class GestionArchivosImpl implements IGestionArchivos {
         });
 
         DTOStartDownload payload = new DTOStartDownload(fileId);
-        System.out.println("[GestionArchivos] Enviando petición " + ACCION + " - FileId: " + fileId);
         enviadorPeticiones.enviar(new DTORequest(ACCION, payload));
 
         return futuroInfo;
     }
 }
+

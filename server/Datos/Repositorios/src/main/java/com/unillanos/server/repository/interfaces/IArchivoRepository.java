@@ -45,7 +45,7 @@ public interface IArchivoRepository {
      * Obtiene archivos de un usuario filtrados por tipo.
      *
      * @param usuarioId ID del usuario
-     * @param tipo Tipo de archivo (IMAGEN, AUDIO, DOCUMENTO)
+     * @param tipo Tipo de archivo (IMAGE, AUDIO, DOCUMENT)
      * @param limit Número máximo de resultados
      * @param offset Desplazamiento inicial
      * @return Lista de archivos filtrados ordenados por fecha descendente
@@ -85,4 +85,3 @@ public interface IArchivoRepository {
      */
     void deleteById(String id);
 }
-

@@ -35,6 +35,12 @@ public class UsuarioMapper {
             usuario.setFechaRegistro(fechaRegistro.toLocalDateTime());
         }
         
+        // Mapear ultimo_acceso
+        Timestamp ultimoAcceso = rs.getTimestamp("ultimo_acceso");
+        if (ultimoAcceso != null) {
+            usuario.setUltimoAcceso(ultimoAcceso.toLocalDateTime());
+        }
+
         // Convertir String a EstadoUsuario enum
         String estadoStr = rs.getString("estado");
         usuario.setEstado(EstadoUsuario.fromString(estadoStr));
@@ -42,4 +48,3 @@ public class UsuarioMapper {
         return usuario;
     }
 }
-

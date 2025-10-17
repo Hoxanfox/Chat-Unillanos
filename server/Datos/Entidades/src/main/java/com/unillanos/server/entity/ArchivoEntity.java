@@ -13,7 +13,7 @@ public class ArchivoEntity {
     private String nombreOriginal;          // Nombre original del archivo
     private String nombreAlmacenado;        // Nombre UUID en disco
     private String tipoMime;                // Tipo MIME
-    private TipoArchivo tipoArchivo;        // IMAGEN, AUDIO, DOCUMENTO
+    private TipoArchivo tipoArchivo;        // IMAGE, AUDIO, DOCUMENT
     private String hashSha256;              // Hash SHA-256 para deduplicación
     private long tamanoBytes;               // Tamaño en bytes
     private String rutaAlmacenamiento;      // Ruta relativa en el sistema de archivos

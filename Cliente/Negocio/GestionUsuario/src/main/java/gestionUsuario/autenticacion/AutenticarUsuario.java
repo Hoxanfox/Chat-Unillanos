@@ -73,18 +73,20 @@ public class AutenticarUsuario implements IAutenticarUsuario {
     @Override
     public CompletableFuture<Boolean> autenticar(DTOAutenticacion dto) {
         CompletableFuture<Boolean> resultadoFuturo = new CompletableFuture<>();
-        final String ACCION = "authenticateUser";
+        final String ACCION_ENVIADA = "authenticateUser";
+        final String ACCION_RESPUESTA = "login"; // El servidor responde con esta acción
 
         // Notificar inicio de autenticación
         notificarObservadores("AUTENTICACION_INICIADA", dto.getEmailUsuario());
 
-        gestorRespuesta.registrarManejador(ACCION, (DTOResponse respuesta) -> {
+        // Manejador común para procesar la respuesta
+        java.util.function.Consumer<DTOResponse> procesarRespuesta = (DTOResponse respuesta) -> {
             if (respuesta.fueExitoso()) {
                 try {
                     // Extraer datos del servidor
                     Map<String, Object> datosUsuario = gson.fromJson(gson.toJson(respuesta.getData()), Map.class);
 
-                    UUID userId = UUID.fromString((String) datosUsuario.get("userId"));
+                    UUID userId = UUID.fromString((String) datosUsuario.get("id"));
                     String nombre = (String) datosUsuario.get("nombre");
                     String email = (String) datosUsuario.get("email");
                     String photoId = (String) datosUsuario.get("photoId");
@@ -92,7 +94,7 @@ public class AutenticarUsuario implements IAutenticarUsuario {
                     String fechaRegistroStr = (String) datosUsuario.get("fechaRegistro");
 
                     if (userId == null || userId.toString().isEmpty()) {
-                        throw new Exception("La respuesta del servidor no contenía un 'userId' válido.");
+                        throw new Exception("La respuesta del servidor no contenía un 'id' válido.");
                     }
 
                     // Verificar estado del usuario
@@ -106,7 +108,7 @@ public class AutenticarUsuario implements IAutenticarUsuario {
                     // Convertir fecha de registro
                     LocalDateTime fechaRegistro = null;
                     if (fechaRegistroStr != null) {
-                        Date fecha = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").parse(fechaRegistroStr);
+                        Date fecha = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").parse(fechaRegistroStr);
                         fechaRegistro = fecha.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
                     }
 
@@ -160,9 +162,13 @@ public class AutenticarUsuario implements IAutenticarUsuario {
                 notificarObservadores("AUTENTICACION_ERROR", mensajeError);
                 resultadoFuturo.complete(false);
             }
-        });
+        };
 
-        DTORequest peticion = new DTORequest(ACCION, dto);
+        // Registrar AMBOS manejadores (por si acaso cambia el servidor)
+        gestorRespuesta.registrarManejador(ACCION_ENVIADA, procesarRespuesta);
+        gestorRespuesta.registrarManejador(ACCION_RESPUESTA, procesarRespuesta);
+
+        DTORequest peticion = new DTORequest(ACCION_ENVIADA, dto);
         enviadorPeticiones.enviar(peticion);
         return resultadoFuturo;
     }

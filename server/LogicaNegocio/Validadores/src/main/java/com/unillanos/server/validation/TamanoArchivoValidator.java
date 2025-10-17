@@ -10,7 +10,7 @@ import com.unillanos.server.exception.ValidationException;
 public class TamanoArchivoValidator {
     
     /**
-     * Valida el tamaño del archivo según su tipo lógico (IMAGEN, AUDIO, DOCUMENTO).
+     * Valida el tamaño del archivo según su tipo lógico (IMAGE, AUDIO, DOCUMENT).
      */
     public static void validate(long tamanoBytes, String tipoLogico, ServerConfigProperties config) throws ValidationException {
         if (tamanoBytes <= 0) {
@@ -21,9 +21,9 @@ public class TamanoArchivoValidator {
         }
         long maxSize;
         switch (tipoLogico) {
-            case "IMAGEN" -> maxSize = config.getArchivos().getMaxTamanoImagen();
+            case "IMAGE" -> maxSize = config.getArchivos().getMaxTamanoImagen();
             case "AUDIO" -> maxSize = config.getArchivos().getMaxTamanoAudio();
-            case "DOCUMENTO" -> maxSize = config.getArchivos().getMaxTamanoDocumento();
+            case "DOCUMENT" -> maxSize = config.getArchivos().getMaxTamanoDocumento();
             default -> throw new ValidationException("Tipo de archivo no reconocido", "tipoArchivo");
         }
         if (tamanoBytes > maxSize) {
@@ -34,4 +34,3 @@ public class TamanoArchivoValidator {
         }
     }
 }
-

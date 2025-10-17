@@ -54,6 +54,7 @@
         <module>Infraestructura/Netty</module>
         <module>Infraestructura/Configuracion</module>
         <module>Infraestructura/Logs</module>
+        <module>LogicaNegocio/GestorArchivos</module>
     </modules>
 
     <dependencyManagement>
@@ -97,6 +98,11 @@
             <dependency>
                 <groupId>com.unillanos</groupId>
                 <artifactId>validadores</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.unillanos</groupId>
+                <artifactId>gestor-archivos</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -187,4 +193,3 @@
         </pluginManagement>
     </build>
 </project>
-

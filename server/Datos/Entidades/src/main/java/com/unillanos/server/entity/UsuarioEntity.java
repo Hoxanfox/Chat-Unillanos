@@ -13,13 +13,15 @@ public class UsuarioEntity {
     private String photoId;
     private String ipAddress;
     private LocalDateTime fechaRegistro;
+    private LocalDateTime ultimoAcceso;
     private EstadoUsuario estado; // ONLINE, OFFLINE, AWAY
 
     public UsuarioEntity() {
     }
 
     public UsuarioEntity(String id, String nombre, String email, String passwordHash,
-                        String photoId, String ipAddress, LocalDateTime fechaRegistro, EstadoUsuario estado) {
+                        String photoId, String ipAddress, LocalDateTime fechaRegistro,
+                        LocalDateTime ultimoAcceso, EstadoUsuario estado) {
         this.id = id;
         this.nombre = nombre;
         this.email = email;
@@ -27,6 +29,7 @@ public class UsuarioEntity {
         this.photoId = photoId;
         this.ipAddress = ipAddress;
         this.fechaRegistro = fechaRegistro;
+        this.ultimoAcceso = ultimoAcceso;
         this.estado = estado;
     }
 
@@ -87,6 +90,14 @@ public class UsuarioEntity {
         this.fechaRegistro = fechaRegistro;
     }
 
+    public LocalDateTime getUltimoAcceso() {
+        return ultimoAcceso;
+    }
+
+    public void setUltimoAcceso(LocalDateTime ultimoAcceso) {
+        this.ultimoAcceso = ultimoAcceso;
+    }
+
     public EstadoUsuario getEstado() {
         return estado;
     }
@@ -120,6 +131,7 @@ public class UsuarioEntity {
                 ", photoId='" + photoId + '\'' +
                 ", ipAddress='" + ipAddress + '\'' +
                 ", fechaRegistro=" + fechaRegistro +
+                ", ultimoAcceso=" + ultimoAcceso +
                 ", estado=" + estado +
                 '}';
     }

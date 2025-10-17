@@ -72,12 +72,14 @@ public class RegistroUsuarioImpl implements IRegistroUsuario {
     @Override
     public CompletableFuture<Boolean> registrar(DTORegistro dto, byte[] fotoBytes) {
         CompletableFuture<Boolean> resultadoFuturo = new CompletableFuture<>();
-        final String ACCION = "registerUser";
+        final String ACCION_ENVIADA = "registerUser";
+        final String ACCION_RESPUESTA = "register"; // Por si el servidor responde con otra acción
 
         // Notificar inicio de registro
         notificarObservadores("REGISTRO_INICIADO", dto);
 
-        gestorRespuesta.registrarManejador(ACCION, (DTOResponse respuesta) -> {
+        // Manejador común para procesar la respuesta
+        java.util.function.Consumer<DTOResponse> procesarRespuesta = (DTOResponse respuesta) -> {
             if (respuesta.fueExitoso()) {
                 try {
                     Map<String, String> datosServidor = gson.fromJson(gson.toJson(respuesta.getData()), Map.class);
@@ -124,9 +126,13 @@ public class RegistroUsuarioImpl implements IRegistroUsuario {
                 notificarObservadores("REGISTRO_ERROR", mensajeError);
                 resultadoFuturo.complete(false);
             }
-        });
+        };
 
-        DTORequest peticion = new DTORequest(ACCION, dto);
+        // Registrar AMBOS manejadores (por si el servidor cambia la acción de respuesta)
+        gestorRespuesta.registrarManejador(ACCION_ENVIADA, procesarRespuesta);
+        gestorRespuesta.registrarManejador(ACCION_RESPUESTA, procesarRespuesta);
+
+        DTORequest peticion = new DTORequest(ACCION_ENVIADA, dto);
         enviadorPeticiones.enviar(peticion);
         return resultadoFuturo;
     }

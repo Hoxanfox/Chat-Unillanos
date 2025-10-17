@@ -265,11 +265,9 @@ public class ArchivoService {
 
     private String subdirectorioPorTipo(TipoArchivo tipo) {
         return switch (tipo) {
-            case IMAGEN -> "imagenes";
+            case IMAGE -> "imagenes";
             case AUDIO -> "audios";
-            case DOCUMENTO -> "documentos";
+            case DOCUMENT -> "documentos";
         };
     }
 }
-
-

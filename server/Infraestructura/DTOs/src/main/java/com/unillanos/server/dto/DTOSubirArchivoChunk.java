@@ -2,10 +2,9 @@ package com.unillanos.server.dto;
 
 /**
  * DTO para subir un chunk individual de un archivo.
- * Se envía múltiples veces hasta completar la subida del archivo.
  */
 public class DTOSubirArchivoChunk {
-    
+
     private String sessionId;
     private String usuarioId;
     private String nombreArchivo;
@@ -20,9 +19,9 @@ public class DTOSubirArchivoChunk {
     public DTOSubirArchivoChunk() {}
 
     // Constructor con parámetros
-    public DTOSubirArchivoChunk(String sessionId, String usuarioId, String nombreArchivo, 
-                               String tipoMime, long tamanoTotal, int numeroChunk, 
-                               int totalChunks, String base64ChunkData, String hashChunk) {
+    public DTOSubirArchivoChunk(String sessionId, String usuarioId, String nombreArchivo,
+                                String tipoMime, long tamanoTotal, int numeroChunk,
+                                int totalChunks, String base64ChunkData, String hashChunk) {
         this.sessionId = sessionId;
         this.usuarioId = usuarioId;
         this.nombreArchivo = nombreArchivo;
@@ -113,12 +112,9 @@ public class DTOSubirArchivoChunk {
                 "sessionId='" + sessionId + '\'' +
                 ", usuarioId='" + usuarioId + '\'' +
                 ", nombreArchivo='" + nombreArchivo + '\'' +
-                ", tipoMime='" + tipoMime + '\'' +
-                ", tamanoTotal=" + tamanoTotal +
                 ", numeroChunk=" + numeroChunk +
                 ", totalChunks=" + totalChunks +
-                ", hashChunk='" + hashChunk + '\'' +
-                ", base64ChunkDataLength=" + (base64ChunkData != null ? base64ChunkData.length() : 0) +
                 '}';
     }
 }
+

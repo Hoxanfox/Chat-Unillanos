@@ -7,7 +7,12 @@ FLUSH PRIVILEGES;
 
 USE chat_unillanos;
 
+-- ============================================================================
+-- TABLAS DE ENTIDADES PRINCIPALES
+-- ============================================================================
+
 -- Tabla: usuarios
+-- Almacena la información de todos los usuarios del sistema
 CREATE TABLE IF NOT EXISTS usuarios (
     id VARCHAR(36) PRIMARY KEY,
     nombre_usuario VARCHAR(100) NOT NULL,
@@ -23,6 +28,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tabla: canales
+-- Almacena los canales de comunicación grupal
 CREATE TABLE IF NOT EXISTS canales (
     id VARCHAR(36) PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL UNIQUE,
@@ -35,7 +41,8 @@ CREATE TABLE IF NOT EXISTS canales (
     INDEX idx_creador (creador_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tabla: canal_miembros (relación N:M entre usuarios y canales)
+-- Tabla: canal_miembros
+-- Relación N:M entre usuarios y canales con roles
 CREATE TABLE IF NOT EXISTS canal_miembros (
     canal_id VARCHAR(36) NOT NULL,
     usuario_id VARCHAR(36) NOT NULL,
@@ -48,7 +55,8 @@ CREATE TABLE IF NOT EXISTS canal_miembros (
     INDEX idx_usuario (usuario_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tabla: mensajes (unificada para mensajes directos y de canal)
+-- Tabla: mensajes
+-- Almacena mensajes directos y de canal (unificada)
 CREATE TABLE IF NOT EXISTS mensajes (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     remitente_id VARCHAR(36) NOT NULL,
@@ -77,6 +85,7 @@ CREATE TABLE IF NOT EXISTS mensajes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Tabla: archivos
+-- Almacena metadata de archivos multimedia (imágenes, audios, documentos)
 CREATE TABLE IF NOT EXISTS archivos (
     id VARCHAR(36) PRIMARY KEY,
     nombre_original VARCHAR(255) NOT NULL,
@@ -86,7 +95,7 @@ CREATE TABLE IF NOT EXISTS archivos (
     hash_sha256 VARCHAR(64) NOT NULL UNIQUE,
     tamano_bytes BIGINT NOT NULL,
     ruta_almacenamiento VARCHAR(500) NOT NULL,
-    usuario_id VARCHAR(36) NOT NULL,
+    usuario_id VARCHAR(36) NULL,  -- NULL permitido para archivos de registro
     fecha_subida TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
     INDEX idx_hash (hash_sha256),
@@ -94,7 +103,12 @@ CREATE TABLE IF NOT EXISTS archivos (
     INDEX idx_tipo_archivo (tipo_archivo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ============================================================================
+-- TABLAS DE SOPORTE Y AUDITORÍA
+-- ============================================================================
+
 -- Tabla: logs_sistema
+-- Registra eventos del sistema para auditoría y debugging
 CREATE TABLE IF NOT EXISTS logs_sistema (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -109,25 +123,8 @@ CREATE TABLE IF NOT EXISTS logs_sistema (
     INDEX idx_usuario (usuario_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tabla: chunk_sessions (para subida de archivos por trozos)
-CREATE TABLE IF NOT EXISTS chunk_sessions (
-    session_id VARCHAR(36) PRIMARY KEY,
-    usuario_id VARCHAR(36) NOT NULL,
-    nombre_archivo VARCHAR(255) NOT NULL,
-    tipo_mime VARCHAR(100) NOT NULL,
-    tamano_total BIGINT NOT NULL,
-    total_chunks INT NOT NULL,
-    chunks_recibidos TEXT,  -- JSON array [0,1,2,...]
-    fecha_inicio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    ultima_actividad TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    estado VARCHAR(20) DEFAULT 'ACTIVA',
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
-    INDEX idx_usuario (usuario_id),
-    INDEX idx_estado (estado),
-    INDEX idx_ultima_actividad (ultima_actividad)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 -- Tabla: notificaciones
+-- Almacena notificaciones para usuarios (mensajes, invitaciones, etc.)
 CREATE TABLE IF NOT EXISTS notificaciones (
     id VARCHAR(36) PRIMARY KEY,
     usuario_id VARCHAR(36) NOT NULL,
@@ -149,7 +146,8 @@ CREATE TABLE IF NOT EXISTS notificaciones (
     INDEX idx_timestamp (timestamp)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tabla: contactos (relaciones de amistad)
+-- Tabla: contactos
+-- Relaciones de amistad entre usuarios
 CREATE TABLE IF NOT EXISTS contactos (
     id VARCHAR(36) PRIMARY KEY,
     usuario_id VARCHAR(36) NOT NULL,
@@ -166,7 +164,10 @@ CREATE TABLE IF NOT EXISTS contactos (
     INDEX idx_estado (estado)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Datos de prueba (opcional, para desarrollo)
+-- ============================================================================
+-- DATOS INICIALES
+-- ============================================================================
+
 -- Usuario de prueba: admin@unillanos.edu.co / Admin123!
 INSERT INTO usuarios (id, nombre_usuario, email, password_hash, estado) 
 VALUES (
@@ -179,4 +180,4 @@ VALUES (
 
 -- Log de inicialización del sistema
 INSERT INTO logs_sistema (tipo, accion, detalles)
-VALUES ('SYSTEM', 'INIT_DB', 'Base de datos inicializada correctamente');
+VALUES ('SYSTEM', 'INIT_DB', 'Base de datos inicializada correctamente - Tabla chunk_sessions eliminada');

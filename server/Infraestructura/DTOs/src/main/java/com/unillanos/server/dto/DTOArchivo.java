@@ -8,7 +8,7 @@ public class DTOArchivo {
     private String id;                     // UUID del archivo
     private String nombreOriginal;         // Nombre original del archivo
     private String tipoMime;               // Tipo MIME
-    private String tipoArchivo;            // "IMAGEN", "AUDIO", "DOCUMENTO"
+    private String tipoArchivo;            // "IMAGE", "AUDIO", "DOCUMENT"
     private long tamanoBytes;              // Tamaño en bytes
     private String hashSha256;             // Hash SHA-256 del archivo
     private boolean duplicado;             // Si es un archivo duplicado
@@ -131,4 +131,3 @@ public class DTOArchivo {
                 '}';
     }
 }
-

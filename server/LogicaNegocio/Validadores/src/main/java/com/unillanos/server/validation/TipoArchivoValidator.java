@@ -61,18 +61,17 @@ public class TipoArchivoValidator {
     }
     
     /**
-     * Determina el tipo de archivo lógico (IMAGEN, AUDIO, DOCUMENTO) según el MIME type.
+     * Determina el tipo de archivo lógico (IMAGE, AUDIO, DOCUMENT) según el MIME type.
      * Retorna el tipo como String para evitar dependencias con otras capas.
      */
     public static String detectarTipo(String tipoMime) {
         if (MIME_IMAGEN.contains(tipoMime)) {
-            return "IMAGEN";
+            return "IMAGE";
         } else if (MIME_AUDIO.contains(tipoMime)) {
             return "AUDIO";
         } else if (MIME_DOCUMENTO.contains(tipoMime)) {
-            return "DOCUMENTO";
+            return "DOCUMENT";
         }
         return null;
     }
 }
-

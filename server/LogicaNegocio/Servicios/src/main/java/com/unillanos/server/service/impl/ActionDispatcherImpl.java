@@ -30,13 +30,13 @@ public class ActionDispatcherImpl implements IActionDispatcher {
     private final CanalService canalService;
     private final MensajeriaService mensajeriaService;
     private final ArchivoService archivoService;
-    private final ChunkingService chunkingService;
     private final NotificationManager notificationManager;
     private final AdminUsersService adminUsersService;
     private final ConnectionManager connectionManager;
     private final NotificationService notificationService;
     private final ContactService contactService;
     private final Gson gson;
+    private final FileTransferService fileTransferService;
 
     public ActionDispatcherImpl(GlobalExceptionHandler exceptionHandler, 
                                 LoggerService loggerService,
@@ -44,24 +44,24 @@ public class ActionDispatcherImpl implements IActionDispatcher {
                                 CanalService canalService,
                                 MensajeriaService mensajeriaService,
                                 ArchivoService archivoService,
-                                ChunkingService chunkingService,
                                 NotificationManager notificationManager,
                                 AdminUsersService adminUsersService,
                                 ConnectionManager connectionManager,
                                 NotificationService notificationService,
-                                ContactService contactService) {
+                                ContactService contactService,
+                                FileTransferService fileTransferService) {
         this.exceptionHandler = exceptionHandler;
         this.loggerService = loggerService;
         this.autenticacionService = autenticacionService;
         this.canalService = canalService;
         this.mensajeriaService = mensajeriaService;
         this.archivoService = archivoService;
-        this.chunkingService = chunkingService;
         this.notificationManager = notificationManager;
         this.adminUsersService = adminUsersService;
         this.connectionManager = connectionManager;
         this.notificationService = notificationService;
         this.contactService = contactService;
+        this.fileTransferService = fileTransferService;
         this.gson = new Gson();
     }
 
@@ -121,19 +121,15 @@ public class ActionDispatcherImpl implements IActionDispatcher {
                 case "descargarArchivo" -> handleDescargarArchivo(request);
                 case "listarArchivos" -> handleListarArchivos(request);
                 
-                
-                // --- ACCIONES DE SUBIDA DE ARCHIVOS (Cliente) ---
-                case "startFileUpload" -> handleStartFileUpload(request, ctx);
-                case "endFileUpload" -> handleEndFileUpload(request);
-                
-                // --- ACCIONES DE SUBIDA DE ARCHIVOS (Solo para usuarios autenticados) ---
-                case "uploadFileChunk" -> handleUploadFileChunk(request, ctx);
-                
-                // --- ACCIONES DE SUBIDA DE ARCHIVOS PARA REGISTRO (Sin autenticación) ---
-                case "uploadFileForRegistration" -> handleUploadFileForRegistration(request);
-                case "uploadFileChunkForRegistration" -> handleUploadFileChunkForRegistration(request);
-                case "endFileUploadForRegistration" -> handleEndFileUploadForRegistration(request);
-                
+                // --- ACCIONES DE TRANSFERENCIA DE ARCHIVOS POR CHUNKS ---
+                case "startFileUpload" -> fileTransferService.startFileUpload(request, ctx);
+                case "uploadFileChunk" -> fileTransferService.uploadFileChunk(request, ctx);
+                case "endFileUpload" -> fileTransferService.endFileUpload(request, ctx);
+                case "startFileDownload" -> fileTransferService.startFileDownload(request, ctx);
+                case "requestFileChunk" -> fileTransferService.requestFileChunk(request, ctx);
+                case "uploadFileForRegistration" -> fileTransferService.uploadFileForRegistration(request, ctx);
+                case "getFileTransferStats" -> fileTransferService.getFileTransferStats(request, ctx);
+
                 // --- ACCIONES DE NOTIFICACIONES ---
                 case "suscribir_notificaciones" -> handleSuscribirNotificaciones(request, ctx);
                 case "desuscribir_notificaciones" -> handleDesuscribirNotificaciones(request);
@@ -402,218 +398,6 @@ public class ActionDispatcherImpl implements IActionDispatcher {
     private DTOResponse handleMarcarMensajeLeido(DTORequest request) {
         DTOMarcarMensajeLeido dto = gson.fromJson(gson.toJson(request.getPayload()), DTOMarcarMensajeLeido.class);
         return mensajeriaService.marcarComoLeido(dto);
-    }
-
-    /**
-     * Maneja la acción startFileUpload del cliente.
-     * Adapta el payload del cliente al formato esperado por el servidor.
-     *
-     * @param request DTORequest con los datos de inicio de subida del cliente
-     * @param ctx Contexto de Netty para obtener el userId
-     * @return DTOResponse con el resultado de la operación
-     */
-    private DTOResponse handleStartFileUpload(DTORequest request, ChannelHandlerContext ctx) {
-        try {
-            // Obtener el userId del contexto de conexión
-            String userId = connectionManager.getUserIdByContext(ctx);
-            if (userId == null) {
-                return DTOResponse.error("startFileUpload", "Usuario no autenticado");
-            }
-
-            // Deserializar el payload del cliente
-            @SuppressWarnings("unchecked")
-            Map<String, Object> clientPayload = (Map<String, Object>) request.getPayload();
-            
-            String fileName = (String) clientPayload.get("fileName");
-            String fileMimeType = (String) clientPayload.get("fileMimeType");
-            
-            // Manejar tanto Integer como Double para totalChunks
-            Object totalChunksObj = clientPayload.get("totalChunks");
-            int totalChunks;
-            if (totalChunksObj instanceof Integer) {
-                totalChunks = (Integer) totalChunksObj;
-            } else if (totalChunksObj instanceof Double) {
-                totalChunks = ((Double) totalChunksObj).intValue();
-            } else {
-                return DTOResponse.error("startFileUpload", "totalChunks debe ser un número");
-            }
-            
-            if (fileName == null || fileMimeType == null || totalChunksObj == null) {
-                return DTOResponse.error("startFileUpload", "Faltan datos requeridos en el payload");
-            }
-            
-            // Calcular el tamaño total estimado (usando el mismo CHUNK_SIZE que el cliente: 512KB)
-            // En un escenario real, el cliente debería enviar el tamaño real
-            long estimatedSize = totalChunks * 1024 * 512; // 512 KB por chunk, igual que el cliente
-            
-            // Crear el DTO que espera el servidor
-            DTOIniciarSubida dto = new DTOIniciarSubida(
-                userId,
-                fileName,
-                fileMimeType,
-                estimatedSize,
-                totalChunks
-            );
-            
-            // Llamar al método existente
-            DTOResponse response = chunkingService.iniciarSubida(dto);
-            
-            // Cambiar la acción de la respuesta para que coincida con la petición del cliente
-            if ("success".equals(response.getStatus())) {
-                return DTOResponse.success("startFileUpload", response.getMessage(), response.getData());
-            } else {
-                return DTOResponse.error("startFileUpload", response.getMessage());
-            }
-            
-        } catch (Exception e) {
-            logger.error("Error al procesar startFileUpload", e);
-            return DTOResponse.error("startFileUpload", "Error interno del servidor: " + e.getMessage());
-        }
-    }
-
-
-    /**
-     * Maneja la subida de chunks de archivos.
-     * Requiere que el usuario esté autenticado.
-     *
-     * @param request DTORequest con los datos del chunk
-     * @param ctx Contexto de Netty para obtener el userId
-     * @return DTOResponse con el resultado de la operación
-     */
-    private DTOResponse handleUploadFileChunk(DTORequest request, ChannelHandlerContext ctx) {
-        try {
-            // Obtener el userId del contexto de conexión
-            String userId = connectionManager.getUserIdByContext(ctx);
-            if (userId == null) {
-                return DTOResponse.error("uploadFileChunk", "Usuario no autenticado");
-            }
-
-            // Deserializar el payload del cliente
-            @SuppressWarnings("unchecked")
-            Map<String, Object> clientPayload = (Map<String, Object>) request.getPayload();
-            
-            String uploadId = (String) clientPayload.get("uploadId");
-            Object chunkNumberObj = clientPayload.get("chunkNumber");
-            // El cliente envía chunkData_base64, pero también puede venir como chunkData
-            String chunkDataBase64 = (String) clientPayload.get("chunkData_base64");
-            if (chunkDataBase64 == null) {
-                chunkDataBase64 = (String) clientPayload.get("chunkData");
-            }
-            
-            // Validar campos requeridos
-            if (uploadId == null || chunkNumberObj == null || chunkDataBase64 == null) {
-                return DTOResponse.error("uploadFileChunk", "Faltan datos requeridos en el payload");
-            }
-            
-            // Manejar tanto Integer como Double para chunkNumber
-            int chunkNumber;
-            if (chunkNumberObj instanceof Integer) {
-                chunkNumber = (Integer) chunkNumberObj;
-            } else if (chunkNumberObj instanceof Double) {
-                chunkNumber = ((Double) chunkNumberObj).intValue();
-            } else {
-                return DTOResponse.error("uploadFileChunk", "chunkNumber debe ser un número");
-            }
-            
-            // El uploadId del cliente es el sessionId del servidor
-            String sessionId = uploadId;
-            
-            // Obtener información de la sesión para completar el DTO
-            DTOResponse sessionInfo = chunkingService.obtenerInformacionSesion(sessionId);
-            if (!"success".equals(sessionInfo.getStatus())) {
-                return DTOResponse.error("uploadFileChunk", "No se pudo obtener información de la sesión");
-            }
-            
-            // Extraer información de la sesión
-            @SuppressWarnings("unchecked")
-            Map<String, Object> sessionData = (Map<String, Object>) sessionInfo.getData();
-            String nombreArchivo = (String) sessionData.get("nombreArchivo");
-            String tipoMime = (String) sessionData.get("tipoMime");
-            Object tamanoTotalObj = sessionData.get("tamanoTotal");
-            Object totalChunksObj = sessionData.get("totalChunks");
-            
-            long tamanoTotal;
-            int totalChunks;
-            if (tamanoTotalObj instanceof Integer) {
-                tamanoTotal = ((Integer) tamanoTotalObj).longValue();
-            } else if (tamanoTotalObj instanceof Long) {
-                tamanoTotal = (Long) tamanoTotalObj;
-            } else if (tamanoTotalObj instanceof Double) {
-                tamanoTotal = ((Double) tamanoTotalObj).longValue();
-            } else {
-                return DTOResponse.error("uploadFileChunk", "Tipo de datos inválido para tamanoTotal");
-            }
-            
-            if (totalChunksObj instanceof Integer) {
-                totalChunks = (Integer) totalChunksObj;
-            } else if (totalChunksObj instanceof Double) {
-                totalChunks = ((Double) totalChunksObj).intValue();
-            } else {
-                return DTOResponse.error("uploadFileChunk", "Tipo de datos inválido para totalChunks");
-            }
-            
-            // Crear el DTO completo que espera el servidor
-            DTOSubirArchivoChunk dto = new DTOSubirArchivoChunk();
-            dto.setSessionId(sessionId);
-            dto.setUsuarioId(userId); // Usar el userId real del usuario autenticado
-            dto.setNombreArchivo(nombreArchivo);
-            dto.setTipoMime(tipoMime);
-            dto.setTamanoTotal(tamanoTotal);
-            dto.setNumeroChunk(chunkNumber);
-            dto.setTotalChunks(totalChunks);
-            dto.setBase64ChunkData(chunkDataBase64);
-            dto.setHashChunk(""); // Hash vacío para simplificar
-            
-            // Llamar al método normal de subida de chunks
-            DTOResponse response = chunkingService.subirChunk(dto);
-            
-            // Generar la acción específica que espera el cliente
-            String clientExpectedAction = "uploadFileChunk_" + uploadId + "_" + chunkNumber;
-            
-            // Cambiar la acción de la respuesta para que coincida con la petición del cliente
-            if ("success".equals(response.getStatus())) {
-                return DTOResponse.success(clientExpectedAction, response.getMessage(), response.getData());
-            } else {
-                return DTOResponse.error(clientExpectedAction, response.getMessage());
-            }
-            
-        } catch (Exception e) {
-            logger.error("Error al procesar uploadFileChunk", e);
-            return DTOResponse.error("uploadFileChunk", "Error interno del servidor: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Maneja la finalización de la subida de archivos.
-     * Ensambla los chunks y crea la entrada en la base de datos.
-     */
-    private DTOResponse handleEndFileUpload(DTORequest request) {
-        try {
-            // Deserializar el payload del cliente
-            @SuppressWarnings("unchecked")
-            Map<String, String> clientPayload = (Map<String, String>) request.getPayload();
-            
-            String uploadId = clientPayload.get("uploadId");
-            String fileHash = clientPayload.get("fileHash_sha256"); // El cliente envía fileHash_sha256
-            
-            if (uploadId == null || fileHash == null) {
-                return DTOResponse.error("endFileUpload", "Faltan datos requeridos en el payload");
-            }
-            
-            // Llamar al servicio de chunking para finalizar la subida
-            DTOResponse response = chunkingService.finalizarSubida(uploadId);
-            
-            // Cambiar la acción de la respuesta para que coincida con la petición del cliente
-            if ("success".equals(response.getStatus())) {
-                return DTOResponse.success("endFileUpload", response.getMessage(), response.getData());
-            } else {
-                return DTOResponse.error("endFileUpload", response.getMessage());
-            }
-            
-        } catch (Exception e) {
-            logger.error("Error al procesar endFileUpload", e);
-            return DTOResponse.error("endFileUpload", "Error interno del servidor: " + e.getMessage());
-        }
     }
 
     // ===== NUEVOS MÉTODOS PARA FASE 1 =====
@@ -887,160 +671,4 @@ public class ActionDispatcherImpl implements IActionDispatcher {
                 mensaje.getFileName()
         );
     }
-
-    // --- HANDLERS DE SUBIDA DE ARCHIVOS PARA REGISTRO ---
-
-    /**
-     * Maneja la acción uploadFileForRegistration del cliente.
-     * Permite iniciar la subida de archivos durante el proceso de registro sin autenticación.
-     *
-     * @param request DTORequest con los datos de inicio de subida del cliente
-     * @return DTOResponse con el resultado de la operación
-     */
-    private DTOResponse handleUploadFileForRegistration(DTORequest request) {
-        try {
-            // Deserializar el payload del cliente
-            @SuppressWarnings("unchecked")
-            Map<String, Object> clientPayload = (Map<String, Object>) request.getPayload();
-            
-            String fileName = (String) clientPayload.get("fileName");
-            String fileMimeType = (String) clientPayload.get("fileMimeType");
-            
-            // Manejar tanto Integer como Double para totalChunks
-            Object totalChunksObj = clientPayload.get("totalChunks");
-            int totalChunks;
-            if (totalChunksObj instanceof Integer) {
-                totalChunks = (Integer) totalChunksObj;
-            } else if (totalChunksObj instanceof Double) {
-                totalChunks = ((Double) totalChunksObj).intValue();
-            } else {
-                return DTOResponse.error("uploadFileForRegistration", "totalChunks debe ser un número");
-            }
-            
-            if (fileName == null || fileMimeType == null || totalChunksObj == null) {
-                return DTOResponse.error("uploadFileForRegistration", "Faltan datos requeridos en el payload");
-            }
-            
-            // Calcular el tamaño total estimado (usando el mismo CHUNK_SIZE que el cliente: 512KB)
-            long estimatedSize = totalChunks * 1024 * 512; // 512 KB por chunk, igual que el cliente
-            
-            // Crear un usuario temporal para la subida (usaremos el fileName como identificador temporal)
-            String tempUserId = "temp_" + fileName.hashCode();
-            
-            // Crear el DTO que espera el servidor
-            DTOIniciarSubida dto = new DTOIniciarSubida(
-                tempUserId,
-                fileName,
-                fileMimeType,
-                estimatedSize,
-                totalChunks
-            );
-            
-            // Usar el método de chunking service para registro
-            return chunkingService.iniciarSubidaParaRegistro(dto);
-            
-        } catch (Exception e) {
-            logger.error("Error en handleUploadFileForRegistration: {}", e.getMessage(), e);
-            return DTOResponse.error("uploadFileForRegistration", "Error interno del servidor");
-        }
-    }
-
-    /**
-     * Maneja la acción uploadFileChunkForRegistration del cliente.
-     * Permite subir chunks de archivos durante el proceso de registro sin autenticación.
-     *
-     * @param request DTORequest con los datos del chunk del cliente
-     * @return DTOResponse con el resultado de la operación
-     */
-    private DTOResponse handleUploadFileChunkForRegistration(DTORequest request) {
-        try {
-            // Deserializar el payload del cliente
-            @SuppressWarnings("unchecked")
-            Map<String, Object> clientPayload = (Map<String, Object>) request.getPayload();
-            
-            String sessionId = (String) clientPayload.get("sessionId");
-            String chunkData = (String) clientPayload.get("chunkData_base64");
-            
-            // Manejar tanto Integer como Double para numeroChunk
-            Object numeroChunkObj = clientPayload.get("numeroChunk");
-            int numeroChunk;
-            if (numeroChunkObj instanceof Integer) {
-                numeroChunk = (Integer) numeroChunkObj;
-            } else if (numeroChunkObj instanceof Double) {
-                numeroChunk = ((Double) numeroChunkObj).intValue();
-            } else {
-                return DTOResponse.error("uploadFileChunkForRegistration", "numeroChunk debe ser un número");
-            }
-            
-            // Manejar tanto Integer como Double para totalChunks
-            Object totalChunksObj = clientPayload.get("totalChunks");
-            int totalChunks;
-            if (totalChunksObj instanceof Integer) {
-                totalChunks = (Integer) totalChunksObj;
-            } else if (totalChunksObj instanceof Double) {
-                totalChunks = ((Double) totalChunksObj).intValue();
-            } else {
-                return DTOResponse.error("uploadFileChunkForRegistration", "totalChunks debe ser un número");
-            }
-            
-            if (sessionId == null || chunkData == null || numeroChunkObj == null || totalChunksObj == null) {
-                return DTOResponse.error("uploadFileChunkForRegistration", "Faltan datos requeridos en el payload");
-            }
-            
-            // Crear el DTO que espera el servidor
-            DTOSubirArchivoChunk dto = new DTOSubirArchivoChunk(
-                sessionId,
-                null, // userId es null para registro
-                null, // nombreArchivo es null para registro
-                null, // tipoMime es null para registro
-                0L,   // tamanoTotal es 0 para registro
-                numeroChunk,
-                totalChunks,
-                chunkData,
-                null  // hashChunk es null para registro (simplificado)
-            );
-            
-            // Usar el método de chunking service para registro
-            return chunkingService.subirChunkParaRegistro(dto);
-            
-        } catch (Exception e) {
-            logger.error("Error en handleUploadFileChunkForRegistration: {}", e.getMessage(), e);
-            return DTOResponse.error("uploadFileChunkForRegistration", "Error interno del servidor");
-        }
-    }
-
-    /**
-     * Maneja la acción endFileUploadForRegistration del cliente.
-     * Permite finalizar la subida de archivos durante el proceso de registro sin autenticación.
-     *
-     * @param request DTORequest con los datos de finalización de subida del cliente
-     * @return DTOResponse con el resultado de la operación
-     */
-    private DTOResponse handleEndFileUploadForRegistration(DTORequest request) {
-        try {
-            // Deserializar el payload del cliente
-            @SuppressWarnings("unchecked")
-            Map<String, Object> clientPayload = (Map<String, Object>) request.getPayload();
-            
-            String sessionId = (String) clientPayload.get("sessionId");
-            
-            if (sessionId == null) {
-                return DTOResponse.error("endFileUploadForRegistration", "sessionId es requerido");
-            }
-            
-            // Crear el DTO que espera el servidor
-            DTOEndUpload dto = new DTOEndUpload(
-                sessionId,
-                null  // userId es null para registro
-            );
-            
-            // Usar el método de chunking service para registro
-            return chunkingService.finalizarSubidaParaRegistro(dto);
-            
-        } catch (Exception e) {
-            logger.error("Error en handleEndFileUploadForRegistration: {}", e.getMessage(), e);
-            return DTOResponse.error("endFileUploadForRegistration", "Error interno del servidor");
-        }
-    }
 }
-
