@@ -10,5 +10,5 @@ public interface IControladorUsuario {
     CompletableFuture<DTOUsuario> cargarInformacionUsuarioLogueado();
     boolean haySesionActiva();
     String obtenerUserIdSesion();
-    void cerrarSesion();
+    CompletableFuture<Boolean> cerrarSesion(); // Cambiado de void a CompletableFuture<Boolean>
 }

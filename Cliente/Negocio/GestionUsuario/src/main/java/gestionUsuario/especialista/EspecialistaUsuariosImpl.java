@@ -35,12 +35,13 @@ public class EspecialistaUsuariosImpl implements IEspecialistaUsuarios {
             return null;
         }
 
-        // Conversión de Dominio -> DTO
+        // Conversión de Dominio -> DTO con estado
         DTOUsuario dto = new DTOUsuario(
                 usuario.getIdUsuario().toString(),
                 usuario.getNombre(),
                 usuario.getEmail(),
-                usuario.getPhotoIdServidor() // o el campo que corresponda en Usuario
+                usuario.getPhotoIdServidor(),
+                usuario.getEstado() // Incluir estado
         );
 
         System.out.println("✅ [EspecialistaUsuarios]: Usuario convertido a DTO: " + usuario.getNombre());
@@ -200,7 +201,10 @@ public class EspecialistaUsuariosImpl implements IEspecialistaUsuarios {
             throw new IllegalStateException("No se puede actualizar estado. Usuario no encontrado: " + idUsuario);
         }
 
-        repositorioUsuario.actualizarEstado(idUsuario, nuevoEstado);
-        System.out.println("✅ [EspecialistaUsuarios]: Estado actualizado correctamente.");
+        // Actualizar solo el estado
+        usuarioExistente.setEstado(nuevoEstado);
+        repositorioUsuario.actualizar(usuarioExistente);
+
+        System.out.println("✅ [EspecialistaUsuarios]: Estado actualizado correctamente a '" + nuevoEstado + "'");
     }
 }

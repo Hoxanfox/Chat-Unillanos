@@ -1,15 +1,19 @@
 package com.unillanos.server.netty.handler;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import com.unillanos.server.dto.DTORequest;
 import com.unillanos.server.dto.DTOResponse;
+import com.unillanos.server.netty.util.LocalDateTimeAdapter;
 import com.unillanos.server.service.impl.ConnectionManager;
 import com.unillanos.server.service.interfaces.IActionDispatcher;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.time.LocalDateTime;
 
 /**
  * Handler de Netty que procesa las peticiones de los clientes.
@@ -19,13 +23,17 @@ import org.slf4j.LoggerFactory;
 public class ClientRequestHandler extends ChannelInboundHandlerAdapter {
     
     private static final Logger logger = LoggerFactory.getLogger(ClientRequestHandler.class);
-    private final Gson gson = new Gson();
+    private final Gson gson;
     private final IActionDispatcher actionDispatcher;
     private final ConnectionManager connectionManager;
 
     public ClientRequestHandler(IActionDispatcher actionDispatcher, ConnectionManager connectionManager) {
         this.actionDispatcher = actionDispatcher;
         this.connectionManager = connectionManager;
+        // Configurar Gson con adaptador para LocalDateTime
+        this.gson = new GsonBuilder()
+                .registerTypeAdapter(LocalDateTime.class, new LocalDateTimeAdapter())
+                .create();
     }
 
     @Override
@@ -84,4 +92,3 @@ public class ClientRequestHandler extends ChannelInboundHandlerAdapter {
         ctx.close();
     }
 }
-

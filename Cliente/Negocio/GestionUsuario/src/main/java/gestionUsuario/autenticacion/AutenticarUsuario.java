@@ -90,15 +90,19 @@ public class AutenticarUsuario implements IAutenticarUsuario {
                     String nombre = (String) datosUsuario.get("nombre");
                     String email = (String) datosUsuario.get("email");
                     String photoId = (String) datosUsuario.get("photoId");
-                    String estado = (String) datosUsuario.get("estado");
+                    String estadoServidor = (String) datosUsuario.get("estado");
                     String fechaRegistroStr = (String) datosUsuario.get("fechaRegistro");
 
                     if (userId == null || userId.toString().isEmpty()) {
                         throw new Exception("La respuesta del servidor no contenía un 'id' válido.");
                     }
 
+                    // Mapear estado del servidor al formato de BD local
+                    // Servidor: ONLINE/OFFLINE/BANNED -> BD Local: activo/inactivo/baneado
+                    String estadoLocal = mapearEstadoServidor(estadoServidor);
+
                     // Verificar estado del usuario
-                    if ("baneado".equals(estado)) {
+                    if ("baneado".equals(estadoLocal)) {
                         String razon = datosUsuario.containsKey("razon") ? (String) datosUsuario.get("razon") : "Usuario baneado";
                         notificarObservadores("USUARIO_BANEADO", razon);
                         resultadoFuturo.complete(false);
@@ -121,7 +125,7 @@ public class AutenticarUsuario implements IAutenticarUsuario {
                         usuario = usuarioExistente;
                         usuario.setNombre(nombre);
                         usuario.setEmail(email);
-                        usuario.setEstado(estado);
+                        usuario.setEstado(estadoLocal); // Usar estado mapeado
                         usuario.setPhotoIdServidor(photoId);
                         especialistaUsuarios.actualizarUsuario(usuario);
                         System.out.println("✅ [AutenticarUsuario]: Usuario actualizado en BD local");
@@ -131,7 +135,7 @@ public class AutenticarUsuario implements IAutenticarUsuario {
                         usuario.setIdUsuario(userId);
                         usuario.setNombre(nombre);
                         usuario.setEmail(email);
-                        usuario.setEstado(estado);
+                        usuario.setEstado(estadoLocal); // Usar estado mapeado
                         usuario.setPhotoIdServidor(photoId);
                         usuario.setFechaRegistro(fechaRegistro);
                         especialistaUsuarios.guardarUsuario(usuario);
@@ -171,5 +175,29 @@ public class AutenticarUsuario implements IAutenticarUsuario {
         DTORequest peticion = new DTORequest(ACCION_ENVIADA, dto);
         enviadorPeticiones.enviar(peticion);
         return resultadoFuturo;
+    }
+
+    /**
+     * Mapea el estado del servidor al formato de la BD local.
+     * Servidor: ONLINE, OFFLINE, BANNED
+     * BD Local: activo, inactivo, baneado
+     */
+    private String mapearEstadoServidor(String estadoServidor) {
+        if (estadoServidor == null) {
+            return "activo"; // Default
+        }
+
+        switch (estadoServidor.toUpperCase()) {
+            case "ONLINE":
+                return "activo";
+            case "OFFLINE":
+                return "inactivo";
+            case "BANNED":
+            case "BANEADO":
+                return "baneado";
+            default:
+                System.out.println("⚠️ [AutenticarUsuario]: Estado desconocido del servidor: " + estadoServidor + ", usando 'activo' por defecto");
+                return "activo";
+        }
     }
 }

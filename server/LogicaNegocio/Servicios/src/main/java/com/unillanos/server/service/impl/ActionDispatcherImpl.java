@@ -1,6 +1,7 @@
 package com.unillanos.server.service.impl;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.unillanos.server.dto.*;
 import com.unillanos.server.dto.response.*;
 import com.unillanos.server.exception.ValidationException;
@@ -11,6 +12,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.net.InetSocketAddress;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +65,13 @@ public class ActionDispatcherImpl implements IActionDispatcher {
         this.notificationService = notificationService;
         this.contactService = contactService;
         this.fileTransferService = fileTransferService;
-        this.gson = new Gson();
+        // Configurar Gson con adaptador para LocalDateTime
+        this.gson = new GsonBuilder()
+                .registerTypeAdapter(LocalDateTime.class, (com.google.gson.JsonSerializer<LocalDateTime>) (src, typeOfSrc, context) ->
+                    new com.google.gson.JsonPrimitive(src.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)))
+                .registerTypeAdapter(LocalDateTime.class, (com.google.gson.JsonDeserializer<LocalDateTime>) (json, typeOfT, context) ->
+                    LocalDateTime.parse(json.getAsString(), DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                .create();
     }
 
     @Override
@@ -208,10 +217,10 @@ public class ActionDispatcherImpl implements IActionDispatcher {
      * Maneja la acción de logout.
      */
     private DTOResponse handleLogout(DTORequest request, String ipAddress) {
-        // El userId viene en el payload
+        // El userId viene en el payload como "usuarioId"
         @SuppressWarnings("unchecked")
         Map<String, String> payload = (Map<String, String>) request.getPayload();
-        String userId = payload.get("userId");
+        String userId = payload.get("usuarioId"); // Cambiado de "userId" a "usuarioId"
         return autenticacionService.logout(userId, ipAddress);
     }
 

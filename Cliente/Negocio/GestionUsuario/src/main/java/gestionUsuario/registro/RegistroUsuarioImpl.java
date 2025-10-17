@@ -73,7 +73,8 @@ public class RegistroUsuarioImpl implements IRegistroUsuario {
     public CompletableFuture<Boolean> registrar(DTORegistro dto, byte[] fotoBytes) {
         CompletableFuture<Boolean> resultadoFuturo = new CompletableFuture<>();
         final String ACCION_ENVIADA = "registerUser";
-        final String ACCION_RESPUESTA = "register"; // Por si el servidor responde con otra acción
+        final String ACCION_RESPUESTA_1 = "register"; // Posible respuesta del servidor
+        final String ACCION_RESPUESTA_2 = "registro"; // La que realmente envía el servidor
 
         // Notificar inicio de registro
         notificarObservadores("REGISTRO_INICIADO", dto);
@@ -82,11 +83,36 @@ public class RegistroUsuarioImpl implements IRegistroUsuario {
         java.util.function.Consumer<DTOResponse> procesarRespuesta = (DTOResponse respuesta) -> {
             if (respuesta.fueExitoso()) {
                 try {
-                    Map<String, String> datosServidor = gson.fromJson(gson.toJson(respuesta.getData()), Map.class);
-                    UUID userId = UUID.fromString(datosServidor.get("userId"));
-                    String fechaRegistroStr = datosServidor.get("fechaRegistro");
-                    Date fechaRegistro = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").parse(fechaRegistroStr);
-                    String photoId = datosServidor.get("photoId");
+                    Map<String, Object> datosServidor = gson.fromJson(gson.toJson(respuesta.getData()), Map.class);
+
+                    // El servidor envía diferentes nombres de campos
+                    String userIdStr = datosServidor.containsKey("userId")
+                        ? (String) datosServidor.get("userId")
+                        : (String) datosServidor.get("id");
+
+                    UUID userId = UUID.fromString(userIdStr);
+
+                    String fechaRegistroStr = (String) datosServidor.get("fechaRegistro");
+
+                    // Parsear fecha (servidor puede enviar diferentes formatos)
+                    Date fechaRegistro;
+                    try {
+                        fechaRegistro = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS").parse(fechaRegistroStr);
+                    } catch (Exception e1) {
+                        try {
+                            fechaRegistro = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").parse(fechaRegistroStr);
+                        } catch (Exception e2) {
+                            fechaRegistro = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").parse(fechaRegistroStr);
+                        }
+                    }
+
+                    String photoId = (String) datosServidor.get("photoId");
+
+                    // Mapear estado del servidor (puede venir como ONLINE/OFFLINE)
+                    String estadoServidor = datosServidor.containsKey("estado")
+                        ? (String) datosServidor.get("estado")
+                        : null;
+                    String estadoLocal = mapearEstadoServidor(estadoServidor);
 
                     // Convertir Date a LocalDateTime
                     LocalDateTime fechaRegistroLocal = fechaRegistro.toInstant()
@@ -98,7 +124,7 @@ public class RegistroUsuarioImpl implements IRegistroUsuario {
                     usuario.setIdUsuario(userId);
                     usuario.setNombre(dto.getName());
                     usuario.setEmail(dto.getEmail());
-                    usuario.setEstado("activo");
+                    usuario.setEstado(estadoLocal); // Usar estado mapeado
                     usuario.setFoto(fotoBytes);
                     usuario.setPhotoIdServidor(photoId);
                     usuario.setIp(dto.getIp());
@@ -128,12 +154,37 @@ public class RegistroUsuarioImpl implements IRegistroUsuario {
             }
         };
 
-        // Registrar AMBOS manejadores (por si el servidor cambia la acción de respuesta)
+        // Registrar TODOS los manejadores posibles (por si el servidor cambia la acción de respuesta)
         gestorRespuesta.registrarManejador(ACCION_ENVIADA, procesarRespuesta);
-        gestorRespuesta.registrarManejador(ACCION_RESPUESTA, procesarRespuesta);
+        gestorRespuesta.registrarManejador(ACCION_RESPUESTA_1, procesarRespuesta);
+        gestorRespuesta.registrarManejador(ACCION_RESPUESTA_2, procesarRespuesta);
 
         DTORequest peticion = new DTORequest(ACCION_ENVIADA, dto);
         enviadorPeticiones.enviar(peticion);
         return resultadoFuturo;
+    }
+
+    /**
+     * Mapea el estado del servidor al formato de la BD local.
+     * Servidor: ONLINE, OFFLINE, BANNED
+     * BD Local: activo, inactivo, baneado
+     */
+    private String mapearEstadoServidor(String estadoServidor) {
+        if (estadoServidor == null) {
+            return "activo"; // Default para nuevos registros
+        }
+
+        switch (estadoServidor.toUpperCase()) {
+            case "ONLINE":
+                return "activo";
+            case "OFFLINE":
+                return "inactivo";
+            case "BANNED":
+            case "BANEADO":
+                return "baneado";
+            default:
+                System.out.println("⚠️ [RegistroUsuario]: Estado desconocido del servidor: " + estadoServidor + ", usando 'activo' por defecto");
+                return "activo";
+        }
     }
 }

@@ -1,10 +1,11 @@
 package fachada.gestionUsuarios.session;
 
 import dto.vistaLobby.DTOUsuario;
+import java.util.concurrent.CompletableFuture;
 
 public interface IFachadaLobby {
     String obtenerUserIdSesion();
     boolean haySesionActiva();
-    DTOUsuario cargarInformacionUsuarioLogueado();  // Debe retornar DTOUsuario, no void
-    void cerrarSesion();
+    DTOUsuario cargarInformacionUsuarioLogueado();
+    CompletableFuture<Boolean> cerrarSesion();
 }

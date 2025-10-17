@@ -49,11 +49,12 @@ public class VistaLobby extends BorderPane {
         this.controladorNotificaciones = new ControladorNotificaciones();
         this.controladorConexion = new ControladorConexion();
 
-        // Cargar información del usuario logueado
-        cargarInformacionUsuario();
-
         // Crear componentes con sus controladores
-        FeatureHeader header = new FeatureHeader(this::cerrarSesion, this.controladorNotificaciones);
+        FeatureHeader header = new FeatureHeader(
+            this.controladorNotificaciones,
+            this.controladorUsuario,
+            this::redirigirAlLogin // Callback para logout como Runnable
+        );
         FeatureContactos contactos = new FeatureContactos(this::mostrarChatPrivado, this.controladorContactos);
         FeatureCanales canales = new FeatureCanales(this::mostrarVistaCanal, this::mostrarVistaCrearCanal, this.controladorCanales);
         this.panelNotificaciones = new FeatureNotificaciones(this.controladorNotificaciones);
@@ -96,6 +97,18 @@ public class VistaLobby extends BorderPane {
         controladorUsuario.cerrarSesion();
         // Aquí puedes navegar de vuelta al login
         System.out.println("✅ [VistaLobby]: Sesión cerrada. Redirigir al login.");
+    }
+
+    private void redirigirAlLogin() {
+        System.out.println("🔄 [VistaLobby]: Redirigiendo al login...");
+        // Aquí se debe cerrar la ventana actual y abrir el login
+        // Por ahora, obtenemos la ventana actual y cerramos la aplicación
+        Platform.runLater(() -> {
+            javafx.stage.Stage stage = (javafx.stage.Stage) this.getScene().getWindow();
+            stage.close();
+            System.out.println("✅ [VistaLobby]: Ventana cerrada");
+            // TODO: Reabrir ventana de login en lugar de cerrar la app
+        });
     }
 
     public DTOUsuario getUsuarioLogueado() {

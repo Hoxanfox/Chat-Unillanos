@@ -30,14 +30,39 @@ public class GestionContactosImpl implements IGestionContactos {
         this.enviadorPeticiones = new EnviadorPeticiones();
         this.gestorRespuesta = GestorRespuesta.getInstancia();
         this.gson = new Gson();
+
+        // Registrar manejadores para ambas acciones posibles
         this.gestorRespuesta.registrarManejador("actualizarListaContactos", this::manejarActualizacion);
+        this.gestorRespuesta.registrarManejador("solicitarListaContactos", this::manejarActualizacion);
+
+        System.out.println("✅ [GestionContactos]: Manejadores registrados para actualización de contactos");
     }
 
     private void manejarActualizacion(DTOResponse respuesta) {
+        System.out.println("📥 [GestionContactos]: Respuesta recibida - Action: " + respuesta.getAction() + ", Status: " + respuesta.getStatus());
+
         if (respuesta.fueExitoso()) {
-            Type tipoLista = new TypeToken<ArrayList<DTOContacto>>() {}.getType();
-            this.contactosCache = gson.fromJson(gson.toJson(respuesta.getData()), tipoLista);
-            notificarObservadores("ACTUALIZAR_CONTACTOS", this.contactosCache);
+            try {
+                Type tipoLista = new TypeToken<ArrayList<DTOContacto>>() {}.getType();
+                this.contactosCache = gson.fromJson(gson.toJson(respuesta.getData()), tipoLista);
+
+                System.out.println("✅ [GestionContactos]: " + contactosCache.size() + " contactos procesados correctamente");
+
+                // Log detallado de los contactos (solo en debug)
+                if (contactosCache.size() > 0) {
+                    System.out.println("📋 [GestionContactos]: Contactos recibidos:");
+                    for (DTOContacto contacto : contactosCache) {
+                        System.out.println("   - ID: " + contacto.getId() + ", Nombre: " + contacto.getNombre() + ", Estado: " + contacto.getEstado());
+                    }
+                }
+
+                notificarObservadores("ACTUALIZAR_CONTACTOS", this.contactosCache);
+            } catch (Exception e) {
+                System.err.println("❌ [GestionContactos]: Error al parsear contactos: " + e.getMessage());
+                e.printStackTrace();
+            }
+        } else {
+            System.err.println("❌ [GestionContactos]: Error en respuesta del servidor: " + respuesta.getMessage());
         }
     }
 

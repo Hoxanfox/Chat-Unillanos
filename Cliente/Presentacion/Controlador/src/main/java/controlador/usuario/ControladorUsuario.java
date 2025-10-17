@@ -51,8 +51,8 @@ public class ControladorUsuario implements IControladorUsuario {
     }
 
     @Override
-    public void cerrarSesion() {
+    public CompletableFuture<Boolean> cerrarSesion() {
         System.out.println("🎮 [ControladorUsuario]: Cerrando sesión del usuario.");
-        servicioUsuario.cerrarSesion();
+        return servicioUsuario.cerrarSesion();
     }
 }

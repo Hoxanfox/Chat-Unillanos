@@ -64,8 +64,8 @@ public class ServicioUsuarioImpl implements IServicioUsuario {
     }
 
     @Override
-    public void cerrarSesion() {
+    public CompletableFuture<Boolean> cerrarSesion() {
         System.out.println("➡️ [ServicioUsuario]: Cerrando sesión del usuario.");
-        fachadaLobby.cerrarSesion();
+        return fachadaLobby.cerrarSesion();
     }
 }

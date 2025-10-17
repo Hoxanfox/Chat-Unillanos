@@ -8,12 +8,19 @@ public final class DTOUsuario {
     private final String nombre;
     private final String email;
     private final String avatarUrl;
+    private final String estado;
 
-    public DTOUsuario(String id, String nombre, String email, String avatarUrl) {
+    public DTOUsuario(String id, String nombre, String email, String avatarUrl, String estado) {
         this.id = id;
         this.nombre = nombre;
         this.email = email;
         this.avatarUrl = avatarUrl;
+        this.estado = estado;
+    }
+
+    // Constructor sin estado para mantener compatibilidad
+    public DTOUsuario(String id, String nombre, String email, String avatarUrl) {
+        this(id, nombre, email, avatarUrl, "activo");
     }
 
     public String getId() {
@@ -32,6 +39,10 @@ public final class DTOUsuario {
         return avatarUrl;
     }
 
+    public String getEstado() {
+        return estado;
+    }
+
     public boolean esValido() {
         return id != null && !id.isEmpty() 
             && nombre != null && !nombre.isEmpty() 
@@ -45,7 +56,7 @@ public final class DTOUsuario {
                 ", nombre='" + nombre + '\'' +
                 ", email='" + email + '\'' +
                 ", avatarUrl='" + avatarUrl + '\'' +
+                ", estado='" + estado + '\'' +
                 '}';
     }
 }
-

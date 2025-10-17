@@ -68,7 +68,10 @@ public class GestorNotificaciones implements ISujeto {
         payload.addProperty("usuarioId", usuarioId);
         DTORequest request = new DTORequest("obtenerNotificaciones", payload);
 
-        gestorRespuesta.registrarManejador(request.getAction(), (respuesta) -> {
+        // Manejador común para procesar la respuesta
+        java.util.function.Consumer<DTOResponse> procesarRespuesta = (respuesta) -> {
+            System.out.println("📥 [GestorNotificaciones]: Respuesta recibida - Action: " + respuesta.getAction() + ", Status: " + respuesta.getStatus());
+
             if ("success".equals(respuesta.getStatus())) {
                 try {
                     List<DTONotificacion> notificaciones = parsearNotificaciones(respuesta);
@@ -81,14 +84,26 @@ public class GestorNotificaciones implements ISujeto {
                     future.complete(notificaciones);
                 } catch (Exception e) {
                     System.err.println("❌ [GestorNotificaciones]: Error al parsear: " + e.getMessage());
+                    e.printStackTrace();
                     future.completeExceptionally(e);
                 }
             } else {
                 String error = "Error al obtener notificaciones: " + respuesta.getMessage();
                 System.err.println("❌ [GestorNotificaciones]: " + error);
-                future.completeExceptionally(new RuntimeException(error));
+
+                // Si el servidor no reconoce la acción, devolver lista vacía en lugar de fallar
+                if ("unknown".equals(respuesta.getAction())) {
+                    System.out.println("⚠️ [GestorNotificaciones]: Acción no implementada en el servidor, devolviendo lista vacía");
+                    future.complete(new ArrayList<>());
+                } else {
+                    future.completeExceptionally(new RuntimeException(error));
+                }
             }
-        });
+        };
+
+        // Registrar manejadores para todas las acciones posibles
+        gestorRespuesta.registrarManejador("obtenerNotificaciones", procesarRespuesta);
+        gestorRespuesta.registrarManejador("unknown", procesarRespuesta); // Servidor responde con esto cuando no reconoce la acción
 
         enviadorPeticiones.enviar(request);
         return future;
@@ -363,22 +378,35 @@ public class GestorNotificaciones implements ISujeto {
 
         if (respuesta.getData() != null) {
             JsonElement element = gson.toJsonTree(respuesta.getData());
-            JsonArray array = element.getAsJsonArray();
-            DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
-            for (JsonElement item : array) {
-                JsonObject obj = item.getAsJsonObject();
+            // El servidor envía un objeto con estructura: {"notificaciones":[], "totalNoLeidas":0, "totalNotificaciones":0}
+            if (element.isJsonObject()) {
+                JsonObject dataObj = element.getAsJsonObject();
 
-                String id = obj.get("id").getAsString();
-                String tipo = obj.get("tipo").getAsString();
-                String titulo = obj.get("titulo").getAsString();
-                String contenido = obj.get("contenido").getAsString();
-                LocalDateTime fecha = LocalDateTime.parse(obj.get("fecha").getAsString(), formatter);
-                boolean leida = obj.get("leida").getAsBoolean();
-                String origenId = obj.get("origenId").getAsString();
+                // Extraer el array de notificaciones del objeto
+                if (dataObj.has("notificaciones") && dataObj.get("notificaciones").isJsonArray()) {
+                    JsonArray array = dataObj.getAsJsonArray("notificaciones");
+                    DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
-                DTONotificacion notif = new DTONotificacion(id, tipo, titulo, contenido, fecha, leida, origenId);
-                notificaciones.add(notif);
+                    for (JsonElement item : array) {
+                        JsonObject obj = item.getAsJsonObject();
+
+                        String id = obj.get("id").getAsString();
+                        String tipo = obj.get("tipo").getAsString();
+                        String titulo = obj.get("titulo").getAsString();
+                        String contenido = obj.get("contenido").getAsString();
+                        LocalDateTime fecha = LocalDateTime.parse(obj.get("fecha").getAsString(), formatter);
+                        boolean leida = obj.get("leida").getAsBoolean();
+                        String origenId = obj.get("origenId").getAsString();
+
+                        DTONotificacion notif = new DTONotificacion(id, tipo, titulo, contenido, fecha, leida, origenId);
+                        notificaciones.add(notif);
+                    }
+
+                    System.out.println("✅ [GestorNotificaciones]: " + notificaciones.size() + " notificaciones parseadas correctamente");
+                } else {
+                    System.out.println("ℹ️ [GestorNotificaciones]: No hay notificaciones en la respuesta");
+                }
             }
         }
 
