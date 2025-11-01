@@ -6,6 +6,7 @@ import gestionContactos.actualizacion.GestionContactosImpl;
 import gestionContactos.actualizacion.IGestionContactos;
 import gestionContactos.mensajes.GestionMensajesImpl;
 import gestionContactos.mensajes.IGestionMensajes;
+import gestionUsuario.sesion.GestorSesionUsuario;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,7 @@ public class FachadaContactosImpl implements IFachadaContactos, IObservador {
     private final List<IObservador> observadores = new ArrayList<>(); // Sus observadores (el Servicio)
     private final IGestionContactos gestionContactos;
     private final IGestionMensajes gestionMensajes;
+    private final GestorSesionUsuario gestorSesion;
 
     public FachadaContactosImpl() {
         System.out.println("🔧 [FachadaContactos]: Inicializando fachada de contactos...");
@@ -26,10 +28,20 @@ public class FachadaContactosImpl implements IFachadaContactos, IObservador {
         // La fachada específica crea sus propios componentes de gestión.
         this.gestionContactos = new GestionContactosImpl();
         this.gestionMensajes = new GestionMensajesImpl();
+        this.gestorSesion = GestorSesionUsuario.getInstancia();
 
         // La fachada se suscribe como observador de ambos gestores para recibir notificaciones.
         this.gestionContactos.registrarObservador(this);
         this.gestionMensajes.registrarObservador(this);
+
+        // Establecer automáticamente el usuario de la sesión activa si existe
+        if (gestorSesion.haySesionActiva()) {
+            String usuarioId = gestorSesion.getUserId();
+            ((GestionContactosImpl) gestionContactos).setUsuarioId(usuarioId);
+            System.out.println("✅ [FachadaContactos]: Usuario de sesión establecido automáticamente: " + usuarioId);
+        } else {
+            System.out.println("⚠️ [FachadaContactos]: No hay sesión activa en el momento de inicialización");
+        }
 
         System.out.println("✅ [FachadaContactos]: Fachada inicializada con gestores de contactos y mensajes");
     }
@@ -37,6 +49,16 @@ public class FachadaContactosImpl implements IFachadaContactos, IObservador {
     @Override
     public void solicitarActualizacionContactos() {
         System.out.println("➡️ [FachadaContactos]: Solicitando actualización de contactos al gestor");
+
+        // Verificar y actualizar el usuario antes de solicitar (por si cambió la sesión)
+        if (gestorSesion.haySesionActiva()) {
+            String usuarioId = gestorSesion.getUserId();
+            ((GestionContactosImpl) gestionContactos).setUsuarioId(usuarioId);
+            System.out.println("🔑 [FachadaContactos]: Usuario actualizado desde sesión: " + usuarioId);
+        } else {
+            System.err.println("⚠️ [FachadaContactos]: ADVERTENCIA - No hay sesión activa al solicitar contactos");
+        }
+
         gestionContactos.solicitarActualizacionContactos();
     }
 

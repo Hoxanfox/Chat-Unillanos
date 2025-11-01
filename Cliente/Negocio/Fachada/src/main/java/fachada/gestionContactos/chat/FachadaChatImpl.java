@@ -70,4 +70,3 @@ public class FachadaChatImpl implements IFachadaChat, IObservador {
         }
     }
 }
-
