@@ -8,6 +8,8 @@ public class DTOMensaje {
     // Campos principales del mensaje
     private String mensajeId;           // UUID del mensaje (puede ser "id" en algunas respuestas)
     private Long id;                    // ID numérico (en algunas respuestas del servidor)
+    private String peerRemitenteId;     // ← NUEVO: UUID del peer remitente WebRTC
+    private String peerDestinoId;       // ← NUEVO: UUID del peer destino WebRTC
     private String remitenteId;         // UUID del remitente
     private String destinatarioId;      // UUID del destinatario
     private String remitenteNombre;     // Nombre del remitente
@@ -64,6 +66,22 @@ public class DTOMensaje {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getPeerRemitenteId() {
+        return peerRemitenteId;
+    }
+
+    public void setPeerRemitenteId(String peerRemitenteId) {
+        this.peerRemitenteId = peerRemitenteId;
+    }
+
+    public String getPeerDestinoId() {
+        return peerDestinoId;
+    }
+
+    public void setPeerDestinoId(String peerDestinoId) {
+        this.peerDestinoId = peerDestinoId;
     }
 
     public String getRemitenteId() {
