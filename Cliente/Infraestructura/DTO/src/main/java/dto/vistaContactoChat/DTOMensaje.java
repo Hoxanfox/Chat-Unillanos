@@ -22,6 +22,7 @@ public class DTOMensaje {
     // Archivos adjuntos
     private String fileId;              // UUID del archivo (null si es texto)
     private String fileName;            // Nombre del archivo (null si es texto)
+    private String audioBase64;         // ← NUEVO: Audio en Base64 para mensajes de audio
 
     // Metadatos
     private String fechaEnvio;          // Timestamp ISO 8601
@@ -146,6 +147,14 @@ public class DTOMensaje {
 
     public void setFileName(String fileName) {
         this.fileName = fileName;
+    }
+
+    public String getAudioBase64() {
+        return audioBase64;
+    }
+
+    public void setAudioBase64(String audioBase64) {
+        this.audioBase64 = audioBase64;
     }
 
     public String getFechaEnvio() {

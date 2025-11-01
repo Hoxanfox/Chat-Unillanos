@@ -45,14 +45,16 @@ public class GestionMensajesImpl implements IGestionMensajes {
 
         // Registrar manejadores para respuestas a peticiones
         this.gestorRespuesta.registrarManejador("enviarMensajeDirecto", this::manejarRespuestaEnvioMensaje);
+        this.gestorRespuesta.registrarManejador("enviarMensajeDirectoAudio", this::manejarRespuestaEnvioMensajeAudio);
         this.gestorRespuesta.registrarManejador("solicitarHistorialPrivado", this::manejarHistorial);
 
         // Registrar manejadores para notificaciones PUSH del servidor
         this.gestorRespuesta.registrarManejador("nuevoMensajeDirecto", this::manejarNuevoMensajePush);
+        this.gestorRespuesta.registrarManejador("nuevoMensajeDirectoAudio", this::manejarNuevoMensajeAudioPush);
 
         System.out.println("✅ [GestionMensajes]: Gestor inicializado con manejadores registrados");
-        System.out.println("   → Respuestas: enviarMensajeDirecto, solicitarHistorialPrivado");
-        System.out.println("   → Push: nuevoMensajeDirecto");
+        System.out.println("   → Respuestas: enviarMensajeDirecto, enviarMensajeDirectoAudio, solicitarHistorialPrivado");
+        System.out.println("   → Push: nuevoMensajeDirecto, nuevoMensajeDirectoAudio");
     }
 
     @Override
@@ -95,15 +97,15 @@ public class GestionMensajesImpl implements IGestionMensajes {
     }
 
     @Override
-    public CompletableFuture<Void> enviarMensajeAudio(String destinatarioId, String audioFileId) {
+    public CompletableFuture<Void> enviarMensajeAudio(String destinatarioId, String audioBase64) {
         String remitenteId = gestorSesionUsuario.getUserId();
         String peerRemitenteId = gestorSesionUsuario.getPeerId();
         String peerDestinoId = gestorContactoPeers.getPeerIdDeContacto(destinatarioId);
 
-        System.out.println("📤 [GestionMensajes]: Enviando mensaje de AUDIO");
+        System.out.println("📤 [GestionMensajes]: Enviando mensaje de AUDIO (Base64)");
         System.out.println("   → Remitente: " + remitenteId + " (Peer: " + peerRemitenteId + ")");
         System.out.println("   → Destinatario: " + destinatarioId + " (Peer: " + peerDestinoId + ")");
-        System.out.println("   → AudioFileId: " + audioFileId);
+        System.out.println("   → AudioBase64 length: " + (audioBase64 != null ? audioBase64.length() : 0));
 
         if (peerDestinoId == null) {
             System.err.println("❌ [GestionMensajes]: No se pudo obtener el peerId del destinatario");
@@ -111,8 +113,13 @@ public class GestionMensajesImpl implements IGestionMensajes {
             return CompletableFuture.completedFuture(null);
         }
 
-        DTOEnviarMensaje payload = DTOEnviarMensaje.deAudio(peerRemitenteId, peerDestinoId, remitenteId, destinatarioId, audioFileId, audioFileId);
-        DTORequest peticion = new DTORequest("enviarMensajeDirecto", payload);
+        // Usar el nuevo DTO específico para mensajes de audio
+        dto.comunicacion.peticion.mensaje.DTOEnviarMensajeAudio payload =
+            new dto.comunicacion.peticion.mensaje.DTOEnviarMensajeAudio(
+                peerDestinoId, peerRemitenteId, remitenteId, destinatarioId, audioBase64
+            );
+
+        DTORequest peticion = new DTORequest("enviarMensajeDirectoAudio", payload);
         enviadorPeticiones.enviar(peticion);
 
         System.out.println("✅ [GestionMensajes]: Mensaje de audio enviado al servidor");
@@ -212,6 +219,40 @@ public class GestionMensajesImpl implements IGestionMensajes {
     }
 
     /**
+     * Maneja la RESPUESTA del servidor después de enviar un mensaje de audio.
+     * Esta es la confirmación de que el mensaje de audio fue enviado exitosamente.
+     */
+    private void manejarRespuestaEnvioMensajeAudio(DTOResponse r) {
+        System.out.println("📥 [GestionMensajes]: Recibida RESPUESTA de envío de mensaje de audio - Status: " + r.getStatus());
+
+        if(r.fueExitoso()) {
+            DTOMensaje mensaje = gson.fromJson(gson.toJson(r.getData()), DTOMensaje.class);
+            System.out.println("✅ [GestionMensajes]: Mensaje de audio confirmado por servidor");
+            System.out.println("   → ID: " + mensaje.getMensajeId());
+            System.out.println("   → Fecha: " + mensaje.getFechaEnvio());
+
+            // Marcar como "es mío" ya que es el mensaje que nosotros enviamos
+            mensaje.setEsMio(true);
+
+            // Notificar a los observadores que el mensaje de audio fue enviado exitosamente
+            notificarObservadores("MENSAJE_AUDIO_ENVIADO_EXITOSO", mensaje);
+        } else {
+            // Manejo granular de errores según la especificación
+            String errorMsg = r.getMessage();
+            System.err.println("❌ [GestionMensajes]: Error en respuesta de envío de mensaje de audio: " + errorMsg);
+
+            if (errorMsg.contains("Destinatario no encontrado") || errorMsg.contains("desconectado")) {
+                notificarObservadores("ERROR_DESTINATARIO_NO_DISPONIBLE", errorMsg);
+            } else if (errorMsg.contains("inválidos") || errorMsg.contains("Datos de mensaje inválidos")) {
+                // Intentar extraer detalles del error de validación
+                notificarObservadores("ERROR_VALIDACION", r.getData() != null ? r.getData() : errorMsg);
+            } else {
+                notificarObservadores("ERROR_ENVIO_MENSAJE_AUDIO", errorMsg);
+            }
+        }
+    }
+
+    /**
      * Maneja las NOTIFICACIONES PUSH de nuevos mensajes directos.
      * Esto se ejecuta cuando otro usuario nos envía un mensaje.
      * Ahora incluye información de peers WebRTC y filtrado de duplicados.
@@ -260,6 +301,57 @@ public class GestionMensajesImpl implements IGestionMensajes {
             String errorMsg = r.getMessage();
             System.err.println("❌ [GestionMensajes]: Error en notificación push: " + errorMsg);
             notificarObservadores("ERROR_NOTIFICACION_MENSAJE", errorMsg);
+        }
+    }
+
+    /**
+     * Maneja las NOTIFICACIONES PUSH de nuevos mensajes directos de audio.
+     * Esto se ejecuta cuando otro usuario nos envía un mensaje de audio.
+     */
+    private void manejarNuevoMensajeAudioPush(DTOResponse r) {
+        System.out.println("🔔 [GestionMensajes]: Recibida NOTIFICACIÓN PUSH de nuevo mensaje de audio - Status: " + r.getStatus());
+
+        if(r.fueExitoso()) {
+            DTOMensaje mensaje = gson.fromJson(gson.toJson(r.getData()), DTOMensaje.class);
+
+            String myUserId = gestorSesionUsuario.getUserId();
+            String myPeerId = gestorSesionUsuario.getPeerId();
+
+            System.out.println("✅ [GestionMensajes]: Nuevo mensaje de audio recibido");
+            System.out.println("   → De: " + mensaje.getRemitenteNombre() + " (" + mensaje.getRemitenteId() + ")");
+            System.out.println("   → Peer Remitente: " + mensaje.getPeerRemitenteId());
+            System.out.println("   → Peer Destino: " + mensaje.getPeerDestinoId());
+            System.out.println("   → Tipo: " + mensaje.getTipo());
+            System.out.println("   → AudioFileId: " + mensaje.getContenido());
+            System.out.println("   → Fecha: " + mensaje.getFechaEnvio());
+
+            // ✅ FILTRO 1: Ignorar pushes de mis propios mensajes (ya procesados en respuesta)
+            boolean esMio = mensaje.getRemitenteId().equals(myUserId);
+            if (esMio) {
+                System.out.println("⚠️ [GestionMensajes]: Ignorando push de mi propio mensaje de audio (ya procesado)");
+                return;
+            }
+
+            // ✅ FILTRO 2: Validar que el mensaje de audio es para mi peer actual
+            if (myPeerId != null && mensaje.getPeerDestinoId() != null &&
+                !mensaje.getPeerDestinoId().equals(myPeerId)) {
+                System.out.println("⚠️ [GestionMensajes]: Mensaje de audio no es para mi peer actual");
+                System.out.println("   → Peer destino del mensaje de audio: " + mensaje.getPeerDestinoId());
+                System.out.println("   → Mi peer actual: " + myPeerId);
+                return;
+            }
+
+            // Marcar como mensaje del otro usuario
+            mensaje.setEsMio(false);
+
+            // Notificar a los observadores que llegó un nuevo mensaje de audio
+            System.out.println("📢 [GestionMensajes]: Notificando nuevo mensaje de audio de: " + mensaje.getRemitenteNombre());
+            notificarObservadores("NUEVO_MENSAJE_AUDIO_PRIVADO", mensaje);
+
+        } else {
+            String errorMsg = r.getMessage();
+            System.err.println("❌ [GestionMensajes]: Error en notificación push de mensaje de audio: " + errorMsg);
+            notificarObservadores("ERROR_NOTIFICACION_MENSAJE_AUDIO", errorMsg);
         }
     }
 

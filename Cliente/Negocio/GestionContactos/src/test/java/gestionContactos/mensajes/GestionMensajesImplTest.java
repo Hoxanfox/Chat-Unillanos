@@ -121,21 +121,21 @@ class GestionMensajesImplTest {
     }
 
     @Test
-    @DisplayName("Debe enviar mensaje de audio correctamente")
+    @DisplayName("Debe enviar mensaje de audio correctamente con Base64")
     void testEnviarMensajeAudio_Exitoso() {
         // Arrange
         String destinatarioId = "contacto-456";
-        String audioFileId = "audio-uuid-789";
+        String audioBase64 = "aW9kYXNkaGFza2RoYXNrZGpoYXNrZGpoYXNrZGg=";
         ArgumentCaptor<DTORequest> requestCaptor = ArgumentCaptor.forClass(DTORequest.class);
 
         // Act
-        gestionMensajes.enviarMensajeAudio(destinatarioId, audioFileId);
+        gestionMensajes.enviarMensajeAudio(destinatarioId, audioBase64);
 
         // Assert
         verify(mockEnviadorPeticiones, times(1)).enviar(requestCaptor.capture());
         
         DTORequest peticionEnviada = requestCaptor.getValue();
-        assertEquals("enviarMensajeDirecto", peticionEnviada.getAction());
+        assertEquals("enviarMensajeDirectoAudio", peticionEnviada.getAction());
         assertNotNull(peticionEnviada.getPayload(), "El payload no debe ser null");
     }
 
