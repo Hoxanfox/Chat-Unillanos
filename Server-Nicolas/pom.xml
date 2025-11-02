@@ -10,20 +10,20 @@
     <packaging>pom</packaging>
 
     <modules>
-        <module>server-dominio</module>
-        <module>server-persistencia</module>
-        <module>server-logicaFachada</module>
-        <module>server-logicaUsuarios</module>
-        <module>server-LogicaCanales</module>
-        <module>server-LogicaMensajes</module>
-        <module>server-Transporte</module>
-        <module>server-controladorTransporte</module>
-        <module>server-controladorVista</module>
-        <module>server-vista</module>
-        <module>server-app</module>
-        <module>Server-DTO</module>
-        <module>server-Utils</module>
-        <module>server-events</module>
+        <module>datos/server-dominio</module>
+        <module>datos/server-persistencia</module>
+        <module>negocio/server-logicaFachada</module>
+        <module>negocio/server-logicaUsuarios</module>
+        <module>negocio/server-LogicaCanales</module>
+        <module>negocio/server-LogicaMensajes</module>
+        <module>transporte/server-Transporte</module>
+        <module>transporte/server-controladorTransporte</module>
+        <module>vista/server-controladorVista</module>
+        <module>vista/server-vista</module>
+        <module>comunes/server-app</module>
+        <module>comunes/Server-DTO</module>
+        <module>comunes/server-Utils</module>
+        <module>comunes/server-events</module>
     </modules>
 
     <properties>
