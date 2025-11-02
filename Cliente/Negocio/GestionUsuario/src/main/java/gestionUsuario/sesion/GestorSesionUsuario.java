@@ -10,6 +10,7 @@ public class GestorSesionUsuario {
 
     private static GestorSesionUsuario instancia;
     private String userId;
+    private String peerId;  // ← NUEVO: ID del peer WebRTC
     private Usuario usuarioLogueado;
 
     private GestorSesionUsuario() {}
@@ -32,6 +33,22 @@ public class GestorSesionUsuario {
         return userId;
     }
 
+    /**
+     * Establece el ID del peer WebRTC para la sesión actual.
+     * @param peerId El UUID del peer asignado por el servidor
+     */
+    public void setPeerId(String peerId) {
+        this.peerId = peerId;
+    }
+
+    /**
+     * Obtiene el ID del peer WebRTC de la sesión actual.
+     * @return El peer ID o null si no está establecido
+     */
+    public String getPeerId() {
+        return peerId;
+    }
+
     public void setUsuarioLogueado(Usuario usuario) {
         this.usuarioLogueado = usuario;
     }
@@ -49,6 +66,7 @@ public class GestorSesionUsuario {
 
     public void cerrarSesion() {
         this.userId = null;
+        this.peerId = null;  // ← Limpiar también el peerId
         this.usuarioLogueado = null;
     }
 }

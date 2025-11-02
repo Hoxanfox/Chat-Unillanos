@@ -2,7 +2,6 @@ package gestionContactos.mensajes;
 
 import observador.ISujeto;
 
-import java.io.File;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -13,11 +12,10 @@ public interface IGestionMensajes extends ISujeto {
     CompletableFuture<Void> enviarMensajeTexto(String destinatarioId, String contenido);
 
     /**
-     * Envía la petición de un mensaje de audio, usando el ID del archivo ya subido.
+     * Envía un mensaje de audio con contenido en Base64.
      * @param destinatarioId El ID del contacto que recibirá el audio.
-     * @param audioFileId El identificador del archivo de audio en el servidor.
+     * @param audioBase64 El contenido del audio codificado en Base64.
      * @return Una promesa que se completa cuando la petición es enviada.
      */
-    CompletableFuture<Void> enviarMensajeAudio(String destinatarioId, String audioFileId);
+    CompletableFuture<Void> enviarMensajeAudio(String destinatarioId, String audioBase64);
 }
-
