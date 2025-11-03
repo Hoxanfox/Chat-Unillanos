@@ -5,20 +5,19 @@ package dto.vistaLogin;
  * desde la vista hacia las capas de lógica de negocio.
  */
 public class DTOAutenticacion {
-    private final String emailUsuario;
-    private final String passwordUsuario;
+    private final String nombreUsuario;
+    private final String password;
 
-    public DTOAutenticacion(String emailUsuario, String passwordUsuario) {
-        this.emailUsuario = emailUsuario;
-        this.passwordUsuario = passwordUsuario;
+    public DTOAutenticacion(String nombreUsuario, String password) {
+        this.nombreUsuario = nombreUsuario;
+        this.password = password;
     }
 
-    public String getEmailUsuario() {
-        return emailUsuario;
+    public String getNombreUsuario() {
+        return nombreUsuario;
     }
 
-    public String getPasswordUsuario() {
-        return passwordUsuario;
+    public String getPassword() {
+        return password;
     }
 }
-
