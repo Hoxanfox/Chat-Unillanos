@@ -45,7 +45,6 @@ public class UserServiceImpl implements IUserService {
         this.networkUtils = networkUtils;
     }
 
-    // Este método ahora no devuelve nada ya que nadie utiliza el retorno
     @Override
     @Transactional
     public void registrarUsuario(UserRegistrationRequestDto requestDto, String ipAddress) throws Exception {
@@ -76,7 +75,6 @@ public class UserServiceImpl implements IUserService {
                 ipAddress
         );
 
-
         // Asignamos la ruta de la foto guardada
         newUserEntity.setPhotoAddress(photoPath);
         newUserEntity.setPeerId(currentPeer);
@@ -101,16 +99,34 @@ public class UserServiceImpl implements IUserService {
         user.setConectado(true);
         userRepository.save(user);
 
-        // 3. Si todo está bien, mapear la entidad a un DTO de respuesta y devolverlo
+        // 3. Convertir la foto a Base64 si existe (LÓGICA DE NEGOCIO)
+        String imagenBase64 = getImagenBase64(user);
+
+        // 4. Retornar el DTO con la imagen codificada
         return new UserResponseDto(
                 user.getUserId(),
                 user.getUsername(),
                 user.getEmail(),
                 user.getPhotoAddress(),
+                imagenBase64, // Imagen codificada en Base64
                 user.getFechaRegistro(),
                 "ONLINE"
         );
     }
+
+    private String getImagenBase64(User user) {
+        String imagenBase64 = null;
+        if (user.getPhotoAddress() != null && !user.getPhotoAddress().isEmpty()) {
+            try {
+                imagenBase64 = fileStorageService.readFileAsBase64(user.getPhotoAddress());
+            } catch (Exception e) {
+                System.err.println("Error al leer la foto del usuario: " + e.getMessage());
+                // Si hay error, imagenBase64 queda null
+            }
+        }
+        return imagenBase64;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<UserResponseDto> getUsersByIds(Set<UUID> userIds) {

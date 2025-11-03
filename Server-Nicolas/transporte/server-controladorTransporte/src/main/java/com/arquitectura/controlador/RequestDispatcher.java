@@ -6,12 +6,12 @@ import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.fachada.IChatFachada;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonSyntaxException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Component
@@ -19,7 +19,9 @@ public class RequestDispatcher {
 
     private final IChatFachada chatFachada;
     private final Gson gson;
-    private UserResponseDto authenticatedUser = null;
+    private static final Set<String> ACCIONES_PUBLICAS = Set.of(
+            "authenticateuser"
+    );
 
     @Autowired
     public RequestDispatcher(IChatFachada chatFachada, Gson gson) {
@@ -27,109 +29,127 @@ public class RequestDispatcher {
         this.gson = gson;
     }
 
-    public void dispatch(String requestJson ,IClientHandler handler)  {
+    public void dispatch(String requestJson, IClientHandler handler) {
         DTORequest request;
         String action = "unknown";
         try {
             request = gson.fromJson(requestJson, DTORequest.class);
             action = request.getAction() != null ? request.getAction().toLowerCase() : "unknown";
+
             // 2. Validar sesión
-            if (!action.equals("authenticateuser") && !handler.isAuthenticated()) {
-                sendJsonResponse(handler, action, "error", "Debes iniciar sesión para realizar esta acción.", null);
+            if (!ACCIONES_PUBLICAS.contains(action)&& !handler.isAuthenticated()) {
+                sendJsonResponse(handler, action, false, "Debes iniciar sesión para realizar esta acción.", null);
                 return;
             }
+
             switch (action) {
                 case "authenticateuser":
-                    Object payloadObj = request.getPayload();
-                    if (payloadObj == null) {
-                        sendJsonResponse(handler, "login", "error", "Falta payload.", null);
+                    Object dataObj = request.getData();
+                    if (dataObj == null) {
+                        sendJsonResponse(handler, "authenticateUser", false, "Falta data.", null);
                         return;
                     }
-                    // Convertir el payload a JSON y luego a LoginRequestDto
-                    JsonObject payloadJson = gson.toJsonTree(payloadObj).getAsJsonObject();
-                    String username = payloadJson.has("username") ? payloadJson.get("username").getAsString() : null;
-                    String password = payloadJson.has("password") ? payloadJson.get("password").getAsString() : null;
 
-                    if (username == null || password == null) {
-                        // Enviar error: faltan campos en payload
-                        sendJsonResponse(handler, "login", "error", "Payload debe contener 'username' y 'password'.", null);
+                    // Convertir el data a JSON y luego a LoginRequestDto
+                    JsonObject dataJson = gson.toJsonTree(dataObj).getAsJsonObject();
+                    String nombreUsuario = dataJson.has("nombreUsuario") ? dataJson.get("nombreUsuario").getAsString() : null;
+                    String password = dataJson.has("password") ? dataJson.get("password").getAsString() : null;
+
+                    if (nombreUsuario == null || password == null) {
+                        sendJsonResponse(handler, "authenticateUser", false, "Email o contraseña inválidos",
+                            createErrorData("nombreUsuario", "El campo nombreUsuario es requerido"));
                         return;
                     }
-                    LoginRequestDto serverLoginDto = new LoginRequestDto(username, password);
+
+                    LoginRequestDto serverLoginDto = new LoginRequestDto(nombreUsuario, password);
                     UserResponseDto userDto = chatFachada.autenticarUsuario(serverLoginDto, handler.getClientIpAddress());
 
                     // Autenticación exitosa
                     handler.setAuthenticatedUser(userDto);
 
-                    //construccion de la respuesta
+                    // Construcción de la respuesta según el API del cliente
                     Map<String, Object> responseData = new HashMap<>();
-                    responseData.put("id", userDto.getUserId().toString()); // ¡Correcto! Envía el UUID como String
+                    responseData.put("userId", userDto.getUserId().toString());
                     responseData.put("nombre", userDto.getUsername());
                     responseData.put("email", userDto.getEmail());
-                    responseData.put("photoId", userDto.getPhotoAddress());
-                    responseData.put("estado", mapearEstadoParaCliente(userDto.getEstado()));
-                    responseData.put("fechaRegistro", userDto.getFechaRegistro());
-                    sendJsonResponse(handler, "login", "success", "Autenticación exitosa", responseData);
-                    break;
-                case "logout": // O "logoutUser"
-                    if (handler.isAuthenticated()) {
-                        UUID publicId = handler.getAuthenticatedUser().getUserId(); // Obtiene UUID
-                        String loggedOutUsername = handler.getAuthenticatedUser().getUsername();
+                    responseData.put("imagenBase64", userDto.getImagenBase64());
 
-                        chatFachada.cambiarEstadoUsuario(publicId,false);
+                    sendJsonResponse(handler, "authenticateUser", true, "Autenticación exitosa", responseData);
+                    break;
+
+                case "logoutuser":
+                    // Ya no necesitamos validar isAuthenticated() aquí porque se valida arriba
+                    Object logoutDataObj = request.getData();
+                    if (logoutDataObj == null) {
+                        sendJsonResponse(handler, "logoutUser", false, "Error al cerrar sesión: Falta el userId", null);
+                        return;
+                    }
+
+                    // Extraer el userId del data
+                    JsonObject logoutDataJson = gson.toJsonTree(logoutDataObj).getAsJsonObject();
+                    String userIdStr = logoutDataJson.has("userId") ? logoutDataJson.get("userId").getAsString() : null;
+
+                    if (userIdStr == null || userIdStr.isEmpty()) {
+                        sendJsonResponse(handler, "logoutUser", false, "Error al cerrar sesión: userId requerido", null);
+                        return;
+                    }
+
+                    try {
+                        UUID userId = UUID.fromString(userIdStr);
+
+                        // Verificar que el userId coincida con el usuario autenticado (seguridad)
+                        if (!handler.getAuthenticatedUser().getUserId().equals(userId)) {
+                            sendJsonResponse(handler, "logoutUser", false, "Usuario no autenticado o token inválido", null);
+                            return;
+                        }
+                        // Realizar el logout
+                        chatFachada.cambiarEstadoUsuario(userId, false);
                         handler.clearAuthenticatedUser();
 
-                        sendJsonResponse(handler, "logoutUser", "success", "Sesión de " + loggedOutUsername + " cerrada.", null);
-                    } else {
-                        sendJsonResponse(handler, "logoutUser", "error", "No hay sesión activa.", null);
+                        sendJsonResponse(handler, "logoutUser", true, "Sesión cerrada exitosamente", null);
+                    } catch (IllegalArgumentException e) {
+                        sendJsonResponse(handler, "logoutUser", false, "Error al cerrar sesión: userId inválido", null);
                     }
                     break;
 
                 default:
-                    handler.sendMessage("ERROR;Comando desconocido: " + action);
+                    sendJsonResponse(handler, action, false, "Comando desconocido: " + action, null);
                     break;
-
             }
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            // Error interno del servidor
+            sendJsonResponse(handler, action, false, "Error interno del servidor", null);
+            e.printStackTrace();
         }
-
     }
 
-    //clases para gson
-    private void sendJsonResponse(IClientHandler handler, String action, String status, String message, Object data) {
-        // Necesitarás una clase DTOResponse en el servidor similar a la del cliente
-        DTOResponse response = new DTOResponse(action, status, message, data);
+    // Método para crear data de error con campo y motivo
+    private Map<String, String> createErrorData(String campo, String motivo) {
+        Map<String, String> errorData = new HashMap<>();
+        errorData.put("campo", campo);
+        errorData.put("motivo", motivo);
+        return errorData;
+    }
+
+    // Método actualizado para enviar respuestas JSON con 'success' booleano
+    private void sendJsonResponse(IClientHandler handler, String action, boolean success, String message, Object data) {
+        DTOResponse response = new DTOResponse(action, success, message, data);
         String jsonResponse = gson.toJson(response);
         handler.sendMessage(jsonResponse);
     }
+
+    // Clase DTOResponse actualizada con 'success' booleano
     public static class DTOResponse {
-        private String action; private String status; private String message; private Object data;
-        public DTOResponse(String a, String s, String m, Object d){this.action=a; this.status=s; this.message=m; this.data=d;}
-    }
-    //metodos para el mapeo de estados
-    private String mapearEstadoParaCliente(String estadoServidor) {
-        if (estadoServidor == null) return "inactivo";
-        switch (estadoServidor.toUpperCase()) {
-            case "ONLINE": return "activo";
-            case "OFFLINE": return "inactivo";
-            default: return "inactivo";
+        private final String action;
+        private final boolean success;
+        private final String message;
+        private final Object data;
+
+        public DTOResponse(String action, boolean success, String message, Object data) {
+            this.action = action;
+            this.success = success;
+            this.message = message;
+            this.data = data;
         }
     }
-    private String mapearEstadoParaClienteLista(String estadoServidor) {
-        if (estadoServidor == null) return "Offline";
-        switch (estadoServidor.toUpperCase()) {
-            case "ONLINE": return "Online";
-            case "OFFLINE":
-                return "Offline";
-            default:
-                return "Offline";
-        }
-    }
-
-
-
-
 }
-
-

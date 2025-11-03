@@ -147,7 +147,7 @@ public class ServerListener {
     }
 
     // --- MÉTODOS PÚBLICOS PARA GESTIÓN DE SESIONES ---
-    private void registerAuthenticatedClient(IClientHandler handler) {
+    public void registerAuthenticatedClient(IClientHandler handler) {
         if (handler.getAuthenticatedUser() != null) {
             UUID userId = handler.getAuthenticatedUser().getUserId();
             activeClientsById.computeIfAbsent(userId, k -> new ArrayList<>()).add(handler);
