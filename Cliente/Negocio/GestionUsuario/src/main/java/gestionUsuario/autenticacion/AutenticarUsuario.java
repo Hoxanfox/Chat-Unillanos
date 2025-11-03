@@ -87,63 +87,48 @@ public class AutenticarUsuario implements IAutenticarUsuario {
     public CompletableFuture<Boolean> autenticar(DTOAutenticacion dto) {
         CompletableFuture<Boolean> resultadoFuturo = new CompletableFuture<>();
         final String ACCION_ENVIADA = "authenticateUser";
-        final String ACCION_RESPUESTA = "authenticateUser"; // servidor responde con esta acción en la API dada
+        final String ACCION_RESPUESTA = "authenticateUser";
 
         // Notificar inicio de autenticación
-        notificarObservadores("AUTENTICACION_INICIADA", dto.getEmailUsuario());
+        notificarObservadores("AUTENTICACION_INICIADA", dto.getNombreUsuario());
 
         // Manejador común para procesar la respuesta
         java.util.function.Consumer<DTOResponse> procesarRespuesta = (DTOResponse respuesta) -> {
             try {
-                // Robust success detection:
+                // Detectar éxito: puede venir como "success": true o "status": "success"
                 boolean exito = respuesta.fueExitoso();
                 String mensaje = respuesta.getMessage();
                 Object dataObj = respuesta.getData();
 
-                // fallback: if fueExitoso() false, check message/status or data presence
-                if (!exito) {
-                    if (mensaje != null && ("success".equalsIgnoreCase(mensaje) || "Autenticación exitosa".equalsIgnoreCase(mensaje))) {
-                        exito = true;
-                    } else if (dataObj != null && !"null".equalsIgnoreCase(String.valueOf(dataObj))) {
+                // Verificar si hay error por status: "error"
+                if (respuesta.getAction() != null && respuesta.getAction().equals(ACCION_RESPUESTA)) {
+                    // Verificar campo status alternativo si existe
+                    String status = respuesta.getStatus();
+                    if ("error".equalsIgnoreCase(status)) {
+                        exito = false;
+                    } else if ("success".equalsIgnoreCase(status)) {
                         exito = true;
                     }
                 }
 
-                if (exito) {
-                    // Extraer datos del servidor de forma tolerante a nombres distintos
+                if (exito && dataObj != null && !"null".equalsIgnoreCase(String.valueOf(dataObj))) {
+                    // Extraer datos del servidor según especificación
                     Map<String, Object> datosUsuario = gson.fromJson(gson.toJson(dataObj), Map.class);
 
-                    if (datosUsuario == null) {
+                    if (datosUsuario == null || datosUsuario.isEmpty()) {
                         throw new Exception("La respuesta no contiene 'data' con información del usuario.");
                     }
 
                     String userIdStr = firstString(datosUsuario, "userId", "id");
-                    String nombre = firstString(datosUsuario, "nombre", "nombreUsuario", "username");
-                    String email = firstString(datosUsuario, "email", "correo");
-                    String imagenBase64 = firstString(datosUsuario, "imagenBase64", "photoId", "imagen");
-                    String estadoServidor = firstString(datosUsuario, "estado", "status");
-                    String fechaRegistroStr = firstString(datosUsuario, "fechaRegistro", "createdAt", "created_at");
+                    String nombre = firstString(datosUsuario, "nombre");
+                    String email = firstString(datosUsuario, "email");
+                    String imagenBase64 = firstString(datosUsuario, "imagenBase64");
 
                     if (userIdStr == null || userIdStr.isEmpty()) {
                         throw new Exception("La respuesta del servidor no contenía un 'userId' válido.");
                     }
 
                     UUID userId = UUID.fromString(userIdStr);
-
-                    // Mapear estado del servidor al formato de BD local
-                    String estadoLocal = mapearEstadoServidor(estadoServidor);
-
-                    // Convertir fecha de registro si viene
-                    LocalDateTime fechaRegistro = null;
-                    if (fechaRegistroStr != null && !fechaRegistroStr.isEmpty()) {
-                        try {
-                            Date fecha = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss").parse(fechaRegistroStr);
-                            fechaRegistro = fecha.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
-                        } catch (Exception e) {
-                            // intentar parseos alternativos o ignorar la fecha
-                            System.out.println("⚠️ [AutenticarUsuario]: No se pudo parsear fechaRegistro: " + fechaRegistroStr);
-                        }
-                    }
 
                     // Crear o actualizar usuario en BD local
                     Usuario usuario;
@@ -153,7 +138,7 @@ public class AutenticarUsuario implements IAutenticarUsuario {
                         usuario = usuarioExistente;
                         if (nombre != null) usuario.setNombre(nombre);
                         if (email != null) usuario.setEmail(email);
-                        usuario.setEstado(estadoLocal);
+                        usuario.setEstado("activo"); // Estado por defecto ya que el servidor no lo envía
                         if (imagenBase64 != null) usuario.setPhotoIdServidor(imagenBase64);
                         especialistaUsuarios.actualizarUsuario(usuario);
                         System.out.println("✅ [AutenticarUsuario]: Usuario actualizado en BD local");
@@ -162,9 +147,9 @@ public class AutenticarUsuario implements IAutenticarUsuario {
                         usuario.setIdUsuario(userId);
                         usuario.setNombre(nombre);
                         usuario.setEmail(email);
-                        usuario.setEstado(estadoLocal);
+                        usuario.setEstado("activo");
                         usuario.setPhotoIdServidor(imagenBase64);
-                        usuario.setFechaRegistro(fechaRegistro);
+                        usuario.setFechaRegistro(LocalDateTime.now()); // Usar fecha actual ya que el servidor no la envía
                         especialistaUsuarios.guardarUsuario(usuario);
                         System.out.println("✅ [AutenticarUsuario]: Usuario guardado en BD local");
                     }
@@ -181,27 +166,34 @@ public class AutenticarUsuario implements IAutenticarUsuario {
 
                     resultadoFuturo.complete(true);
                 } else {
-                    // Manejar distintos formatos de error y data con campo/motivo
+                    // Manejar error según especificación
                     String mensajeError = mensaje != null ? mensaje : "Credenciales incorrectas";
-                    Map<String, Object> datosError = dataObj != null ? gson.fromJson(gson.toJson(dataObj), Map.class) : null;
-                    if (datosError != null && datosError.containsKey("campo")) {
-                        mensajeError += " - " + datosError.get("campo") + ": " + datosError.getOrDefault("motivo", "");
+
+                    // Verificar si hay detalles adicionales en data (campo/motivo)
+                    if (dataObj != null && !"null".equalsIgnoreCase(String.valueOf(dataObj))) {
+                        Map<String, Object> datosError = gson.fromJson(gson.toJson(dataObj), Map.class);
+                        if (datosError != null && datosError.containsKey("campo")) {
+                            String campo = String.valueOf(datosError.get("campo"));
+                            String motivo = String.valueOf(datosError.getOrDefault("motivo", ""));
+                            mensajeError += " - Campo: " + campo + ", Motivo: " + motivo;
+                        }
                     }
+
                     System.err.println("⚠️ [AutenticarUsuario]: " + mensajeError);
                     notificarObservadores("AUTENTICACION_ERROR", mensajeError);
                     resultadoFuturo.complete(false);
                 }
             } catch (Exception e) {
                 System.err.println("❌ [AutenticarUsuario]: Error al procesar respuesta: " + e.getMessage());
+                e.printStackTrace();
                 notificarObservadores("AUTENTICACION_ERROR", "Error al procesar datos del usuario");
                 resultadoFuturo.complete(false);
             }
         };
 
-        // Registrar manejadores: acción enviada y acción de respuesta conocida. Mantener 'login' por compatibilidad.
+        // Registrar manejadores
         gestorRespuesta.registrarManejador(ACCION_ENVIADA, procesarRespuesta);
         gestorRespuesta.registrarManejador(ACCION_RESPUESTA, procesarRespuesta);
-        gestorRespuesta.registrarManejador("login", procesarRespuesta);
 
         DTORequest peticion = new DTORequest(ACCION_ENVIADA, dto);
         enviadorPeticiones.enviar(peticion);
