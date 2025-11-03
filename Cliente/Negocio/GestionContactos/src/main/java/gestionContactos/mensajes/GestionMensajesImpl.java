@@ -60,12 +60,29 @@ public class GestionMensajesImpl implements IGestionMensajes {
     @Override
     public void solicitarHistorial(String contactoId) {
         String userId = gestorSesionUsuario.getUserId();
-        System.out.println("📡 [GestionMensajes]: Solicitando historial de mensajes");
-        System.out.println("   → UserId: " + userId);
-        System.out.println("   → ContactoId: " + contactoId);
+        String peerRemitenteId = gestorSesionUsuario.getPeerId();
+        String peerDestinatarioId = gestorContactoPeers.getPeerIdDeContacto(contactoId);
 
-        // Crear el DTO correcto con ambos IDs
-        DTOSolicitarHistorial payload = new DTOSolicitarHistorial(userId, contactoId);
+        System.out.println("📡 [GestionMensajes]: Solicitando historial de mensajes");
+        System.out.println("   → RemitenteId (UserId): " + userId);
+        System.out.println("   → PeerRemitenteId: " + peerRemitenteId);
+        System.out.println("   → DestinatarioId (ContactoId): " + contactoId);
+        System.out.println("   → PeerDestinatarioId: " + peerDestinatarioId);
+
+        if (peerDestinatarioId == null) {
+            System.err.println("❌ [GestionMensajes]: No se pudo obtener el peerId del destinatario");
+            notificarObservadores("ERROR_PEER_NO_ENCONTRADO", "El contacto no está disponible para obtener el historial");
+            return;
+        }
+
+        // Crear el DTO con los 4 campos requeridos
+        DTOSolicitarHistorial payload = new DTOSolicitarHistorial(
+            userId,
+            peerRemitenteId,
+            contactoId,
+            peerDestinatarioId
+        );
+
         DTORequest peticion = new DTORequest("solicitarHistorialPrivado", payload);
         enviadorPeticiones.enviar(peticion);
         System.out.println("✅ [GestionMensajes]: Petición de historial enviada al servidor");

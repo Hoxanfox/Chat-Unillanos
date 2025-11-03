@@ -2,30 +2,45 @@ package dto.comunicacion.peticion.mensaje;
 
 /**
  * DTO para el payload de la petición 'solicitarHistorialPrivado'.
- * Incluye el usuarioId del usuario activo y el contactoId del chat.
+ * Incluye información del remitente y destinatario con sus respectivos peers.
  */
 public class DTOSolicitarHistorial {
-    private final String usuarioId;   // UUID del usuario activo (quien solicita)
-    private final String contactoId;  // UUID del contacto del chat
+    private final String remitenteId;          // UUID del usuario que solicita
+    private final String peerRemitenteId;      // UUID del peer del solicitante
+    private final String destinatarioId;       // UUID del contacto del chat
+    private final String peerDestinatarioId;   // UUID del peer del destinatario
 
-    public DTOSolicitarHistorial(String usuarioId, String contactoId) {
-        this.usuarioId = usuarioId;
-        this.contactoId = contactoId;
+    public DTOSolicitarHistorial(String remitenteId, String peerRemitenteId,
+                                  String destinatarioId, String peerDestinatarioId) {
+        this.remitenteId = remitenteId;
+        this.peerRemitenteId = peerRemitenteId;
+        this.destinatarioId = destinatarioId;
+        this.peerDestinatarioId = peerDestinatarioId;
     }
 
-    public String getUsuarioId() {
-        return usuarioId;
+    public String getRemitenteId() {
+        return remitenteId;
     }
 
-    public String getContactoId() {
-        return contactoId;
+    public String getPeerRemitenteId() {
+        return peerRemitenteId;
+    }
+
+    public String getDestinatarioId() {
+        return destinatarioId;
+    }
+
+    public String getPeerDestinatarioId() {
+        return peerDestinatarioId;
     }
 
     @Override
     public String toString() {
         return "DTOSolicitarHistorial{" +
-                "usuarioId='" + usuarioId + '\'' +
-                ", contactoId='" + contactoId + '\'' +
+                "remitenteId='" + remitenteId + '\'' +
+                ", peerRemitenteId='" + peerRemitenteId + '\'' +
+                ", destinatarioId='" + destinatarioId + '\'' +
+                ", peerDestinatarioId='" + peerDestinatarioId + '\'' +
                 '}';
     }
 }
