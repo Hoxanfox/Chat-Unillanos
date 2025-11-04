@@ -2,6 +2,10 @@ package com.arquitectura.fachada;
 
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 import com.arquitectura.DTO.Mensajes.TranscriptionResponseDto;
+import com.arquitectura.DTO.archivos.DTODownloadInfo;
+import com.arquitectura.DTO.archivos.DTOEndUpload;
+import com.arquitectura.DTO.archivos.DTOStartUpload;
+import com.arquitectura.DTO.archivos.DTOUploadChunk;
 import com.arquitectura.DTO.canales.ChannelResponseDto;
 import com.arquitectura.DTO.canales.CreateChannelRequestDto;
 import com.arquitectura.DTO.Mensajes.SendMessageRequestDto;
@@ -10,6 +14,7 @@ import com.arquitectura.DTO.canales.RespondToInviteRequestDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
+import com.arquitectura.utils.chunkManager.FileUploadResponse;
 
 
 import java.io.IOException;
@@ -29,6 +34,7 @@ public interface IChatFachada {
     List<UserResponseDto> getUsersByIds(Set<UUID> userIds);
     List<UserResponseDto> obtenerUsuariosConectados();
     void cambiarEstadoUsuario(UUID userId, boolean nuevoEstado) throws Exception;
+    List<UserResponseDto> listarContactos(UUID excludeUserId);
 
 
     // --- Métodos de Canal ---
@@ -53,5 +59,12 @@ public interface IChatFachada {
     //Metodos de Utils
     String getFileAsBase64(String relativePath)throws IOException;
     String getLogContents() throws IOException;
+    // --- MÉTODOS DE TRANSFERENCIA DE ARCHIVOS ---
+
+    String startUpload(DTOStartUpload dto) throws Exception;
+    void processChunk(DTOUploadChunk dto) throws Exception;
+    FileUploadResponse endUpload(DTOEndUpload dto, UUID autorId, String subDirectory) throws Exception;
+    DTODownloadInfo startDownload(String fileId) throws Exception;
+    byte[] getChunk(String downloadId, int chunkNumber) throws Exception;
 
 }

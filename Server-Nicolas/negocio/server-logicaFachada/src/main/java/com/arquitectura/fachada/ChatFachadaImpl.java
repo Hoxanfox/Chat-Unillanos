@@ -2,6 +2,10 @@ package com.arquitectura.fachada;
 
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 import com.arquitectura.DTO.Mensajes.TranscriptionResponseDto;
+import com.arquitectura.DTO.archivos.DTODownloadInfo;
+import com.arquitectura.DTO.archivos.DTOEndUpload;
+import com.arquitectura.DTO.archivos.DTOStartUpload;
+import com.arquitectura.DTO.archivos.DTOUploadChunk;
 import com.arquitectura.DTO.canales.ChannelResponseDto;
 import com.arquitectura.DTO.canales.CreateChannelRequestDto;
 import com.arquitectura.DTO.Mensajes.SendMessageRequestDto;
@@ -15,6 +19,8 @@ import com.arquitectura.logicaCanales.IChannelService;
 import com.arquitectura.logicaMensajes.IMessageService;
 import com.arquitectura.logicaMensajes.transcripcionAudio.IAudioTranscriptionService;
 import com.arquitectura.logicaUsuarios.IUserService;
+import com.arquitectura.utils.chunkManager.FileChunkManager;
+import com.arquitectura.utils.chunkManager.FileUploadResponse;
 import com.arquitectura.utils.file.IFileStorageService;
 import com.arquitectura.utils.logs.ILogService;
 import com.arquitectura.utils.logs.LogService;
@@ -34,17 +40,19 @@ public class ChatFachadaImpl implements IChatFachada {
     private final IAudioTranscriptionService transcriptionService;
     private final IFileStorageService fileStorageService;
     private final ApplicationEventPublisher eventPublisher;
+    private final FileChunkManager fileChunkManager;
 
     private final ILogService logService ;
 
     @Autowired
-    public ChatFachadaImpl(IUserService userService, IChannelService channelService, IMessageService messageService, IAudioTranscriptionService transcriptionService, IFileStorageService fileStorageService, ApplicationEventPublisher eventPublisher, ILogService logService) {
+    public ChatFachadaImpl(IUserService userService, IChannelService channelService, IMessageService messageService, IAudioTranscriptionService transcriptionService, IFileStorageService fileStorageService, ApplicationEventPublisher eventPublisher, FileChunkManager fileChunkManager, ILogService logService) {
         this.userService = userService;
         this.channelService = channelService;
         this.messageService = messageService;
         this.transcriptionService = transcriptionService;
         this.fileStorageService = fileStorageService;
         this.eventPublisher = eventPublisher;
+        this.fileChunkManager = fileChunkManager;
         this.logService = logService;
     }
 
@@ -87,6 +95,11 @@ public class ChatFachadaImpl implements IChatFachada {
     @Override
     public void cambiarEstadoUsuario(UUID userId, boolean nuevoEstado) throws Exception {
         userService.cambiarEstadoUsuario(userId, nuevoEstado);
+    }
+
+    @Override
+    public List<UserResponseDto> listarContactos(UUID excludeUserId) {
+        return userService.listarContactos(excludeUserId);
     }
 
     // --- MÉTODOS DE Canales ---
@@ -183,4 +196,36 @@ public class ChatFachadaImpl implements IChatFachada {
     public String getLogContents() throws IOException {
         return logService.getLogContents();
     }
+    // --- IMPLEMENTACIÓN DE TRANSFERENCIA DE ARCHIVOS ---
+    @Override
+    public String startUpload(DTOStartUpload dto) throws Exception {
+        // Simplemente delegamos al manager
+        return fileChunkManager.startUpload(dto);
+    }
+
+    @Override
+    public void processChunk(DTOUploadChunk dto) throws Exception {
+        // Delegamos al manager
+        fileChunkManager.processChunk(dto);
+    }
+
+    @Override
+    public FileUploadResponse endUpload(DTOEndUpload dto, UUID autorId, String subDirectory) throws Exception {
+        // Delegamos al manager
+        return fileChunkManager.endUpload(dto, autorId, subDirectory);
+    }
+
+    @Override
+    public DTODownloadInfo startDownload(String fileId) throws Exception {
+        // Delegamos al manager
+        return fileChunkManager.startDownload(fileId);
+    }
+
+    @Override
+    public byte[] getChunk(String downloadId, int chunkNumber) throws Exception {
+        // Delegamos al manager
+        return fileChunkManager.getChunk(downloadId, chunkNumber);
+    }
+
+
 }

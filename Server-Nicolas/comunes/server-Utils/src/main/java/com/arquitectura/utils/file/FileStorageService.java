@@ -3,6 +3,7 @@ package com.arquitectura.utils.file;
 import org.springframework.stereotype.Service;
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -32,6 +33,7 @@ public class FileStorageService implements  IFileStorageService{
      * @return La ruta relativa del archivo guardado para almacenarla en la base de datos.
      * @throws IOException Si ocurre un error durante la copia del archivo.
      */
+    @Override
     public String storeFile(File sourceFile, String newFileName, String subDirectory) throws IOException {
         // 1. Determinar la extensión del archivo original
         String originalFileName = sourceFile.getName();
@@ -75,12 +77,42 @@ public class FileStorageService implements  IFileStorageService{
 
     @Override
     public String storeFile(byte[] fileData, String newFileName, String subDirectory) throws IOException {
-        Path uploadPath = Paths.get("uploads", subDirectory).toAbsolutePath().normalize();
-        Files.createDirectories(uploadPath);
+        // 1. Resolver la ruta del subdirectorio de destino y crearlo si no existe
+        Path targetDirectory = this.rootStorageLocation.resolve(subDirectory).normalize();
+        Files.createDirectories(targetDirectory); // Crea la carpeta si no existe
 
-        Path targetLocation = uploadPath.resolve(newFileName);
-        Files.write(targetLocation, fileData); // Usamos Files.write para guardar los bytes
+        // 2. Resolver la ruta completa del archivo final
+        Path targetLocation = targetDirectory.resolve(newFileName);
 
-        return targetLocation.toString();
+        // 3. Escribir los bytes directamente al archivo
+        Files.write(targetLocation, fileData); // Guarda los bytes en el archivo
+
+        // 4. Devolver la ruta relativa (igual que el otro método storeFile)
+        // Esto devolverá algo como "user_photos/juan.jpg" o "audio_files/12345.wav"
+        return Paths.get(subDirectory).resolve(newFileName).toString();
+    }
+    @Override
+    public byte[] readChunk(String relativePath, long offset, int length) throws IOException{
+        Path filePath = this.rootStorageLocation.resolve(relativePath).normalize();
+
+        if (!Files.exists(filePath)) {
+            throw new IOException("Archivo no encontrado: " + relativePath);
+        }
+
+        // Usa RandomAccessFile para leer solo un "trozo" (chunk)
+        try (RandomAccessFile raf = new RandomAccessFile(filePath.toFile(), "r")) {
+            raf.seek(offset);
+
+            // Asegurarse de no leer más allá del final del archivo
+            long remaining = raf.length() - offset;
+            if (length > remaining) {
+                length = (int) remaining;
+            }
+            if(length <= 0) return new byte[0]; // No hay nada que leer
+
+            byte[] buffer = new byte[length];
+            raf.readFully(buffer);
+            return buffer;
+        }
     }
 }
