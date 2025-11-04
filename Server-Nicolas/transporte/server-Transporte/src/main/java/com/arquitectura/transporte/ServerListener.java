@@ -1,10 +1,10 @@
 package com.arquitectura.transporte;
 
+import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 import com.arquitectura.controlador.IClientHandler;
 import com.arquitectura.controlador.RequestDispatcher;
 import com.arquitectura.events.*;
-import com.arquitectura.utils.file.IFileStorageService;
 import com.google.gson.Gson;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -19,7 +19,6 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -38,16 +37,15 @@ public class ServerListener {
     private ExecutorService clientPool;
 
     private final RequestDispatcher requestDispatcher;
-    private final IFileStorageService fileStorageService;
 
-    // El mapa de sesiones activas vuelve a ser responsabilidad de esta clase.
+
+    // El mapa de sesiones activas responsabilidad
     private final Map<UUID, List<IClientHandler>> activeClientsById = Collections.synchronizedMap(new HashMap<>());
 
     @Autowired
-    public ServerListener(Gson gson, RequestDispatcher requestDispatcher, IFileStorageService fileStorageService) {
+    public ServerListener(Gson gson, RequestDispatcher requestDispatcher) {
         this.gson = gson;
         this.requestDispatcher = requestDispatcher;
-        this.fileStorageService = fileStorageService;
     }
 
     @PostConstruct
@@ -66,15 +64,14 @@ public class ServerListener {
                 if (totalConnections >= maxConnectedUsers) {
                     log.warn("Conexión rechazada de {}. Límite de {} conexiones alcanzado.", clientSocket.getInetAddress().getHostAddress(), maxConnectedUsers);
                     try (PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
-                        out.println("ERROR;SERVER_FULL;El servidor ha alcanzado su capacidad máxima.");
+                        DTOResponse errResponse = new DTOResponse("connect", "error", "El servidor ha alcanzado su capacidad máxima.", null);
+                        out.println(gson.toJson(errResponse));
                     }
                     clientSocket.close();
                     continue;
                 }
 
                 log.info("Nuevo cliente conectado: {}", clientSocket.getInetAddress().getHostAddress());
-                // --- ¡LÍNEA CORREGIDA! ---
-                // Pasamos la instancia completa de 'this' (el ServerListener)
                 ClientHandler clientHandler = new ClientHandler(clientSocket, requestDispatcher, this, this::removeClient);
                 clientPool.submit(clientHandler);
             }
@@ -88,8 +85,10 @@ public class ServerListener {
     @EventListener
     public void handleBroadcastEvent(BroadcastMessageEvent event) {
         log.info("Evento de Broadcast recibido. Enviando a todas las sesiones activas.");
+        DTOResponse response = new DTOResponse("broadcast", "success", "Mensaje global", event.getFormattedMessage());
+        String notification = gson.toJson(response);
         activeClientsById.values().forEach(handlerList -> {
-            handlerList.forEach(handler -> handler.sendMessage(event.getFormattedMessage()));
+            handlerList.forEach(handler -> handler.sendMessage(notification));
         });
     }
 
@@ -98,27 +97,13 @@ public class ServerListener {
         MessageResponseDto originalDto = event.getMessageDto();
         log.info("Nuevo mensaje en canal {}. Propagando a los miembros conectados.", originalDto.getChannelId());
         List<UUID> memberIds = event.getRecipientUserIds();
-        MessageResponseDto dtoParaPropagar = originalDto;
-        if ("AUDIO".equals(originalDto.getMessageType())) {
-            try {
-                String base64Content = fileStorageService.readFileAsBase64(originalDto.getContent());
-                dtoParaPropagar = new MessageResponseDto(
-                        originalDto.getMessageId(),
-                        originalDto.getChannelId(),
-                        originalDto.getAuthor(),
-                        originalDto.getTimestamp(),
-                        originalDto.getMessageType(),
-                        base64Content
-                );
-                log.info("Mensaje de audio ID {} codificado a Base64 para su propagación.", originalDto.getMessageId());
-
-            } catch (Exception e) {
-                log.error("Error al leer y codificar el archivo de audio para propagación: {}", e.getMessage());
-                return;
-            }
+        MessageResponseDto dtoParaPropagar = requestDispatcher.enrichOutgoingMessage(originalDto);
+        if (dtoParaPropagar != originalDto) { // Comprobamos si el DTO fue modificado
+            log.info("Mensaje de audio ID {} codificado a Base64 para su propagación.", originalDto.getMessageId());
         }
 
-        String notification = "EVENTO;NUEVO_MENSAJE;" + gson.toJson(dtoParaPropagar);
+        DTOResponse response = new DTOResponse("nuevoMensajeCanal", "success", "Nuevo mensaje recibido", dtoParaPropagar);
+        String notification = gson.toJson(response);
 
         memberIds.forEach(memberId -> {
             List<IClientHandler> userSessions = activeClientsById.get(memberId);
@@ -134,8 +119,8 @@ public class ServerListener {
         log.info("Usuario {} invitado al canal '{}'. Notificando si está en línea.", invitedUserId, event.getChannelDto().getChannelName());
         List<IClientHandler> userSessions = activeClientsById.get(invitedUserId);
         if (userSessions != null && !userSessions.isEmpty()) {
-            String notificationJson = gson.toJson(event.getChannelDto());
-            String notification = "EVENTO;NUEVA_INVITACION;" + notificationJson;
+            DTOResponse response = new DTOResponse("notificacionInvitacionCanal", "success", "Has sido invitado a un canal", event.getChannelDto());
+            String notification = gson.toJson(response);
             userSessions.forEach(handler -> handler.sendMessage(notification));
             log.info("Notificación de invitación enviada al usuario {}.", invitedUserId);
         }

@@ -1,6 +1,8 @@
 package com.arquitectura.controlador;
 
 import com.arquitectura.DTO.Comunicacion.DTORequest;
+import com.arquitectura.DTO.Comunicacion.DTOResponse; // <-- Usar el DTOResponse estándar
+import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.fachada.IChatFachada;
@@ -44,9 +46,9 @@ public class RequestDispatcher {
 
             switch (action) {
                 case "authenticateuser":
-                    Object dataObj = request.getData();
+                    Object dataObj = request.getPayload();
                     if (dataObj == null) {
-                        sendJsonResponse(handler, "authenticateUser", false, "Falta data.", null);
+                        sendJsonResponse(handler, "authenticateUser", false, "Falta payload.", null);
                         return;
                     }
 
@@ -56,7 +58,7 @@ public class RequestDispatcher {
                     String password = dataJson.has("password") ? dataJson.get("password").getAsString() : null;
 
                     if (nombreUsuario == null || password == null) {
-                        sendJsonResponse(handler, "authenticateUser", false, "Email o contraseña inválidos",
+                        sendJsonResponse(handler, "authenticateUser", false, "usuario o contraseña inválidos",
                             createErrorData("nombreUsuario", "El campo nombreUsuario es requerido"));
                         return;
                     }
@@ -79,7 +81,7 @@ public class RequestDispatcher {
 
                 case "logoutuser":
                     // Ya no necesitamos validar isAuthenticated() aquí porque se valida arriba
-                    Object logoutDataObj = request.getData();
+                    Object logoutDataObj = request.getPayload();
                     if (logoutDataObj == null) {
                         sendJsonResponse(handler, "logoutUser", false, "Error al cerrar sesión: Falta el userId", null);
                         return;
@@ -123,6 +125,32 @@ public class RequestDispatcher {
         }
     }
 
+    public MessageResponseDto enrichOutgoingMessage(MessageResponseDto originalDto) {
+        if ("AUDIO".equals(originalDto.getMessageType())) {
+            try {
+                // Esta llamada (Controlador -> Fachada) es VÁLIDA.
+                String base64Content = chatFachada.getFileAsBase64(originalDto.getContent());
+
+                // Devolver un DTO *nuevo* con el contenido Base64
+                return new MessageResponseDto(
+                        originalDto.getMessageId(),
+                        originalDto.getChannelId(),
+                        originalDto.getAuthor(),
+                        originalDto.getTimestamp(),
+                        originalDto.getMessageType(),
+                        base64Content
+                );
+            } catch (Exception e) {
+                // Aquí deberíamos usar el logger
+                System.err.println("Error al leer y codificar el archivo de audio para propagación: " + e.getMessage());
+                // Devuelve el DTO original si falla la codificación
+                return originalDto;
+            }
+        }
+        // Si no es audio, devolver el original
+        return originalDto;
+    }
+
     // Método para crear data de error con campo y motivo
     private Map<String, String> createErrorData(String campo, String motivo) {
         Map<String, String> errorData = new HashMap<>();
@@ -133,23 +161,9 @@ public class RequestDispatcher {
 
     // Método actualizado para enviar respuestas JSON con 'success' booleano
     private void sendJsonResponse(IClientHandler handler, String action, boolean success, String message, Object data) {
-        DTOResponse response = new DTOResponse(action, success, message, data);
+        String status = success ? "success" : "error";
+        DTOResponse response = new DTOResponse(action, status, message, data);
         String jsonResponse = gson.toJson(response);
         handler.sendMessage(jsonResponse);
-    }
-
-    // Clase DTOResponse actualizada con 'success' booleano
-    public static class DTOResponse {
-        private final String action;
-        private final boolean success;
-        private final String message;
-        private final Object data;
-
-        public DTOResponse(String action, boolean success, String message, Object data) {
-            this.action = action;
-            this.success = success;
-            this.message = message;
-            this.data = data;
-        }
     }
 }

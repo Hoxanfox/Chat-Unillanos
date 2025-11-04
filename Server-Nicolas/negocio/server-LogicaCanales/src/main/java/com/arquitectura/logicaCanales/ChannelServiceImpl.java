@@ -41,7 +41,7 @@ public class ChannelServiceImpl implements IChannelService {
 
 
     @Autowired
-    public ChannelServiceImpl(ChannelRepository channelRepository, UserRepository userRepository,
+    public ChannelServiceImpl(ChannelRepository channelRepository, UserRepository userRepository, 
                               MembresiaCanalRepository membresiaCanalRepository, PeerRepository peerRepository,
                               NetworkUtils networkUtils, ApplicationEventPublisher eventPublisher) {
         this.channelRepository = channelRepository;
@@ -62,15 +62,15 @@ public class ChannelServiceImpl implements IChannelService {
         if (tipo == TipoCanal.DIRECTO) {
             throw new Exception("Los canales directos deben crearse con el método crearCanalDirecto.");
         }
-
+        
         // Obtener el Peer (servidor) actual
         String serverPeerAddress = networkUtils.getServerIPAddress();
         Peer currentPeer = peerRepository.findByIp(serverPeerAddress)
                 .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress)));
-
+        
         Channel newChannel = new Channel(requestDto.getChannelName(), owner, tipo);
         newChannel.setPeerId(currentPeer); // Asignamos el servidor padre
-
+        
         // Se guarda primero para obtener el ID del canal
         Channel savedChannel = channelRepository.save(newChannel);
         //Creador se agrega automáticamente como miembro
@@ -106,16 +106,16 @@ public class ChannelServiceImpl implements IChannelService {
         // Si no existe, procedemos a crear uno nuevo
         User user1 = userRepository.findById(user1Id).orElseThrow(() -> new Exception("El usuario con ID " + user1Id + " no existe."));
         User user2 = userRepository.findById(user2Id).orElseThrow(() -> new Exception("El usuario con ID " + user2Id + " no existe."));
-
+        
         // Obtener el Peer (servidor) actual
         String serverPeerAddress = networkUtils.getServerIPAddress();
         Peer currentPeer = peerRepository.findByIp(serverPeerAddress)
                 .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress)));
-
+        
         String channelName = "Directo: " + user1.getUsername() + " - " + user2.getUsername();
         Channel directChannel = new Channel(channelName, user1, TipoCanal.DIRECTO); // user1 es el "owner" simbólico
         directChannel.setPeerId(currentPeer); // Asignamos el servidor padre
-
+        
         //guardamos el canal
         Channel savedChannel = channelRepository.save(directChannel);
         // Añadimos a ambos usuarios como miembros activos
