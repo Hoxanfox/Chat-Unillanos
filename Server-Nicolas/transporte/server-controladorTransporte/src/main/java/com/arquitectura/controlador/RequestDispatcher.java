@@ -3,18 +3,21 @@ package com.arquitectura.controlador;
 import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.DTO.Comunicacion.DTOResponse; // <-- Usar el DTOResponse estándar
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
+import com.arquitectura.DTO.archivos.DTODownloadInfo;
+import com.arquitectura.DTO.archivos.DTOEndUpload;
+import com.arquitectura.DTO.archivos.DTOStartUpload;
+import com.arquitectura.DTO.archivos.DTOUploadChunk;
+import com.arquitectura.DTO.canales.ChannelResponseDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.fachada.IChatFachada;
+import com.arquitectura.utils.chunkManager.FileUploadResponse;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @Component
 public class RequestDispatcher {
@@ -22,7 +25,10 @@ public class RequestDispatcher {
     private final IChatFachada chatFachada;
     private final Gson gson;
     private static final Set<String> ACCIONES_PUBLICAS = Set.of(
-            "authenticateuser"
+            "authenticateuser",
+            "uploadfileforregistration",  // Subida sin autenticación para registro
+            "uploadfilechunk",             // Los chunks pueden ser públicos
+            "endfileupload"                // Finalizar upload puede ser público
     );
 
     @Autowired
@@ -74,7 +80,9 @@ public class RequestDispatcher {
                     responseData.put("userId", userDto.getUserId().toString());
                     responseData.put("nombre", userDto.getUsername());
                     responseData.put("email", userDto.getEmail());
-                    responseData.put("imagenBase64", userDto.getImagenBase64());
+                    // Enviar el fileId (ruta relativa) para que el cliente lo descargue con chunks
+                    // Si no tiene foto, enviar null
+                    responseData.put("fileId", userDto.getPhotoAddress());
 
                     sendJsonResponse(handler, "authenticateUser", true, "Autenticación exitosa", responseData);
                     break;
@@ -113,6 +121,176 @@ public class RequestDispatcher {
                         sendJsonResponse(handler, "logoutUser", false, "Error al cerrar sesión: userId inválido", null);
                     }
                     break;
+
+                case "listarcontactos":
+                    Object listarContactosDataObj = request.getPayload();
+                    if (listarContactosDataObj == null) {
+                        sendJsonResponse(handler, "listarContactos", false, "Error al obtener contactos: Falta el usuarioId", null);
+                        return;
+                    }
+
+                    JsonObject listarContactosJson = gson.toJsonTree(listarContactosDataObj).getAsJsonObject();
+                    String usuarioIdStr = listarContactosJson.has("usuarioId") ? listarContactosJson.get("usuarioId").getAsString() : null;
+
+                    if (usuarioIdStr == null || usuarioIdStr.isEmpty()) {
+                        sendJsonResponse(handler, "listarContactos", false, "Error al obtener contactos: usuarioId requerido", null);
+                        return;
+                    }
+
+                    try {
+                        UUID usuarioId = UUID.fromString(usuarioIdStr);
+
+                        // Verificar que el usuarioId coincida con el usuario autenticado (seguridad)
+                        if (!handler.getAuthenticatedUser().getUserId().equals(usuarioId)) {
+                            sendJsonResponse(handler, "listarContactos", false, "Usuario no autenticado o token inválido", null);
+                            return;
+                        }
+
+                        // Obtener la lista de contactos (todos los usuarios excepto el actual)
+                        List<UserResponseDto> contactos = chatFachada.listarContactos(usuarioId);
+
+                        // Construir la respuesta según el formato del API
+                        List<Map<String, Object>> contactosData = new ArrayList<>();
+                        for (UserResponseDto contacto : contactos) {
+                            Map<String, Object> contactoMap = new HashMap<>();
+                            contactoMap.put("id", contacto.getUserId().toString());
+                            contactoMap.put("nombre", contacto.getUsername());
+                            contactoMap.put("email", contacto.getEmail());
+                            contactoMap.put("imagenBase64", contacto.getImagenBase64());
+                            contactoMap.put("conectado", contacto.getEstado());
+                            contactosData.add(contactoMap);
+                        }
+
+                        sendJsonResponse(handler, "listarContactos", true, "Lista de contactos obtenida", contactosData);
+                    } catch (IllegalArgumentException e) {
+                        sendJsonResponse(handler, "listarContactos", false, "Error al obtener contactos: usuarioId inválido", null);
+                    } catch (Exception e) {
+                        sendJsonResponse(handler, "listarContactos", false, "Error al obtener contactos: " + e.getMessage(), null);
+                    }
+                    break;
+
+                case "listarcanales":
+                    Object listarCanalesDataObj = request.getPayload();
+                    if (listarCanalesDataObj == null) {
+                        sendJsonResponse(handler, "listarCanales", false, "Error al listar canales: Falta el usuarioId", null);
+                        return;
+                    }
+
+                    JsonObject listarCanalesJson = gson.toJsonTree(listarCanalesDataObj).getAsJsonObject();
+                    String canalesUsuarioIdStr = listarCanalesJson.has("usuarioId") ? listarCanalesJson.get("usuarioId").getAsString() : null;
+
+                    if (canalesUsuarioIdStr == null || canalesUsuarioIdStr.isEmpty()) {
+                        sendJsonResponse(handler, "listarCanales", false, "Error al listar canales: usuarioId requerido", null);
+                        return;
+                    }
+
+                    try {
+                        UUID canalesUsuarioId = UUID.fromString(canalesUsuarioIdStr);
+
+                        // Verificar que el usuarioId coincida con el usuario autenticado (seguridad)
+                        if (!handler.getAuthenticatedUser().getUserId().equals(canalesUsuarioId)) {
+                            sendJsonResponse(handler, "listarCanales", false, "Usuario no autorizado para ver esta lista", null);
+                            return;
+                        }
+
+                        // Obtener la lista de canales del usuario
+                        List<ChannelResponseDto> canales = chatFachada.obtenerCanalesPorUsuario(canalesUsuarioId);
+
+                        // Construir la respuesta según el formato del API
+                        List<Map<String, Object>> canalesData = new ArrayList<>();
+                        for (ChannelResponseDto canal : canales) {
+                            Map<String, Object> canalMap = new HashMap<>();
+                            canalMap.put("idCanal", canal.getChannelId().toString());
+                            canalMap.put("idPeer", canal.getPeerId() != null ? canal.getPeerId().toString() : null);
+                            canalMap.put("nombreCanal", canal.getChannelName());
+                            canalMap.put("ownerId", canal.getOwner().getUserId().toString());
+                            canalesData.add(canalMap);
+                        }
+
+                        sendJsonResponse(handler, "listarCanales", true, "Lista de canales obtenida", canalesData);
+                    } catch (IllegalArgumentException e) {
+                        sendJsonResponse(handler, "listarCanales", false, "Error al listar canales: usuarioId inválido", null);
+                    } catch (Exception e) {
+                        sendJsonResponse(handler, "listarCanales", false, "Error al listar canales: " + e.getMessage(), null);
+                    }
+                    break;
+                case "startfileupload": // Subida autenticada (ej. audio)
+                case "uploadfileforregistration": // Subida pública (ej. foto de registro)
+                {
+                    DTOStartUpload payload = gson.fromJson(gson.toJsonTree(request.getPayload()), DTOStartUpload.class);
+                    // ✅ ¡Llamada correcta a la Fachada!
+                    String uploadId = chatFachada.startUpload(payload);
+                    sendJsonResponse(handler, action, true, "Upload iniciado", Map.of("uploadId", uploadId));
+                    break;
+                }
+
+                case "uploadfilechunk":
+                {
+                    DTOUploadChunk payload = gson.fromJson(gson.toJsonTree(request.getPayload()), DTOUploadChunk.class);
+                    // ✅ ¡Llamada correcta a la Fachada!
+                    chatFachada.processChunk(payload);
+
+                    // Respuesta PUSH (ack dinámico, como dice la documentación)
+                    String ackAction = "uploadFileChunk_" + payload.getUploadId() + "_" + payload.getChunkNumber();
+                    sendJsonResponse(handler, ackAction, true, "Chunk " + payload.getChunkNumber() + " recibido", null);
+                    break;
+                }
+
+                case "endfileupload":
+                {
+                    DTOEndUpload payload = gson.fromJson(gson.toJsonTree(request.getPayload()), DTOEndUpload.class);
+
+                    String subDirectory;
+                    UUID autorId;
+
+                    if (handler.isAuthenticated()) {
+                        autorId = handler.getAuthenticatedUser().getUserId();
+                        subDirectory = "audio_files"; // O "user_files" si es genérico
+                    } else {
+                        // Es una subida de registro (sin auth)
+                        autorId = UUID.fromString("00000000-0000-0000-0000-000000000000"); // ID temporal/genérico
+                        subDirectory = "user_photos"; // Guardar en fotos de perfil
+                    }
+
+                    // ✅ ¡Llamada correcta a la Fachada!
+                    FileUploadResponse responseDataLocal = chatFachada.endUpload(payload, autorId, subDirectory);
+                    sendJsonResponse(handler, action, true , "Archivo subido", responseDataLocal);
+                    break;
+                }
+
+                // --- INICIO DE ACCIONES DE DESCARGA (Para el Login) ---
+                case "startfiledownload":
+                {
+                    // El payload es { "fileId": "ruta/archivo.jpg" }
+                    JsonObject payloadJson = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+                    String fileId = payloadJson.get("fileId").getAsString();
+
+                    // ✅ ¡Llamada correcta a la Fachada!
+                    DTODownloadInfo info = chatFachada.startDownload(fileId);
+                    sendJsonResponse(handler, action, true, "Descarga iniciada", info);
+                    break;
+                }
+
+                case "requestfilechunk":
+                {
+                    // El payload es { "downloadId": "...", "chunkNumber": N }
+                    JsonObject payloadJson = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+                    String downloadId = payloadJson.get("downloadId").getAsString();
+                    int chunkNumber = payloadJson.get("chunkNumber").getAsInt();
+
+                    // ✅ ¡Llamada correcta a la Fachada!
+                    byte[] chunkBytes = chatFachada.getChunk(downloadId, chunkNumber);
+                    String chunkBase64 = Base64.getEncoder().encodeToString(chunkBytes);
+
+                    Map<String, Object> chunkData = new HashMap<>();
+                    chunkData.put("chunkNumber", chunkNumber);
+                    chunkData.put("chunkDataBase64", chunkBase64); // La doc del cliente usa 'chunkDataBase64'
+
+                    // Respuesta PUSH (chunk dinámico)
+                    String pushAction = "downloadFileChunk_" + downloadId + "_" + chunkNumber;
+                    sendJsonResponse(handler, pushAction, true, "Enviando chunk", chunkData);
+                    break;
+                }
 
                 default:
                     sendJsonResponse(handler, action, false, "Comando desconocido: " + action, null);

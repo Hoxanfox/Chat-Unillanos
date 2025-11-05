@@ -33,7 +33,7 @@ public class GestionArchivosImpl implements IGestionArchivos {
     private final IGestorRespuesta gestorRespuesta;
     private final IRepositorioArchivo repositorioArchivo;
     private final Gson gson;
-    private static final int CHUNK_SIZE = 256;  // 1.5 MB
+    private static final int CHUNK_SIZE = 524288; // 512 KB (512 * 1024)
 
     // Patrón Observador
     private final List<IObservador> observadores;
@@ -371,15 +371,30 @@ public class GestionArchivosImpl implements IGestionArchivos {
                                 System.out.println("[GestionArchivos] Info de descarga recibida - Archivo: " + downloadInfo.getFileName() +
                                                  ", Total chunks: " + downloadInfo.getTotalChunks());
 
-                                // Crear entrada en BD con estado "descargando"
-                                Archivo archivo = new Archivo(fileId, downloadInfo.getFileName(),
-                                                             downloadInfo.getMimeType(), downloadInfo.getFileSize());
-                                archivo.setEstado("descargando");
+                                // ✅ CORRECCIÓN: Verificar si existe antes de guardar
+                                return repositorioArchivo.existe(fileId)
+                                        .thenCompose(yaExiste -> {
+                                            if (yaExiste) {
+                                                // El archivo existe, actualizar estado
+                                                System.out.println("[GestionArchivos] Actualizando estado de archivo existente");
+                                                return repositorioArchivo.actualizarEstado(fileId, "descargando")
+                                                        .thenCompose(actualizado -> {
+                                                            notificarObservadores("DESCARGA_INFO", downloadInfo);
+                                                            return recibirChunksYAlmacenar(downloadInfo, directorioDestino, fileId);
+                                                        });
+                                            } else {
+                                                // El archivo NO existe, crear entrada nueva
+                                                System.out.println("[GestionArchivos] Creando nueva entrada en BD");
+                                                Archivo archivo = new Archivo(fileId, downloadInfo.getFileName(),
+                                                                             downloadInfo.getMimeType(), downloadInfo.getFileSize());
+                                                archivo.setEstado("descargando");
 
-                                return repositorioArchivo.guardar(archivo)
-                                        .thenCompose(guardado -> {
-                                            notificarObservadores("DESCARGA_INFO", downloadInfo);
-                                            return recibirChunksYAlmacenar(downloadInfo, directorioDestino, fileId);
+                                                return repositorioArchivo.guardar(archivo)
+                                                        .thenCompose(guardado -> {
+                                                            notificarObservadores("DESCARGA_INFO", downloadInfo);
+                                                            return recibirChunksYAlmacenar(downloadInfo, directorioDestino, fileId);
+                                                        });
+                                            }
                                         });
                             })
                             .thenApply(archivoDescargado -> {
@@ -483,10 +498,43 @@ public class GestionArchivosImpl implements IGestionArchivos {
         gestorRespuesta.registrarManejador(ACCION_RESPUESTA, (DTOResponse res) -> {
             System.out.println("[GestionArchivos] Respuesta recibida para chunk " + chunkNumber + " - Exitoso: " + res.fueExitoso());
             if (res.fueExitoso()) {
-                DTODownloadChunk chunkDto = gson.fromJson(gson.toJson(res.getData()), DTODownloadChunk.class);
-                byte[] chunkData = Base64.getDecoder().decode(chunkDto.getChunkData());
-                System.out.println("[GestionArchivos] Chunk " + chunkNumber + " decodificado - Tamaño: " + chunkData.length + " bytes");
-                futuroChunk.complete(chunkData);
+                try {
+                    // ✅ CORRECCIÓN: El servidor envía "chunkDataBase64" en lugar de "chunkData"
+                    // Extraer el valor directamente del objeto data
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Object> dataMap = (java.util.Map<String, Object>) res.getData();
+
+                    // El servidor puede enviar "chunkDataBase64" o "chunkData"
+                    String chunkDataBase64 = null;
+                    if (dataMap.containsKey("chunkDataBase64")) {
+                        chunkDataBase64 = (String) dataMap.get("chunkDataBase64");
+                    } else if (dataMap.containsKey("chunkData")) {
+                        chunkDataBase64 = (String) dataMap.get("chunkData");
+                    }
+
+                    // Validar que chunkData no sea null
+                    if (chunkDataBase64 == null || chunkDataBase64.isEmpty()) {
+                        System.err.println("[GestionArchivos] ERROR: chunkData es null o vacío para chunk " + chunkNumber);
+                        System.err.println("[GestionArchivos] Keys disponibles: " + dataMap.keySet());
+                        futuroChunk.completeExceptionally(new RuntimeException("Chunk data es null o vacío"));
+                        return;
+                    }
+
+                    // Log truncado (primeros 50 y últimos 50 caracteres)
+                    String preview = chunkDataBase64.length() > 100
+                        ? chunkDataBase64.substring(0, 50) + "..." + chunkDataBase64.substring(chunkDataBase64.length() - 50)
+                        : chunkDataBase64;
+                    System.out.println("[GestionArchivos] Chunk " + chunkNumber + " recibido - Base64 length: " +
+                                     chunkDataBase64.length() + " - Preview: " + preview);
+
+                    byte[] chunkData = Base64.getDecoder().decode(chunkDataBase64);
+                    System.out.println("[GestionArchivos] Chunk " + chunkNumber + " decodificado - Tamaño: " + chunkData.length + " bytes");
+                    futuroChunk.complete(chunkData);
+                } catch (Exception e) {
+                    System.err.println("[GestionArchivos] ERROR al procesar chunk " + chunkNumber + ": " + e.getMessage());
+                    e.printStackTrace();
+                    futuroChunk.completeExceptionally(e);
+                }
             } else {
                 System.err.println("[GestionArchivos] ERROR en chunk " + chunkNumber + ": " + res.getMessage());
                 futuroChunk.completeExceptionally(new RuntimeException(res.getMessage()));
@@ -628,15 +676,31 @@ public class GestionArchivosImpl implements IGestionArchivos {
                 String contenidoBase64 = Base64.getEncoder().encodeToString(contenidoCompleto);
                 String hashCalculado = calcularHashSHA256(contenidoCompleto);
 
-                // Crear entrada en BD para caché
-                Archivo archivo = new Archivo(fileId, downloadInfo.getFileName(),
-                                             downloadInfo.getMimeType(), downloadInfo.getFileSize());
-                archivo.setEstado("completo");
-                archivo.setContenidoBase64(contenidoBase64);
-                archivo.setHashSHA256(hashCalculado);
-                repositorioArchivo.guardar(archivo);
-
-                System.out.println("[GestionArchivos] Archivo guardado en caché local");
+                // ✅ CORRECCIÓN: Verificar si existe antes de guardar en caché
+                repositorioArchivo.existe(fileId).thenAccept(yaExiste -> {
+                    if (yaExiste) {
+                        // Actualizar contenido existente
+                        System.out.println("[GestionArchivos] Actualizando caché existente");
+                        repositorioArchivo.actualizarContenido(fileId, contenidoBase64)
+                                .thenRun(() -> {
+                                    repositorioArchivo.buscarPorFileIdServidor(fileId)
+                                            .thenAccept(archivo -> {
+                                                archivo.setHashSHA256(hashCalculado);
+                                                // No necesitamos guardar de nuevo, solo actualizar hash si es necesario
+                                            });
+                                });
+                    } else {
+                        // Crear nueva entrada en caché
+                        System.out.println("[GestionArchivos] Creando nueva entrada en caché");
+                        Archivo archivo = new Archivo(fileId, downloadInfo.getFileName(),
+                                                     downloadInfo.getMimeType(), downloadInfo.getFileSize());
+                        archivo.setEstado("completo");
+                        archivo.setContenidoBase64(contenidoBase64);
+                        archivo.setHashSHA256(hashCalculado);
+                        repositorioArchivo.guardar(archivo);
+                        System.out.println("[GestionArchivos] Archivo guardado en caché local");
+                    }
+                });
 
                 futuroBytes.complete(contenidoCompleto);
 

@@ -52,4 +52,12 @@ public interface IUserService {
      */
     void cambiarEstadoUsuario(UUID userId, boolean conectado);
 
+    /**
+     * Obtiene una lista de todos los usuarios excepto el usuario especificado.
+     * Útil para listar contactos disponibles.
+     * @param excludeUserId El ID del usuario a excluir de la lista (generalmente el usuario actual)
+     * @return Una lista de DTOs de usuarios con imagenBase64
+     */
+    List<UserResponseDto> listarContactos(UUID excludeUserId);
+
 }

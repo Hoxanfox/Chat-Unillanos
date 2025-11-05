@@ -203,6 +203,42 @@ public class GestorConexionH2 {
                 )
             """);
 
+            // Tabla Canal Usuario (miembros del canal)
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS canal_usuario (
+                    id_canal_usuario UUID DEFAULT RANDOM_UUID() PRIMARY KEY,
+                    id_canal UUID NOT NULL,
+                    id_usuario UUID NOT NULL,
+                    fecha_union TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    rol VARCHAR(50) DEFAULT 'miembro',
+                    FOREIGN KEY (id_canal) REFERENCES canales(id_canal) ON DELETE CASCADE,
+                    FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
+                    UNIQUE (id_canal, id_usuario)
+                )
+            """);
+
+            // Tabla de Archivos
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS archivos (
+                    id_archivo UUID DEFAULT RANDOM_UUID() PRIMARY KEY,
+                    file_id_servidor VARCHAR(255) NOT NULL UNIQUE,
+                    nombre_archivo VARCHAR(500) NOT NULL,
+                    mime_type VARCHAR(100),
+                    tamanio_bytes BIGINT,
+                    contenido_base64 CLOB,
+                    hash_sha256 VARCHAR(64),
+                    fecha_descarga TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    fecha_ultima_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    asociado_a VARCHAR(50),
+                    id_asociado UUID,
+                    estado VARCHAR(20) DEFAULT 'completo' CHECK (estado IN ('descargando', 'completo', 'error'))
+                )
+            """);
+
+            // Índices para búsquedas rápidas en archivos
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_archivos_file_id_servidor ON archivos(file_id_servidor)");
+            stmt.execute("CREATE INDEX IF NOT EXISTS idx_archivos_asociado ON archivos(asociado_a, id_asociado)");
+
             System.out.println("✅ [GestorConexionH2]: Todas las tablas verificadas/creadas correctamente.");
         }
     }

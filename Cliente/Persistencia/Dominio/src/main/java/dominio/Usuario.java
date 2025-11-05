@@ -16,7 +16,8 @@ public class Usuario {
     private byte[] foto;
     private String ip;
     private LocalDateTime fechaRegistro;
-    private String photoIdServidor;
+    private String photoIdServidor; // ID del archivo en el servidor
+    private String rutaFotoLocal;   // Ruta local del archivo descargado
 
     public Usuario() {
     }
@@ -98,6 +99,14 @@ public class Usuario {
         this.photoIdServidor = photoIdServidor;
     }
 
+    public String getRutaFotoLocal() {
+        return rutaFotoLocal;
+    }
+
+    public void setRutaFotoLocal(String rutaFotoLocal) {
+        this.rutaFotoLocal = rutaFotoLocal;
+    }
+
     @Override
     public String toString() {
         return "Usuario{" +
@@ -108,6 +117,7 @@ public class Usuario {
                 ", ip='" + ip + '\'' +
                 ", fechaRegistro=" + fechaRegistro +
                 ", photoIdServidor='" + photoIdServidor + '\'' +
+                ", rutaFotoLocal='" + rutaFotoLocal + '\'' +
                 '}';
     }
 }

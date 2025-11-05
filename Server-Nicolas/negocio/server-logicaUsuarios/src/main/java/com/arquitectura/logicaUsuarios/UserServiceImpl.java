@@ -188,4 +188,24 @@ public class UserServiceImpl implements IUserService {
         }
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserResponseDto> listarContactos(UUID excludeUserId) {
+        return userRepository.findAll().stream()
+                .filter(user -> !user.getUserId().equals(excludeUserId)) // Excluir al usuario actual
+                .map(user -> {
+                    String imagenBase64 = getImagenBase64(user);
+                    return new UserResponseDto(
+                            user.getUserId(),
+                            user.getUsername(),
+                            user.getEmail(),
+                            user.getPhotoAddress(),
+                            imagenBase64, // Incluir imagen en Base64
+                            user.getFechaRegistro(),
+                            user.getConectado() ? "ONLINE" : "OFFLINE"
+                    );
+                })
+                .collect(Collectors.toList());
+    }
+
 }

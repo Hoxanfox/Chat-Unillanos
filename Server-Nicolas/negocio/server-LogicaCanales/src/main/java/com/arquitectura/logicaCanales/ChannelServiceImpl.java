@@ -232,11 +232,15 @@ public class ChannelServiceImpl implements IChannelService {
     private ChannelResponseDto mapToChannelResponseDto(Channel channel) {
         UserResponseDto ownerDto = mapToUserResponseDto(channel.getOwner());
 
+        // Obtener el peerId si existe, sino null
+        UUID peerId = channel.getPeerId() != null ? channel.getPeerId().getPeerId() : null;
+
         return new ChannelResponseDto(
                 channel.getChannelId(),
                 channel.getName(),
                 channel.getTipo().toString(),
-                ownerDto
+                ownerDto,
+                peerId
         );
     }
     private UserResponseDto mapToUserResponseDto(User user) {
