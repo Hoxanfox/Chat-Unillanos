@@ -1,0 +1,75 @@
+package fachada.gestionUsuarios.session;
+
+import dto.vistaLobby.DTOUsuario;
+import gestionUsuario.sesion.GestorSesionUsuario;
+import gestionUsuario.sesion.GestorCierreSesion;
+import gestionUsuario.especialista.EspecialistaUsuariosImpl;
+
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+public class FachadaLobby implements IFachadaLobby {
+
+    private final GestorSesionUsuario gestorSesion;
+    private final GestorCierreSesion gestorCierreSesion;
+    private final EspecialistaUsuariosImpl especialistaUsuarios;
+
+    public FachadaLobby() {
+        this.gestorSesion = GestorSesionUsuario.getInstancia();
+        this.gestorCierreSesion = new GestorCierreSesion();
+        this.especialistaUsuarios = new EspecialistaUsuariosImpl();
+        System.out.println("✅ [FachadaLobby]: Inicializada.");
+    }
+
+    @Override
+    public String obtenerUserIdSesion() {
+        System.out.println("[FachadaLobby] Obteniendo userId de la sesión activa...");
+        String userId = gestorSesion.getUserId();
+        System.out.println("[FachadaLobby] UserId obtenido: " + userId);
+        return userId;
+    }
+
+    @Override
+    public boolean haySesionActiva() {
+        boolean activa = gestorSesion.haySesionActiva();
+        System.out.println("[FachadaLobby] Verificación de sesión activa: " + activa);
+        return activa;
+    }
+
+    @Override
+    public DTOUsuario cargarInformacionUsuarioLogueado() {
+        System.out.println("[FachadaLobby] Cargando información del usuario logueado...");
+
+        if (!haySesionActiva()) {
+            System.err.println("[FachadaLobby] ERROR: No hay sesión activa");
+            throw new IllegalStateException("No hay un usuario autenticado en la sesión.");
+        }
+
+        String userId = obtenerUserIdSesion();
+        System.out.println("[FachadaLobby] Consultando datos del usuario: " + userId);
+
+        UUID userIdUUID;
+        try {
+            userIdUUID = UUID.fromString(userId);
+        } catch (IllegalArgumentException e) {
+            System.err.println("[FachadaLobby] ERROR: userId inválido: " + userId);
+            throw new IllegalStateException("El userId de la sesión no es un UUID válido.", e);
+        }
+
+        DTOUsuario dtoUsuario = especialistaUsuarios.obtenerUsuarioPorIdComoDTO(userIdUUID);
+
+        if (dtoUsuario == null) {
+            System.err.println("[FachadaLobby] ERROR: Usuario no encontrado en BD para userId: " + userId);
+            throw new IllegalStateException("El usuario de la sesión no existe en la base de datos.");
+        }
+
+        System.out.println("[FachadaLobby] Información del usuario cargada exitosamente");
+        return dtoUsuario;
+    }
+
+    @Override
+    public CompletableFuture<Boolean> cerrarSesion() {
+        System.out.println("[FachadaLobby] Delegando cierre de sesión al GestorCierreSesion...");
+        return gestorCierreSesion.cerrarSesion();
+    }
+}
