@@ -3,20 +3,25 @@ package servicio.usuario;
 import dto.vistaLobby.DTOUsuario;
 import fachada.FachadaGeneralImpl;
 import fachada.IFachadaGeneral;
+import fachada.gestionArchivos.IFachadaArchivos;
 import fachada.gestionUsuarios.insercionDB.IFachadaUsuarios;
 import fachada.gestionUsuarios.session.IFachadaLobby;
 
+import java.io.File;
+import java.nio.file.Paths;
 import java.util.concurrent.CompletableFuture;
 
 public class ServicioUsuarioImpl implements IServicioUsuario {
 
     private final IFachadaUsuarios fachadaUsuarios;
     private final IFachadaLobby fachadaLobby;
+    private final IFachadaArchivos fachadaArchivos;
 
     public ServicioUsuarioImpl() {
         IFachadaGeneral fachadaGeneral = FachadaGeneralImpl.getInstancia();
         this.fachadaUsuarios = fachadaGeneral.getFachadaUsuarios();
-        this.fachadaLobby = fachadaGeneral.getFachadaLobby(); // Asume que existe este método
+        this.fachadaLobby = fachadaGeneral.getFachadaLobby();
+        this.fachadaArchivos = fachadaGeneral.getFachadaArchivos();
         System.out.println("✅ [ServicioUsuario]: Inicializado con FachadaUsuarios y FachadaLobby.");
     }
 
@@ -67,5 +72,13 @@ public class ServicioUsuarioImpl implements IServicioUsuario {
     public CompletableFuture<Boolean> cerrarSesion() {
         System.out.println("➡️ [ServicioUsuario]: Cerrando sesión del usuario.");
         return fachadaLobby.cerrarSesion();
+    }
+
+    @Override
+    public CompletableFuture<File> obtenerFotoPerfil(String fileId) {
+        System.out.println("➡️ [ServicioUsuario]: Solicitando foto de perfil - FileId: " + fileId);
+
+        // ✅ Usa el método optimizado que verifica BD/caché antes de descargar
+        return fachadaArchivos.obtenerArchivoPorFileId(fileId);
     }
 }

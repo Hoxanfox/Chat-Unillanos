@@ -9,8 +9,11 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
 import observador.IObservador;
 
@@ -25,6 +28,7 @@ public class FeatureHeader extends BorderPane implements IObservador {
     private final Label notificacionesIcono;
     private final Label nombreUsuarioLabel;
     private final Label estadoUsuarioLabel;
+    private final ImageView avatarImageView;
     private final IControladorUsuario controladorUsuario;
     private final Runnable onLogoutSuccess;
 
@@ -47,9 +51,19 @@ public class FeatureHeader extends BorderPane implements IObservador {
         HBox infoUsuario = new HBox(15);
         infoUsuario.setAlignment(Pos.CENTER_LEFT);
 
-        Label avatarIcono = new Label("👤");
-        avatarIcono.setFont(Font.font(24));
-        avatarIcono.setStyle("-fx-text-fill: white;");
+        // Avatar con ImageView circular
+        avatarImageView = new ImageView();
+        avatarImageView.setFitWidth(40);
+        avatarImageView.setFitHeight(40);
+        avatarImageView.setPreserveRatio(true);
+        avatarImageView.setSmooth(true);
+
+        // Hacer el ImageView circular
+        Circle clip = new Circle(20, 20, 20);
+        avatarImageView.setClip(clip);
+
+        // Por defecto sin imagen (transparente)
+        avatarImageView.setStyle("-fx-background-color: #34495e;");
 
         nombreUsuarioLabel = new Label("Cargando...");
         nombreUsuarioLabel.setFont(Font.font("System", 14));
@@ -59,7 +73,7 @@ public class FeatureHeader extends BorderPane implements IObservador {
         estadoUsuarioLabel.setFont(Font.font(12));
         estadoUsuarioLabel.setStyle("-fx-text-fill: #2ecc71;"); // Verde por defecto
 
-        infoUsuario.getChildren().addAll(avatarIcono, nombreUsuarioLabel, estadoUsuarioLabel);
+        infoUsuario.getChildren().addAll(avatarImageView, nombreUsuarioLabel, estadoUsuarioLabel);
 
         // --- Controles (Derecha) ---
         HBox controlesLayout = new HBox(20);
@@ -144,7 +158,43 @@ public class FeatureHeader extends BorderPane implements IObservador {
             }
         }
 
+        // ✅ Cargar avatar usando la arquitectura de capas
+        if (usuario.getAvatarUrl() != null && !usuario.getAvatarUrl().isEmpty()) {
+            cargarAvatar(usuario.getAvatarUrl());
+        } else {
+            System.out.println("⚠️ [FeatureHeader]: Usuario sin avatarUrl");
+        }
+
         System.out.println("✅ [FeatureHeader]: Información del usuario actualizada - " + usuario.getNombre());
+    }
+
+    /**
+     * Carga el avatar siguiendo la arquitectura de capas:
+     * Vista → Controlador → Servicio → Fachada → Gestor de Archivos
+     */
+    private void cargarAvatar(String fileId) {
+        System.out.println("📸 [FeatureHeader]: Solicitando carga de avatar - FileId: " + fileId);
+
+        controladorUsuario.obtenerFotoPerfil(fileId)
+            .thenAccept(archivoFoto -> {
+                if (archivoFoto != null && archivoFoto.exists()) {
+                    Platform.runLater(() -> {
+                        try {
+                            Image image = new Image(archivoFoto.toURI().toString(), true);
+                            avatarImageView.setImage(image);
+                            System.out.println("✅ [FeatureHeader]: Avatar cargado exitosamente");
+                        } catch (Exception e) {
+                            System.err.println("❌ [FeatureHeader]: Error al crear imagen: " + e.getMessage());
+                        }
+                    });
+                } else {
+                    System.out.println("⚠️ [FeatureHeader]: Archivo de avatar no disponible");
+                }
+            })
+            .exceptionally(error -> {
+                System.err.println("❌ [FeatureHeader]: Error al cargar avatar: " + error.getMessage());
+                return null;
+            });
     }
 
     private void cerrarSesion() {
@@ -175,6 +225,7 @@ public class FeatureHeader extends BorderPane implements IObservador {
 
         Platform.runLater(() -> {
             if ("ACTUALIZAR_NOTIFICACIONES".equals(tipoDeDato) && datos instanceof List) {
+                @SuppressWarnings("unchecked")
                 List<DTONotificacion> notificaciones = (List<DTONotificacion>) datos;
                 long noLeidas = notificaciones.stream().filter(n -> !n.isLeida()).count();
                 notificacionesIcono.setText("🔔 " + noLeidas);

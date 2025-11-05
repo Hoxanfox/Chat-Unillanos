@@ -3,6 +3,7 @@ package controlador.usuario;
 import dto.vistaLobby.DTOUsuario;
 import servicio.usuario.IServicioUsuario;
 import servicio.usuario.ServicioUsuarioImpl;
+import java.io.File;
 import java.util.concurrent.CompletableFuture;
 
 public class ControladorUsuario implements IControladorUsuario {
@@ -54,5 +55,11 @@ public class ControladorUsuario implements IControladorUsuario {
     public CompletableFuture<Boolean> cerrarSesion() {
         System.out.println("🎮 [ControladorUsuario]: Cerrando sesión del usuario.");
         return servicioUsuario.cerrarSesion();
+    }
+
+    @Override
+    public CompletableFuture<File> obtenerFotoPerfil(String fileId) {
+        System.out.println("🎮 [ControladorUsuario]: Solicitando foto de perfil - FileId: " + fileId);
+        return servicioUsuario.obtenerFotoPerfil(fileId);
     }
 }
