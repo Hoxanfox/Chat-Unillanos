@@ -41,6 +41,13 @@ public class RequestDispatcher {
         DTORequest request;
         String action = "unknown";
         try {
+            // LOG: Mostrar el JSON recibido
+            System.out.println("\n========== REQUEST RECIBIDO ==========");
+            System.out.println("Timestamp: " + java.time.LocalDateTime.now());
+            System.out.println("Cliente IP: " + handler.getClientIpAddress());
+            System.out.println("JSON: " + requestJson);
+            System.out.println("=====================================\n");
+
             request = gson.fromJson(requestJson, DTORequest.class);
             action = request.getAction() != null ? request.getAction().toLowerCase() : "unknown";
 
@@ -298,8 +305,13 @@ public class RequestDispatcher {
             }
         } catch (Exception e) {
             // Error interno del servidor
-            sendJsonResponse(handler, action, false, "Error interno del servidor", null);
+            System.err.println("\n========== ERROR EN DISPATCH ==========");
+            System.err.println("Action: " + action);
+            System.err.println("Error: " + e.getMessage());
             e.printStackTrace();
+            System.err.println("======================================\n");
+
+            sendJsonResponse(handler, action, false, "Error interno del servidor", null);
         }
     }
 
@@ -342,6 +354,15 @@ public class RequestDispatcher {
         String status = success ? "success" : "error";
         DTOResponse response = new DTOResponse(action, status, message, data);
         String jsonResponse = gson.toJson(response);
+
+        // LOG: Mostrar el JSON que se va a enviar
+        System.out.println("\n========== RESPONSE ENVIADO ==========");
+        System.out.println("Timestamp: " + java.time.LocalDateTime.now());
+        System.out.println("Action: " + action);
+        System.out.println("Success: " + success);
+        System.out.println("JSON: " + jsonResponse);
+        System.out.println("=====================================\n");
+
         handler.sendMessage(jsonResponse);
     }
 }

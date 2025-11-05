@@ -33,14 +33,20 @@ public class FileChunkManager {
     }
 
     public String startUpload(DTOStartUpload dto) throws Exception {
-        String uploadId = "upload-" + UUID.randomUUID().toString();
+        String uploadId = "upload-" + UUID.randomUUID();
         Path uploadPath = tempUploadDir.resolve(uploadId);
         Files.createDirectories(uploadPath);
 
         UploadState state = new UploadState(dto.getFileName(), uploadPath.toString(), dto.getTotalChunks());
         activeUploads.put(uploadId, state);
 
-        System.out.println("[Server] Iniciando subida: " + uploadId + " para " + dto.getFileName());
+        System.out.println("\n[CHUNK MANAGER] ========== INICIO UPLOAD ==========");
+        System.out.println("Upload ID: " + uploadId);
+        System.out.println("Archivo: " + dto.getFileName());
+        System.out.println("Total chunks: " + dto.getTotalChunks());
+        System.out.println("MIME Type: " + dto.getFileMimeType());
+        System.out.println("==================================================\n");
+
         return uploadId;
     }
 
@@ -54,7 +60,9 @@ public class FileChunkManager {
         Files.write(chunkFile, data);
 
         state.chunksReceived.add(dto.getChunkNumber());
-        System.out.println("[Server] Recibido chunk " + state.chunksReceived.size() + "/" + state.totalChunks + " para " + dto.getUploadId());
+
+        System.out.println("[CHUNK MANAGER] Chunk recibido: " + dto.getChunkNumber() + "/" + state.totalChunks +
+                          " | Upload ID: " + dto.getUploadId() + " | Tamaño: " + data.length + " bytes");
     }
 
     public FileUploadResponse endUpload(DTOEndUpload dto, UUID autorId, String subDirectory) throws Exception {
@@ -65,6 +73,10 @@ public class FileChunkManager {
         if (state.chunksReceived.size() != state.totalChunks) {
             throw new Exception("Chunks incompletos: " + state.chunksReceived.size() + "/" + state.totalChunks);
         }
+
+        System.out.println("\n[CHUNK MANAGER] ========== FINALIZANDO UPLOAD ==========");
+        System.out.println("Upload ID: " + dto.getUploadId());
+        System.out.println("Ensamblando " + state.totalChunks + " chunks...");
 
         // 1. Ensamblar el archivo final en un archivo temporal
         Path tempFile = Files.createTempFile(tempUploadDir, "final-", state.fileName);
@@ -86,12 +98,15 @@ public class FileChunkManager {
         long fileSize = Files.size(tempFile);
         String mimeType = Files.probeContentType(tempFile);
 
+        System.out.println("Archivo guardado: " + relativePath);
+        System.out.println("Tamaño final: " + fileSize + " bytes");
+        System.out.println("MIME Type: " + mimeType);
+        System.out.println("======================================================\n");
+
         // 3. Limpiar archivos temporales
         cleanUpDirectory(Paths.get(state.tempDir)); // Borra el directorio de chunks
         activeUploads.remove(dto.getUploadId());   // Limpia el mapa
         Files.delete(tempFile);                     // Borra el archivo temporal ensamblado
-
-        System.out.println("[Server] Subida finalizada: " + relativePath);
 
         return new FileUploadResponse(
                 relativePath, // ¡Este es el 'fileId' que el cliente usará!
@@ -112,9 +127,17 @@ public class FileChunkManager {
         long fileSize = Files.size(filePath);
         int totalChunks = (int) Math.ceil((double) fileSize / CHUNK_SIZE_BYTES);
 
-        String downloadId = "download-" + UUID.randomUUID().toString();
+        String downloadId = "download-" + UUID.randomUUID();
         DownloadState state = new DownloadState(fileId, fileSize, totalChunks);
         activeDownloads.put(downloadId, state);
+
+        System.out.println("\n[CHUNK MANAGER] ========== INICIO DOWNLOAD ==========");
+        System.out.println("Download ID: " + downloadId);
+        System.out.println("File ID: " + fileId);
+        System.out.println("Archivo: " + filePath.getFileName());
+        System.out.println("Tamaño: " + fileSize + " bytes");
+        System.out.println("Total chunks: " + totalChunks);
+        System.out.println("=====================================================\n");
 
         return new DTODownloadInfo(
                 downloadId,
@@ -131,7 +154,12 @@ public class FileChunkManager {
 
         long offset = (long) (chunkNumber - 1) * CHUNK_SIZE_BYTES;
 
-        return fileStorage.readChunk(state.filePath, offset, CHUNK_SIZE_BYTES);
+        byte[] chunkData = fileStorage.readChunk(state.filePath, offset, CHUNK_SIZE_BYTES);
+
+        System.out.println("[CHUNK MANAGER] Enviando chunk: " + chunkNumber + "/" + state.totalChunks +
+                          " | Download ID: " + downloadId + " | Tamaño: " + chunkData.length + " bytes");
+
+        return chunkData;
     }
 
     private void cleanUpDirectory(Path directory) throws IOException {
