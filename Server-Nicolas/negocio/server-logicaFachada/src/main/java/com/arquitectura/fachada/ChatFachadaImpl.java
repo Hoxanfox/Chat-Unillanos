@@ -143,6 +143,11 @@ public class ChatFachadaImpl implements IChatFachada {
         return channelService.getPendingInvitationsForUser(userId);
     }
 
+    @Override
+    public List<UserResponseDto> obtenerMiembrosDeCanal(UUID canalId, UUID solicitanteId) throws Exception {
+        return channelService.obtenerMiembrosDeCanal(canalId, solicitanteId);
+    }
+
     
     // ---Metodos de Mensajes---
     @Override

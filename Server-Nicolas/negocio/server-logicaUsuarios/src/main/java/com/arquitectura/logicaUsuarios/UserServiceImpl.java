@@ -48,8 +48,14 @@ public class UserServiceImpl implements IUserService {
     @Override
     @Transactional
     public void registrarUsuario(UserRegistrationRequestDto requestDto, String ipAddress) throws Exception {
+        // Validar que el username no exista
         if (userRepository.findByUsername(requestDto.getUsername()).isPresent()) {
-            throw new Exception("El nombre de usuario ya está en uso.");
+            throw new IllegalArgumentException("El nombre de usuario ya está en uso");
+        }
+        
+        // Validar que el email no exista
+        if (userRepository.findByEmail(requestDto.getEmail()).isPresent()) {
+            throw new IllegalArgumentException("El email ya está registrado");
         }
         //guardar la foto si existe
         String photoPath = null;

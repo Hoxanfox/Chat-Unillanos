@@ -3,12 +3,14 @@ package com.arquitectura.controlador;
 import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.DTO.Comunicacion.DTOResponse; // <-- Usar el DTOResponse estándar
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
+import com.arquitectura.DTO.Mensajes.SendMessageRequestDto;
 import com.arquitectura.DTO.archivos.DTODownloadInfo;
 import com.arquitectura.DTO.archivos.DTOEndUpload;
 import com.arquitectura.DTO.archivos.DTOStartUpload;
 import com.arquitectura.DTO.archivos.DTOUploadChunk;
 import com.arquitectura.DTO.canales.ChannelResponseDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
+import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.fachada.IChatFachada;
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
@@ -26,6 +28,7 @@ public class RequestDispatcher {
     private final Gson gson;
     private static final Set<String> ACCIONES_PUBLICAS = Set.of(
             "authenticateuser",
+            "registeruser",                // Registro de usuarios (público)
             "uploadfileforregistration",  // Subida sin autenticación para registro
             "uploadfilechunk",             // Los chunks pueden ser públicos
             "endfileupload"                // Finalizar upload puede ser público
@@ -122,6 +125,95 @@ public class RequestDispatcher {
                     }
                     break;
 
+                case "registeruser":
+                    // 1. Extraer payload
+                    Object registerDataObj = request.getPayload();
+                    if (registerDataObj == null) {
+                        sendJsonResponse(handler, "registerUser", false, "Falta payload", null);
+                        return;
+                    }
+
+                    // 2. Convertir a JSON y extraer campos
+                    JsonObject registerJson = gson.toJsonTree(registerDataObj).getAsJsonObject();
+                    String regUsername = registerJson.has("username") ? registerJson.get("username").getAsString() : null;
+                    String regEmail = registerJson.has("email") ? registerJson.get("email").getAsString() : null;
+                    String regPassword = registerJson.has("password") ? registerJson.get("password").getAsString() : null;
+                    String regPhotoFileId = registerJson.has("photoFileId") ? registerJson.get("photoFileId").getAsString() : null;
+
+                    // 3. Validar campos requeridos
+                    if (regUsername == null || regUsername.trim().isEmpty()) {
+                        sendJsonResponse(handler, "registerUser", false, "El nombre de usuario es requerido",
+                            createErrorData("username", "Campo requerido"));
+                        return;
+                    }
+
+                    if (regEmail == null || regEmail.trim().isEmpty()) {
+                        sendJsonResponse(handler, "registerUser", false, "El email es requerido",
+                            createErrorData("email", "Campo requerido"));
+                        return;
+                    }
+
+                    if (regPassword == null || regPassword.trim().isEmpty()) {
+                        sendJsonResponse(handler, "registerUser", false, "La contraseña es requerida",
+                            createErrorData("password", "Campo requerido"));
+                        return;
+                    }
+
+                    // 4. Validar formato de email (básico)
+                    if (!regEmail.contains("@") || !regEmail.contains(".")) {
+                        sendJsonResponse(handler, "registerUser", false, "Formato de email inválido",
+                            createErrorData("email", "Formato inválido"));
+                        return;
+                    }
+
+                    // 5. Validar longitud de contraseña
+                    if (regPassword.length() < 6) {
+                        sendJsonResponse(handler, "registerUser", false, "La contraseña debe tener al menos 6 caracteres",
+                            createErrorData("password", "Mínimo 6 caracteres"));
+                        return;
+                    }
+
+                    try {
+                        // 6. Crear DTO
+                        UserRegistrationRequestDto registrationDto = new UserRegistrationRequestDto(
+                            regUsername,
+                            regEmail,
+                            regPassword,
+                            regPhotoFileId
+                        );
+
+                        // 7. Llamar a la fachada
+                        chatFachada.registrarUsuario(registrationDto, handler.getClientIpAddress());
+
+                        // 8. Construir respuesta exitosa
+                        Map<String, Object> registerResponseData = new HashMap<>();
+                        registerResponseData.put("username", regUsername);
+                        registerResponseData.put("email", regEmail);
+                        registerResponseData.put("message", "Usuario registrado exitosamente. Ahora puedes iniciar sesión.");
+
+                        sendJsonResponse(handler, "registerUser", true, "Registro exitoso", registerResponseData);
+
+                    } catch (IllegalArgumentException e) {
+                        // Error de validación (email duplicado, username duplicado, etc.)
+                        String errorMessage = e.getMessage();
+                        String campo = "general";
+                        
+                        if (errorMessage.contains("email")) {
+                            campo = "email";
+                        } else if (errorMessage.contains("username") || errorMessage.contains("usuario")) {
+                            campo = "username";
+                        }
+                        
+                        sendJsonResponse(handler, "registerUser", false, errorMessage,
+                            createErrorData(campo, errorMessage));
+                            
+                    } catch (Exception e) {
+                        // Error inesperado
+                        System.err.println("Error al registrar usuario: " + e.getMessage());
+                        sendJsonResponse(handler, "registerUser", false, "Error interno del servidor al registrar usuario", null);
+                    }
+                    break;
+
                 case "listarcontactos":
                     Object listarContactosDataObj = request.getPayload();
                     if (listarContactosDataObj == null) {
@@ -214,6 +306,284 @@ public class RequestDispatcher {
                         sendJsonResponse(handler, "listarCanales", false, "Error al listar canales: " + e.getMessage(), null);
                     }
                     break;
+
+                case "enviarmensajecanal":
+                case "enviarmensajetexto":
+                    // 1. Extraer payload
+                    Object mensajeDataObj = request.getPayload();
+                    if (mensajeDataObj == null) {
+                        sendJsonResponse(handler, "enviarMensajeCanal", false, "Falta payload", null);
+                        return;
+                    }
+
+                    // 2. Convertir a JSON y extraer campos
+                    JsonObject mensajeJson = gson.toJsonTree(mensajeDataObj).getAsJsonObject();
+                    String canalIdStr = mensajeJson.has("canalId") ? mensajeJson.get("canalId").getAsString() : null;
+                    String contenido = mensajeJson.has("contenido") ? mensajeJson.get("contenido").getAsString() : null;
+
+                    // 3. Validar campos requeridos
+                    if (canalIdStr == null || canalIdStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "enviarMensajeCanal", false, "El ID del canal es requerido",
+                            createErrorData("canalId", "Campo requerido"));
+                        return;
+                    }
+
+                    if (contenido == null || contenido.trim().isEmpty()) {
+                        sendJsonResponse(handler, "enviarMensajeCanal", false, "El contenido del mensaje es requerido",
+                            createErrorData("contenido", "Campo requerido"));
+                        return;
+                    }
+
+                    // 4. Validar longitud del mensaje (opcional pero recomendado)
+                    if (contenido.length() > 5000) {
+                        sendJsonResponse(handler, "enviarMensajeCanal", false, "El mensaje es demasiado largo (máximo 5000 caracteres)",
+                            createErrorData("contenido", "Máximo 5000 caracteres"));
+                        return;
+                    }
+
+                    try {
+                        // 5. Convertir canalId a UUID
+                        UUID canalId = UUID.fromString(canalIdStr);
+
+                        // 6. Obtener ID del usuario autenticado
+                        UUID autorId = handler.getAuthenticatedUser().getUserId();
+
+                        // 7. Crear DTO de request
+                        SendMessageRequestDto sendMessageDto = new SendMessageRequestDto(
+                            canalId,
+                            "TEXT",
+                            contenido
+                        );
+
+                        // 8. Llamar a la fachada
+                        MessageResponseDto messageResponse = chatFachada.enviarMensajeTexto(sendMessageDto, autorId);
+
+                        // 9. Construir respuesta exitosa
+                        Map<String, Object> mensajeResponseData = new HashMap<>();
+                        mensajeResponseData.put("messageId", messageResponse.getMessageId().toString());
+                        mensajeResponseData.put("channelId", messageResponse.getChannelId().toString());
+                        mensajeResponseData.put("author", Map.of(
+                            "userId", messageResponse.getAuthor().getUserId().toString(),
+                            "username", messageResponse.getAuthor().getUsername()
+                        ));
+                        mensajeResponseData.put("timestamp", messageResponse.getTimestamp().toString());
+                        mensajeResponseData.put("messageType", messageResponse.getMessageType());
+                        mensajeResponseData.put("content", messageResponse.getContent());
+
+                        sendJsonResponse(handler, "enviarMensajeCanal", true, "Mensaje enviado", mensajeResponseData);
+
+                    } catch (IllegalArgumentException e) {
+                        // Error de validación (canal no existe, no es miembro, etc.)
+                        String errorMessage = e.getMessage();
+                        String campo = "general";
+                        
+                        if (errorMessage.contains("Canal") || errorMessage.contains("canal")) {
+                            campo = "canalId";
+                        } else if (errorMessage.contains("miembro")) {
+                            campo = "permisos";
+                        }
+                        
+                        sendJsonResponse(handler, "enviarMensajeCanal", false, errorMessage,
+                            createErrorData(campo, errorMessage));
+                            
+                    } catch (Exception e) {
+                        // Error inesperado
+                        System.err.println("Error al enviar mensaje: " + e.getMessage());
+                        e.printStackTrace();
+                        sendJsonResponse(handler, "enviarMensajeCanal", false, "Error interno del servidor al enviar mensaje", null);
+                    }
+                    break;
+
+                case "solicitarhistorialcanal":
+                case "obtenermensajescanal":
+                    // 1. Extraer payload
+                    Object historialDataObj = request.getPayload();
+                    if (historialDataObj == null) {
+                        sendJsonResponse(handler, "solicitarHistorialCanal", false, "Falta payload", null);
+                        return;
+                    }
+
+                    // 2. Convertir a JSON y extraer campos
+                    JsonObject historialJson = gson.toJsonTree(historialDataObj).getAsJsonObject();
+                    String histCanalIdStr = historialJson.has("canalId") ? historialJson.get("canalId").getAsString() : null;
+                    String histUsuarioIdStr = historialJson.has("usuarioId") ? historialJson.get("usuarioId").getAsString() : null;
+
+                    // 3. Validar campos requeridos
+                    if (histCanalIdStr == null || histCanalIdStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "solicitarHistorialCanal", false, "El ID del canal es requerido",
+                            createErrorData("canalId", "Campo requerido"));
+                        return;
+                    }
+
+                    if (histUsuarioIdStr == null || histUsuarioIdStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "solicitarHistorialCanal", false, "El ID del usuario es requerido",
+                            createErrorData("usuarioId", "Campo requerido"));
+                        return;
+                    }
+
+                    try {
+                        // 4. Convertir a UUIDs
+                        UUID histCanalId = UUID.fromString(histCanalIdStr);
+                        UUID histUsuarioId = UUID.fromString(histUsuarioIdStr);
+
+                        // 5. Validar que el usuario autenticado coincida con el solicitante (seguridad)
+                        if (!handler.getAuthenticatedUser().getUserId().equals(histUsuarioId)) {
+                            sendJsonResponse(handler, "solicitarHistorialCanal", false, "No autorizado para ver este historial",
+                                createErrorData("permisos", "Usuario no autorizado"));
+                            return;
+                        }
+
+                        // 6. Llamar a la fachada
+                        List<MessageResponseDto> mensajes = chatFachada.obtenerMensajesDeCanal(histCanalId, histUsuarioId);
+
+                        // 7. Enriquecer mensajes de audio con Base64
+                        List<Map<String, Object>> mensajesEnriquecidos = new ArrayList<>();
+                        
+                        for (MessageResponseDto mensaje : mensajes) {
+                            Map<String, Object> mensajeMap = new HashMap<>();
+                            mensajeMap.put("messageId", mensaje.getMessageId().toString());
+                            mensajeMap.put("channelId", mensaje.getChannelId().toString());
+                            mensajeMap.put("author", Map.of(
+                                "userId", mensaje.getAuthor().getUserId().toString(),
+                                "username", mensaje.getAuthor().getUsername()
+                            ));
+                            mensajeMap.put("timestamp", mensaje.getTimestamp().toString());
+                            mensajeMap.put("messageType", mensaje.getMessageType());
+                            
+                            // Para mensajes de audio, codificar a Base64
+                            if ("AUDIO".equals(mensaje.getMessageType())) {
+                                try {
+                                    String base64Content = chatFachada.getFileAsBase64(mensaje.getContent());
+                                    mensajeMap.put("content", base64Content);
+                                } catch (Exception e) {
+                                    System.err.println("Error al codificar audio a Base64: " + e.getMessage());
+                                    mensajeMap.put("content", null);
+                                    mensajeMap.put("error", "Audio no disponible");
+                                }
+                            } else {
+                                // Para mensajes de texto, usar el contenido directamente
+                                mensajeMap.put("content", mensaje.getContent());
+                            }
+                            
+                            mensajesEnriquecidos.add(mensajeMap);
+                        }
+
+                        // 8. Construir respuesta exitosa
+                        Map<String, Object> historialResponseData = new HashMap<>();
+                        historialResponseData.put("mensajes", mensajesEnriquecidos);
+                        historialResponseData.put("totalMensajes", mensajes.size());
+
+                        sendJsonResponse(handler, "solicitarHistorialCanal", true, "Historial obtenido", historialResponseData);
+
+                    } catch (IllegalArgumentException e) {
+                        // Error de validación (canal no existe, no es miembro, etc.)
+                        String errorMessage = e.getMessage();
+                        String campo = "general";
+                        
+                        if (errorMessage.contains("Canal") || errorMessage.contains("canal")) {
+                            campo = "canalId";
+                        } else if (errorMessage.contains("miembro")) {
+                            campo = "permisos";
+                        }
+                        
+                        sendJsonResponse(handler, "solicitarHistorialCanal", false, errorMessage,
+                            createErrorData(campo, errorMessage));
+                            
+                    } catch (Exception e) {
+                        // Error inesperado
+                        System.err.println("Error al obtener historial: " + e.getMessage());
+                        e.printStackTrace();
+                        sendJsonResponse(handler, "solicitarHistorialCanal", false, "Error interno del servidor al obtener historial", null);
+                    }
+                    break;
+
+                case "listarmiembros":
+                case "obtenermiembroscanal":
+                    // 1. Extraer payload
+                    Object miembrosDataObj = request.getPayload();
+                    if (miembrosDataObj == null) {
+                        sendJsonResponse(handler, "listarMiembros", false, "Falta payload", null);
+                        return;
+                    }
+
+                    // 2. Convertir a JSON y extraer campos
+                    JsonObject miembrosJson = gson.toJsonTree(miembrosDataObj).getAsJsonObject();
+                    String miembrosCanalIdStr = miembrosJson.has("canalId") ? miembrosJson.get("canalId").getAsString() : null;
+                    String solicitanteIdStr = miembrosJson.has("solicitanteId") ? miembrosJson.get("solicitanteId").getAsString() : null;
+
+                    // 3. Validar campos requeridos
+                    if (miembrosCanalIdStr == null || miembrosCanalIdStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "listarMiembros", false, "El ID del canal es requerido",
+                            createErrorData("canalId", "Campo requerido"));
+                        return;
+                    }
+
+                    if (solicitanteIdStr == null || solicitanteIdStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "listarMiembros", false, "El ID del solicitante es requerido",
+                            createErrorData("solicitanteId", "Campo requerido"));
+                        return;
+                    }
+
+                    try {
+                        // 4. Convertir a UUIDs
+                        UUID miembrosCanalId = UUID.fromString(miembrosCanalIdStr);
+                        UUID solicitanteId = UUID.fromString(solicitanteIdStr);
+
+                        // 5. Validar que el usuario autenticado coincida con el solicitante (seguridad)
+                        if (!handler.getAuthenticatedUser().getUserId().equals(solicitanteId)) {
+                            sendJsonResponse(handler, "listarMiembros", false, "No autorizado para ver estos miembros",
+                                createErrorData("permisos", "Usuario no autorizado"));
+                            return;
+                        }
+
+                        // 6. Llamar a la fachada
+                        List<UserResponseDto> miembros = chatFachada.obtenerMiembrosDeCanal(miembrosCanalId, solicitanteId);
+
+                        // 7. Construir lista de miembros para la respuesta
+                        List<Map<String, Object>> miembrosData = new ArrayList<>();
+                        
+                        for (UserResponseDto miembro : miembros) {
+                            Map<String, Object> miembroMap = new HashMap<>();
+                            miembroMap.put("userId", miembro.getUserId().toString());
+                            miembroMap.put("username", miembro.getUsername());
+                            miembroMap.put("email", miembro.getEmail());
+                            miembroMap.put("photoAddress", miembro.getPhotoAddress());
+                            miembroMap.put("conectado", miembro.getEstado() != null ? miembro.getEstado() : "false");
+                            miembroMap.put("rol", miembro.getRol() != null ? miembro.getRol() : "MIEMBRO");
+                            
+                            miembrosData.add(miembroMap);
+                        }
+
+                        // 8. Construir respuesta exitosa
+                        Map<String, Object> miembrosResponseData = new HashMap<>();
+                        miembrosResponseData.put("miembros", miembrosData);
+                        miembrosResponseData.put("totalMiembros", miembros.size());
+                        miembrosResponseData.put("canalId", miembrosCanalIdStr);
+
+                        sendJsonResponse(handler, "listarMiembros", true, "Miembros obtenidos", miembrosResponseData);
+
+                    } catch (IllegalArgumentException e) {
+                        // Error de validación (canal no existe, no es miembro, etc.)
+                        String errorMessage = e.getMessage();
+                        String campo = "general";
+                        
+                        if (errorMessage.contains("Canal")) {
+                            campo = "canalId";
+                        } else if (errorMessage.contains("miembro")) {
+                            campo = "permisos";
+                        }
+                        
+                        sendJsonResponse(handler, "listarMiembros", false, errorMessage,
+                            createErrorData(campo, errorMessage));
+                            
+                    } catch (Exception e) {
+                        // Error inesperado
+                        System.err.println("Error al listar miembros: " + e.getMessage());
+                        e.printStackTrace();
+                        sendJsonResponse(handler, "listarMiembros", false, "Error interno del servidor al listar miembros", null);
+                    }
+                    break;
+
                 case "startfileupload": // Subida autenticada (ej. audio)
                 case "uploadfileforregistration": // Subida pública (ej. foto de registro)
                 {

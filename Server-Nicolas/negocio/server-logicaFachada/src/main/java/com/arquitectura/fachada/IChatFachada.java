@@ -47,6 +47,15 @@ public interface IChatFachada {
     List<ChannelResponseDto> getPendingInvitationsForUser(UUID userId);
     void agregarMiembroACanal(InviteMemberRequestDto inviteMemberRequestDto, UUID userId) throws Exception;
     List<ChannelResponseDto> obtenerTodosLosCanales();
+    
+    /**
+     * Obtiene la lista de miembros de un canal.
+     * @param canalId El ID del canal.
+     * @param solicitanteId El ID del usuario que solicita la lista.
+     * @return Lista de usuarios que son miembros del canal.
+     * @throws Exception si el canal no existe o el solicitante no es miembro.
+     */
+    List<UserResponseDto> obtenerMiembrosDeCanal(UUID canalId, UUID solicitanteId) throws Exception;
 
     // --- MÉTODOS DE MENSAJE (ACTUALIZADOS) ---
     void enviarMensajeBroadcast(String contenido, UUID adminId) throws Exception;
