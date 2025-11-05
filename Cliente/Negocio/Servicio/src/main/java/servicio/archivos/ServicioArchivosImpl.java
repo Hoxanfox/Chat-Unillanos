@@ -28,5 +28,16 @@ public class ServicioArchivosImpl implements IServicioArchivos {
     public CompletableFuture<String> subirArchivoParaRegistro(File archivo) {
         return fachadaArchivos.subirArchivoParaRegistro(archivo);
     }
-}
 
+    @Override
+    public CompletableFuture<File> obtenerArchivoPorFileId(String fileId, File directorioDestino) {
+        System.out.println("➡️ [ServicioArchivos]: Solicitando archivo - FileId: " + fileId);
+        return fachadaArchivos.obtenerArchivoPorFileId(fileId, directorioDestino);
+    }
+
+    @Override
+    public CompletableFuture<File> obtenerArchivoPorFileId(String fileId) {
+        System.out.println("➡️ [ServicioArchivos]: Solicitando archivo con directorio auto - FileId: " + fileId);
+        return fachadaArchivos.obtenerArchivoPorFileId(fileId);
+    }
+}

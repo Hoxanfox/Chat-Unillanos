@@ -23,4 +23,22 @@ public interface IServicioArchivos {
      * @return CompletableFuture que se completa con el ID del archivo subido
      */
     CompletableFuture<String> subirArchivoParaRegistro(File archivo);
+
+    /**
+     * Obtiene un archivo por su fileId. Si ya existe localmente, lo devuelve inmediatamente.
+     * Si no existe, lo descarga desde el servidor.
+     *
+     * @param fileId El identificador del archivo en el servidor (ej: "user_photos/deivid1.jpg")
+     * @param directorioDestino El directorio donde se guardará/buscará el archivo
+     * @return CompletableFuture que se completa con el archivo local listo para usar
+     */
+    CompletableFuture<File> obtenerArchivoPorFileId(String fileId, File directorioDestino);
+
+    /**
+     * Obtiene un archivo por su fileId usando directorio automático.
+     *
+     * @param fileId El identificador del archivo en el servidor
+     * @return CompletableFuture que se completa con el archivo local
+     */
+    CompletableFuture<File> obtenerArchivoPorFileId(String fileId);
 }

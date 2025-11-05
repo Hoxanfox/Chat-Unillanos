@@ -80,7 +80,21 @@ public class GestorRespuesta implements IGestorRespuesta {
         try {
             DTOResponse response = gson.fromJson(jsonResponse, DTOResponse.class);
             if (response != null && response.getAction() != null) {
+                // Normalizar la acción a minúsculas para comparación case-insensitive
+                String actionNormalizada = response.getAction().toLowerCase();
+
+                // Buscar manejador con la acción original o normalizada
                 Consumer<DTOResponse> manejador = manejadores.get(response.getAction());
+                if (manejador == null) {
+                    // Intentar buscar con todas las claves normalizadas
+                    for (Map.Entry<String, Consumer<DTOResponse>> entry : manejadores.entrySet()) {
+                        if (entry.getKey().toLowerCase().equals(actionNormalizada)) {
+                            manejador = entry.getValue();
+                            break;
+                        }
+                    }
+                }
+
                 if (manejador != null) {
                     manejador.accept(response);
                 } else {
@@ -104,4 +118,3 @@ public class GestorRespuesta implements IGestorRespuesta {
         manejadores.put(tipoOperacion, manejador);
     }
 }
-

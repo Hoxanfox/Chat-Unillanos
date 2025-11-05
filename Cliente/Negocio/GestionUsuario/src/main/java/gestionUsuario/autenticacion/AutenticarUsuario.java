@@ -16,14 +16,11 @@ import gestionUsuario.sesion.GestorSesionUsuario;
 import observador.IObservador;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.text.SimpleDateFormat;
 
 /**
  * Implementación del componente de autenticación con patrón Observador.
@@ -120,9 +117,9 @@ public class AutenticarUsuario implements IAutenticarUsuario {
                     }
 
                     String userIdStr = firstString(datosUsuario, "userId", "id");
-                    String nombre = firstString(datosUsuario, "nombre");
+                    String nombre = firstString(datosUsuario, "nombre", "username");
                     String email = firstString(datosUsuario, "email");
-                    String imagenBase64 = firstString(datosUsuario, "imagenBase64");
+                    String fileId = firstString(datosUsuario, "fileId", "photoAddress", "photoId", "imagenBase64");
 
                     if (userIdStr == null || userIdStr.isEmpty()) {
                         throw new Exception("La respuesta del servidor no contenía un 'userId' válido.");
@@ -138,8 +135,8 @@ public class AutenticarUsuario implements IAutenticarUsuario {
                         usuario = usuarioExistente;
                         if (nombre != null) usuario.setNombre(nombre);
                         if (email != null) usuario.setEmail(email);
-                        usuario.setEstado("activo"); // Estado por defecto ya que el servidor no lo envía
-                        if (imagenBase64 != null) usuario.setPhotoIdServidor(imagenBase64);
+                        usuario.setEstado("activo");
+                        if (fileId != null) usuario.setPhotoIdServidor(fileId);
                         especialistaUsuarios.actualizarUsuario(usuario);
                         System.out.println("✅ [AutenticarUsuario]: Usuario actualizado en BD local");
                     } else {
@@ -148,8 +145,8 @@ public class AutenticarUsuario implements IAutenticarUsuario {
                         usuario.setNombre(nombre);
                         usuario.setEmail(email);
                         usuario.setEstado("activo");
-                        usuario.setPhotoIdServidor(imagenBase64);
-                        usuario.setFechaRegistro(LocalDateTime.now()); // Usar fecha actual ya que el servidor no la envía
+                        if (fileId != null) usuario.setPhotoIdServidor(fileId);
+                        usuario.setFechaRegistro(LocalDateTime.now());
                         especialistaUsuarios.guardarUsuario(usuario);
                         System.out.println("✅ [AutenticarUsuario]: Usuario guardado en BD local");
                     }
@@ -160,7 +157,8 @@ public class AutenticarUsuario implements IAutenticarUsuario {
 
                     System.out.println("✅ [AutenticarUsuario]: Sesión iniciada para: " + nombre);
 
-                    // Notificar éxito
+                    // Notificar éxito de autenticación
+                    // La descarga de foto se manejará en la capa de Fachada/Servicio
                     notificarObservadores("AUTENTICACION_EXITOSA", usuario);
                     notificarObservadores("USUARIO_LOGUEADO", usuario);
 
