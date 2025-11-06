@@ -4,6 +4,7 @@ import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.DTO.p2p.PeerResponseDto;
 import com.arquitectura.domain.Peer;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -27,7 +28,7 @@ public class HeartbeatService {
     private boolean heartbeatEnabled = true;
     
     @Autowired
-    public HeartbeatService(IPeerService peerService) {
+    public HeartbeatService(@Qualifier("peerServiceP2P") IPeerService peerService) {
         this.peerService = peerService;
         System.out.println("✓ [HeartbeatService] Servicio de heartbeat inicializado");
     }

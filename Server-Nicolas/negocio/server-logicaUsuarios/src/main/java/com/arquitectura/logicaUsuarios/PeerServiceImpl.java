@@ -9,6 +9,7 @@ import com.arquitectura.DTO.peers.RetransmitResponseDto;
 import com.arquitectura.DTO.peers.UpdatePeerListRequestDto;
 import com.arquitectura.DTO.peers.UpdatePeerListResponseDto;
 import com.arquitectura.domain.Peer;
+import com.arquitectura.domain.enums.EstadoPeer;
 import com.arquitectura.persistence.repository.PeerRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -21,7 +22,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-@Service
+@Service("peerServiceUsuarios")
 public class PeerServiceImpl implements IPeerService {
 
     private final PeerRepository peerRepository;
@@ -78,6 +79,7 @@ public class PeerServiceImpl implements IPeerService {
 
         // Actualizar el latido
         peer.actualizarLatido();
+        peer.setConectado(EstadoPeer.ONLINE);
         peerRepository.save(peer);
 
         // Retornar el intervalo del próximo latido
@@ -102,7 +104,8 @@ public class PeerServiceImpl implements IPeerService {
         }
 
         // Crear nuevo peer
-        Peer newPeer = new Peer(requestDto.getIp(), requestDto.getPuerto(), "ONLINE");
+        Peer newPeer = new Peer(requestDto.getIp(), requestDto.getPuerto());
+        newPeer.setConectado(EstadoPeer.ONLINE);
         newPeer.setUltimoLatido(LocalDateTime.now());
         Peer savedPeer = peerRepository.save(newPeer);
 
@@ -124,7 +127,7 @@ public class PeerServiceImpl implements IPeerService {
         if (peer.getUltimoLatido() != null) {
             long secondsSinceLastHeartbeat = ChronoUnit.SECONDS.between(peer.getUltimoLatido(), LocalDateTime.now());
             if (secondsSinceLastHeartbeat > HEARTBEAT_TIMEOUT_SECONDS) {
-                peer.setConectado("OFFLINE");
+                peer.setConectado(EstadoPeer.OFFLINE);
                 peerRepository.save(peer);
             }
         }
@@ -205,24 +208,28 @@ public class PeerServiceImpl implements IPeerService {
                 Peer peer = existingPeer.get();
                 peer.setIp(peerInfo.getIp());
                 peer.setPuerto(peerInfo.getPuerto());
-                peer.setConectado(peerInfo.getConectado() != null ? peerInfo.getConectado() : "OFFLINE");
+
+                // Convertir String a EstadoPeer
+                EstadoPeer estado = parseEstadoFromString(peerInfo.getConectado());
+                peer.setConectado(estado);
 
                 // Si el peer está online, actualizar el latido
-                if ("ONLINE".equalsIgnoreCase(peerInfo.getConectado())) {
+                if (estado == EstadoPeer.ONLINE) {
                     peer.actualizarLatido();
                 }
 
                 peerRepository.save(peer);
             } else {
                 // Crear nuevo peer
-                Peer newPeer = new Peer(peerInfo.getIp(), peerInfo.getPuerto(),
-                    peerInfo.getConectado() != null ? peerInfo.getConectado() : "OFFLINE");
+                EstadoPeer estado = parseEstadoFromString(peerInfo.getConectado());
+                Peer newPeer = new Peer(peerInfo.getIp(), peerInfo.getPuerto());
+                newPeer.setConectado(estado);
 
                 if (peerId != null) {
                     newPeer.setPeerId(peerId);
                 }
 
-                if ("ONLINE".equalsIgnoreCase(peerInfo.getConectado())) {
+                if (estado == EstadoPeer.ONLINE) {
                     newPeer.setUltimoLatido(LocalDateTime.now());
                 }
 
@@ -246,12 +253,27 @@ public class PeerServiceImpl implements IPeerService {
         return IP_PATTERN.matcher(ip).matches();
     }
 
+    /**
+     * Convierte un String a EstadoPeer, retornando DESCONOCIDO si el valor es inválido
+     */
+    private EstadoPeer parseEstadoFromString(String estado) {
+        if (estado == null || estado.trim().isEmpty()) {
+            return EstadoPeer.DESCONOCIDO;
+        }
+
+        try {
+            return EstadoPeer.valueOf(estado.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return EstadoPeer.DESCONOCIDO;
+        }
+    }
+
     private PeerResponseDto convertirADTO(Peer peer) {
         return new PeerResponseDto(
                 peer.getPeerId(),
                 peer.getIp(),
                 peer.getPuerto(),
-                peer.getConectado()
+                peer.getConectado() != null ? peer.getConectado().name() : EstadoPeer.DESCONOCIDO.name()
         );
     }
 }

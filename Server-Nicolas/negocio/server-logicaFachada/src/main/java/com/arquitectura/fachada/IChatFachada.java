@@ -13,14 +13,12 @@ import com.arquitectura.DTO.canales.CreateChannelRequestDto;
 import com.arquitectura.DTO.Mensajes.SendMessageRequestDto;
 import com.arquitectura.DTO.canales.InviteMemberRequestDto;
 import com.arquitectura.DTO.canales.RespondToInviteRequestDto;
-import com.arquitectura.DTO.p2p.PeerResponseDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.DTO.peers.AddPeerRequestDto;
 import com.arquitectura.DTO.peers.HeartbeatRequestDto;
 import com.arquitectura.DTO.peers.HeartbeatResponseDto;
-import com.arquitectura.DTO.peers.PeerResponseDto;
 import com.arquitectura.DTO.peers.RetransmitRequestDto;
 import com.arquitectura.DTO.peers.RetransmitResponseDto;
 import com.arquitectura.DTO.peers.UpdatePeerListRequestDto;
@@ -48,11 +46,11 @@ public interface IChatFachada {
     List<UserResponseDto> listarContactos(UUID excludeUserId);
 
 
-    // --- Métodos de Peer ---
-    List<PeerResponseDto> listarPeersDisponibles(UUID excludePeerId) throws Exception;
+    // --- Métodos de Peer (usando com.arquitectura.DTO.peers) ---
+    List<com.arquitectura.DTO.peers.PeerResponseDto> listarPeersDisponibles(UUID excludePeerId) throws Exception;
     HeartbeatResponseDto reportarLatido(HeartbeatRequestDto requestDto) throws Exception;
-    PeerResponseDto añadirPeer(AddPeerRequestDto requestDto) throws Exception;
-    PeerResponseDto verificarEstadoPeer(UUID peerId) throws Exception;
+    com.arquitectura.DTO.peers.PeerResponseDto añadirPeer(AddPeerRequestDto requestDto) throws Exception;
+    com.arquitectura.DTO.peers.PeerResponseDto verificarEstadoPeer(UUID peerId) throws Exception;
     RetransmitResponseDto retransmitirPeticion(RetransmitRequestDto requestDto) throws Exception;
     UpdatePeerListResponseDto actualizarListaPeers(UpdatePeerListRequestDto requestDto) throws Exception;
 
@@ -105,8 +103,8 @@ public interface IChatFachada {
     DTODownloadInfo startDownload(String fileId) throws Exception;
     byte[] getChunk(String downloadId, int chunkNumber) throws Exception;
 
-    // --- MÉTODOS P2P (PEER-TO-PEER) ---
-    
+    // --- MÉTODOS P2P (PEER-TO-PEER) usando com.arquitectura.DTO.p2p ---
+
     /**
      * Agrega un nuevo peer a la red P2P.
      * @param ip Dirección IP del peer
@@ -114,8 +112,8 @@ public interface IChatFachada {
      * @return DTO con la información del peer agregado
      * @throws Exception si hay error al agregar el peer
      */
-    PeerResponseDto agregarPeer(String ip, int puerto) throws Exception;
-    
+    com.arquitectura.DTO.p2p.PeerResponseDto agregarPeer(String ip, int puerto) throws Exception;
+
     /**
      * Agrega un nuevo peer con nombre de servidor.
      * @param ip Dirección IP del peer
@@ -124,20 +122,20 @@ public interface IChatFachada {
      * @return DTO con la información del peer agregado
      * @throws Exception si hay error al agregar el peer
      */
-    PeerResponseDto agregarPeer(String ip, int puerto, String nombreServidor) throws Exception;
-    
+    com.arquitectura.DTO.p2p.PeerResponseDto agregarPeer(String ip, int puerto, String nombreServidor) throws Exception;
+
     /**
      * Lista todos los peers disponibles en la red.
      * @return Lista de DTOs con información de todos los peers
      */
-    List<PeerResponseDto> listarPeersDisponibles();
-    
+    List<com.arquitectura.DTO.p2p.PeerResponseDto> listarPeersDisponibles();
+
     /**
      * Lista solo los peers que están activos (ONLINE).
      * @return Lista de DTOs con información de peers activos
      */
-    List<PeerResponseDto> listarPeersActivos();
-    
+    List<com.arquitectura.DTO.p2p.PeerResponseDto> listarPeersActivos();
+
     /**
      * Reporta un latido (heartbeat) de un peer.
      * @param peerId ID del peer que reporta el latido
@@ -150,23 +148,23 @@ public interface IChatFachada {
      * @param peerId ID del peer
      * @param ip IP del peer
      * @param puerto Puerto del peer
-     * @throws Exception si hay error al procesar el latido
+     * @throws Exception si el peer no existe
      */
     void reportarLatido(UUID peerId, String ip, int puerto) throws Exception;
     
     /**
-     * Obtiene el intervalo configurado para heartbeats en milisegundos.
-     * @return Intervalo de heartbeat en ms
+     * Obtiene el intervalo de heartbeat configurado.
+     * @return Intervalo en milisegundos
      */
     long obtenerIntervaloHeartbeat();
     
     /**
-     * Retransmite una petición a otro peer en la red.
+     * Retransmite una petición a otro peer.
      * @param peerDestinoId ID del peer destino
      * @param peticionOriginal Petición original a retransmitir
      * @return Respuesta del peer destino
      * @throws Exception si hay error en la retransmisión
      */
     DTOResponse retransmitirPeticion(UUID peerDestinoId, DTORequest peticionOriginal) throws Exception;
-
 }
+

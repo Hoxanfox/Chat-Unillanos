@@ -4,6 +4,7 @@ import com.arquitectura.controlador.IPeerHandler;
 import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.domain.Peer;
+import com.arquitectura.domain.enums.EstadoPeer;
 import com.arquitectura.events.*;
 import com.arquitectura.persistence.repository.PeerRepository;
 import com.google.gson.Gson;
@@ -224,7 +225,7 @@ public class PeerConnectionManager {
                 continue;
             }
 
-            if (peer.getPuerto() == null || peer.getPuerto() <= 0 || peer.getPuerto() > 65535) {
+            if (peer.getPuerto() <= 0 || peer.getPuerto() > 65535) {
                 log.warn("⚠️ Peer {} tiene puerto inválido: {}. Ignorando...",
                         peer.getPeerId(), peer.getPuerto());
                 invalidCount++;
@@ -254,7 +255,7 @@ public class PeerConnectionManager {
         if (bootstrapNodes == null || bootstrapNodes.trim().isEmpty()) {
             log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             log.warn("⚠️  RED AISLADA - Este servidor NO tiene peers configurados");
-            log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━���━━━━━━━━━━━━━━━━━━━━━");
             log.warn("El servidor está en modo LISTENING en puerto {}", peerPort);
             log.warn("Para conectar manualmente a otro peer:");
             log.warn("  1. Asegúrate que el otro servidor esté corriendo");
@@ -410,7 +411,7 @@ public class PeerConnectionManager {
                 Optional<Peer> peerOpt = peerRepository.findById(peerId);
                 if (peerOpt.isPresent()) {
                     Peer peer = peerOpt.get();
-                    peer.setConectado("ONLINE");
+                    peer.setConectado(EstadoPeer.ONLINE);
                     peer.setUltimoLatido(LocalDateTime.now());
                     peerRepository.save(peer);
                 }
@@ -422,8 +423,8 @@ public class PeerConnectionManager {
                 if (!peer.getPeerId().equals(localPeerId) && 
                     !connectedPeerIds.contains(peer.getPeerId())) {
                     
-                    if ("ONLINE".equals(peer.getConectado())) {
-                        peer.setConectado("OFFLINE");
+                    if (EstadoPeer.ONLINE.equals(peer.getConectado())) {
+                        peer.setConectado(EstadoPeer.OFFLINE);
                         peerRepository.save(peer);
                         log.info("Peer {} marcado como OFFLINE en BD", peer.getPeerId());
                     }
@@ -456,7 +457,7 @@ public class PeerConnectionManager {
         Optional<Peer> peerOpt = peerRepository.findById(peerId);
         if (peerOpt.isPresent()) {
             Peer peer = peerOpt.get();
-            peer.setConectado("ONLINE");
+            peer.setConectado(EstadoPeer.ONLINE);
             peer.actualizarLatido();
             peerRepository.save(peer);
         }
@@ -479,7 +480,7 @@ public class PeerConnectionManager {
             Optional<Peer> peerOpt = peerRepository.findById(peerId);
             if (peerOpt.isPresent()) {
                 Peer peer = peerOpt.get();
-                peer.setConectado("OFFLINE");
+                peer.setConectado(EstadoPeer.OFFLINE);
                 peerRepository.save(peer);
             }
         }

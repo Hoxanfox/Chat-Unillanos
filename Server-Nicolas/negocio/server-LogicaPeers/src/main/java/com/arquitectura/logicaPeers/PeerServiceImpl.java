@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
  * Implementación del servicio de gestión de peers P2P.
  * Maneja la lógica de negocio para peers, heartbeats y retransmisión.
  */
-@Service
+@Service("peerServiceP2P")
 public class PeerServiceImpl implements IPeerService {
 
     private final PeerRepository peerRepository;
