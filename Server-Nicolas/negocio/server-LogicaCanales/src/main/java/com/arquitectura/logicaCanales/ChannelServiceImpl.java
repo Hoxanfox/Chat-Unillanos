@@ -66,8 +66,8 @@ public class ChannelServiceImpl implements IChannelService {
         // Obtener el Peer (servidor) actual
         String serverPeerAddress = networkUtils.getServerIPAddress();
         Peer currentPeer = peerRepository.findByIp(serverPeerAddress)
-                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress)));
-        
+                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress, 9000, "ONLINE")));
+
         Channel newChannel = new Channel(requestDto.getChannelName(), owner, tipo);
         newChannel.setPeerId(currentPeer); // Asignamos el servidor padre
         
@@ -110,8 +110,8 @@ public class ChannelServiceImpl implements IChannelService {
         // Obtener el Peer (servidor) actual
         String serverPeerAddress = networkUtils.getServerIPAddress();
         Peer currentPeer = peerRepository.findByIp(serverPeerAddress)
-                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress)));
-        
+                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress, 9000, "ONLINE")));
+
         String channelName = "Directo: " + user1.getUsername() + " - " + user2.getUsername();
         Channel directChannel = new Channel(channelName, user1, TipoCanal.DIRECTO); // user1 es el "owner" simbólico
         directChannel.setPeerId(currentPeer); // Asignamos el servidor padre
