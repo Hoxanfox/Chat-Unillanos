@@ -9,6 +9,8 @@ import com.arquitectura.DTO.archivos.DTOEndUpload;
 import com.arquitectura.DTO.archivos.DTOStartUpload;
 import com.arquitectura.DTO.archivos.DTOUploadChunk;
 import com.arquitectura.DTO.canales.ChannelResponseDto;
+import com.arquitectura.DTO.canales.InviteMemberRequestDto;
+import com.arquitectura.DTO.canales.RespondToInviteRequestDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
@@ -581,6 +583,336 @@ public class RequestDispatcher {
                         System.err.println("Error al listar miembros: " + e.getMessage());
                         e.printStackTrace();
                         sendJsonResponse(handler, "listarMiembros", false, "Error interno del servidor al listar miembros", null);
+                    }
+                    break;
+
+                case "invitarmiembro":
+                case "invitarusuario":
+                    // 1. Extraer payload
+                    Object inviteDataObj = request.getPayload();
+                    if (inviteDataObj == null) {
+                        sendJsonResponse(handler, "invitarMiembro", false, "Falta payload", null);
+                        return;
+                    }
+
+                    // 2. Convertir a JSON y extraer campos
+                    JsonObject inviteJson = gson.toJsonTree(inviteDataObj).getAsJsonObject();
+                    String inviteChannelIdStr = inviteJson.has("channelId") ? inviteJson.get("channelId").getAsString() : null;
+                    String inviteUserIdStr = inviteJson.has("userIdToInvite") ? inviteJson.get("userIdToInvite").getAsString() : null;
+
+                    // 3. Validar campos requeridos
+                    if (inviteChannelIdStr == null || inviteChannelIdStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "invitarMiembro", false, "El ID del canal es requerido",
+                            createErrorData("channelId", "Campo requerido"));
+                        return;
+                    }
+
+                    if (inviteUserIdStr == null || inviteUserIdStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "invitarMiembro", false, "El ID del usuario a invitar es requerido",
+                            createErrorData("userIdToInvite", "Campo requerido"));
+                        return;
+                    }
+
+                    try {
+                        // 4. Convertir a UUIDs
+                        UUID inviteChannelId = UUID.fromString(inviteChannelIdStr);
+                        UUID inviteUserId = UUID.fromString(inviteUserIdStr);
+
+                        // 5. Obtener ID del owner (usuario autenticado)
+                        UUID ownerId = handler.getAuthenticatedUser().getUserId();
+
+                        // 6. Crear DTO de request
+                        InviteMemberRequestDto inviteDto = new InviteMemberRequestDto(inviteChannelId, inviteUserId);
+
+                        // 7. Llamar a la fachada
+                        chatFachada.invitarMiembro(inviteDto, ownerId);
+
+                        // 8. Obtener información del usuario invitado para la respuesta
+                        List<UserResponseDto> invitedUsers = chatFachada.getUsersByIds(Set.of(inviteUserId));
+                        
+                        // 9. Construir respuesta exitosa
+                        Map<String, Object> inviteResponseData = new HashMap<>();
+                        inviteResponseData.put("channelId", inviteChannelIdStr);
+                        inviteResponseData.put("invitedUserId", inviteUserIdStr);
+                        if (!invitedUsers.isEmpty()) {
+                            inviteResponseData.put("invitedUsername", invitedUsers.get(0).getUsername());
+                        }
+
+                        sendJsonResponse(handler, "invitarMiembro", true, "Invitación enviada exitosamente", inviteResponseData);
+
+                    } catch (IllegalArgumentException e) {
+                        // Error de validación
+                        String errorMessage = e.getMessage();
+                        String campo = "general";
+                        
+                        if (errorMessage.contains("Canal")) {
+                            campo = "channelId";
+                        } else if (errorMessage.contains("propietario") || errorMessage.contains("owner")) {
+                            campo = "permisos";
+                        } else if (errorMessage.contains("Usuario") || errorMessage.contains("usuario")) {
+                            campo = "userIdToInvite";
+                        } else if (errorMessage.contains("miembro") || errorMessage.contains("invitación")) {
+                            campo = "membresía";
+                        }
+                        
+                        sendJsonResponse(handler, "invitarMiembro", false, errorMessage,
+                            createErrorData(campo, errorMessage));
+                            
+                    } catch (Exception e) {
+                        // Error inesperado
+                        System.err.println("Error al invitar miembro: " + e.getMessage());
+                        e.printStackTrace();
+                        sendJsonResponse(handler, "invitarMiembro", false, "Error interno del servidor al invitar miembro", null);
+                    }
+                    break;
+
+                case "responderinvitacion":
+                case "aceptarinvitacion":
+                case "rechazarinvitacion":
+                    // 1. Extraer payload
+                    Object respondDataObj = request.getPayload();
+                    if (respondDataObj == null) {
+                        sendJsonResponse(handler, "responderInvitacion", false, "Falta payload", null);
+                        return;
+                    }
+
+                    // 2. Convertir a JSON y extraer campos
+                    JsonObject respondJson = gson.toJsonTree(respondDataObj).getAsJsonObject();
+                    String respondChannelIdStr = respondJson.has("channelId") ? respondJson.get("channelId").getAsString() : null;
+                    Boolean accepted = respondJson.has("accepted") ? respondJson.get("accepted").getAsBoolean() : null;
+
+                    // 3. Validar campos requeridos
+                    if (respondChannelIdStr == null || respondChannelIdStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "responderInvitacion", false, "El ID del canal es requerido",
+                            createErrorData("channelId", "Campo requerido"));
+                        return;
+                    }
+
+                    if (accepted == null) {
+                        sendJsonResponse(handler, "responderInvitacion", false, "Debes indicar si aceptas o rechazas la invitación",
+                            createErrorData("accepted", "Campo requerido"));
+                        return;
+                    }
+
+                    try {
+                        // 4. Convertir a UUID
+                        UUID respondChannelId = UUID.fromString(respondChannelIdStr);
+
+                        // 5. Obtener ID del usuario autenticado
+                        UUID userId = handler.getAuthenticatedUser().getUserId();
+
+                        // 6. Crear DTO de request
+                        RespondToInviteRequestDto respondDto = new RespondToInviteRequestDto(respondChannelId, accepted);
+
+                        // 7. Llamar a la fachada
+                        chatFachada.responderInvitacion(respondDto, userId);
+
+                        // 8. Construir respuesta exitosa
+                        Map<String, Object> respondResponseData = new HashMap<>();
+                        respondResponseData.put("channelId", respondChannelIdStr);
+                        respondResponseData.put("accepted", accepted);
+
+                        String message = accepted ? 
+                            "Invitación aceptada. Ahora eres miembro del canal" : 
+                            "Invitación rechazada";
+
+                        sendJsonResponse(handler, "responderInvitacion", true, message, respondResponseData);
+
+                    } catch (IllegalArgumentException e) {
+                        // Error de validación
+                        String errorMessage = e.getMessage();
+                        String campo = "general";
+                        
+                        if (errorMessage.contains("Canal")) {
+                            campo = "channelId";
+                        } else if (errorMessage.contains("invitación")) {
+                            campo = "invitación";
+                        }
+                        
+                        sendJsonResponse(handler, "responderInvitacion", false, errorMessage,
+                            createErrorData(campo, errorMessage));
+                            
+                    } catch (Exception e) {
+                        // Error inesperado
+                        System.err.println("Error al responder invitación: " + e.getMessage());
+                        e.printStackTrace();
+                        sendJsonResponse(handler, "responderInvitacion", false, "Error interno del servidor al responder invitación", null);
+                    }
+                    break;
+
+                case "obtenerinvitaciones":
+                case "listarinvitaciones":
+                case "invitacionespendientes":
+                    // 1. Extraer payload
+                    Object invitacionesDataObj = request.getPayload();
+                    if (invitacionesDataObj == null) {
+                        sendJsonResponse(handler, "obtenerInvitaciones", false, "Falta payload", null);
+                        return;
+                    }
+
+                    // 2. Convertir a JSON y extraer campos
+                    JsonObject invitacionesJson = gson.toJsonTree(invitacionesDataObj).getAsJsonObject();
+                    String invitUsuarioIdStr = invitacionesJson.has("usuarioId") ? invitacionesJson.get("usuarioId").getAsString() : null;
+
+                    // 3. Validar campos requeridos
+                    if (invitUsuarioIdStr == null || invitUsuarioIdStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "obtenerInvitaciones", false, "El ID del usuario es requerido",
+                            createErrorData("usuarioId", "Campo requerido"));
+                        return;
+                    }
+
+                    try {
+                        // 4. Convertir a UUID
+                        UUID invitUsuarioId = UUID.fromString(invitUsuarioIdStr);
+
+                        // 5. Validar que el usuario autenticado coincida con el solicitante (seguridad)
+                        if (!handler.getAuthenticatedUser().getUserId().equals(invitUsuarioId)) {
+                            sendJsonResponse(handler, "obtenerInvitaciones", false, "No autorizado para ver estas invitaciones",
+                                createErrorData("permisos", "Usuario no autorizado"));
+                            return;
+                        }
+
+                        // 6. Llamar a la fachada
+                        List<ChannelResponseDto> invitaciones = chatFachada.getPendingInvitationsForUser(invitUsuarioId);
+
+                        // 7. Construir lista de invitaciones para la respuesta
+                        List<Map<String, Object>> invitacionesData = new ArrayList<>();
+                        
+                        for (ChannelResponseDto canal : invitaciones) {
+                            Map<String, Object> canalMap = new HashMap<>();
+                            canalMap.put("channelId", canal.getChannelId().toString());
+                            canalMap.put("channelName", canal.getChannelName());
+                            canalMap.put("channelType", canal.getChannelType());
+                            
+                            if (canal.getOwner() != null) {
+                                canalMap.put("owner", Map.of(
+                                    "userId", canal.getOwner().getUserId().toString(),
+                                    "username", canal.getOwner().getUsername()
+                                ));
+                            }
+                            
+                            if (canal.getPeerId() != null) {
+                                canalMap.put("peerId", canal.getPeerId().toString());
+                            }
+                            
+                            invitacionesData.add(canalMap);
+                        }
+
+                        // 8. Construir respuesta exitosa
+                        Map<String, Object> invitacionesResponseData = new HashMap<>();
+                        invitacionesResponseData.put("invitaciones", invitacionesData);
+                        invitacionesResponseData.put("totalInvitaciones", invitaciones.size());
+
+                        sendJsonResponse(handler, "obtenerInvitaciones", true, "Invitaciones obtenidas", invitacionesResponseData);
+
+                    } catch (IllegalArgumentException e) {
+                        // Error de validación
+                        String errorMessage = e.getMessage();
+                        sendJsonResponse(handler, "obtenerInvitaciones", false, errorMessage,
+                            createErrorData("general", errorMessage));
+                            
+                    } catch (Exception e) {
+                        // Error inesperado
+                        System.err.println("Error al obtener invitaciones: " + e.getMessage());
+                        e.printStackTrace();
+                        sendJsonResponse(handler, "obtenerInvitaciones", false, "Error interno del servidor al obtener invitaciones", null);
+                    }
+                    break;
+
+                case "crearcanaldirecto":
+                case "iniciarchat":
+                case "obtenerchatprivado":
+                    // 1. Extraer payload
+                    Object directDataObj = request.getPayload();
+                    if (directDataObj == null) {
+                        sendJsonResponse(handler, "crearCanalDirecto", false, "Falta payload", null);
+                        return;
+                    }
+
+                    // 2. Convertir a JSON y extraer campos
+                    JsonObject directJson = gson.toJsonTree(directDataObj).getAsJsonObject();
+                    String user1IdStr = directJson.has("user1Id") ? directJson.get("user1Id").getAsString() : null;
+                    String user2IdStr = directJson.has("user2Id") ? directJson.get("user2Id").getAsString() : null;
+
+                    // 3. Validar campos requeridos
+                    if (user1IdStr == null || user1IdStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "crearCanalDirecto", false, "El ID del primer usuario es requerido",
+                            createErrorData("user1Id", "Campo requerido"));
+                        return;
+                    }
+
+                    if (user2IdStr == null || user2IdStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "crearCanalDirecto", false, "El ID del segundo usuario es requerido",
+                            createErrorData("user2Id", "Campo requerido"));
+                        return;
+                    }
+
+                    try {
+                        // 4. Convertir a UUIDs
+                        UUID user1Id = UUID.fromString(user1IdStr);
+                        UUID user2Id = UUID.fromString(user2IdStr);
+
+                        // 5. Validar que el usuario autenticado sea uno de los dos
+                        UUID authenticatedUserId = handler.getAuthenticatedUser().getUserId();
+                        if (!authenticatedUserId.equals(user1Id) && !authenticatedUserId.equals(user2Id)) {
+                            sendJsonResponse(handler, "crearCanalDirecto", false, "No autorizado para crear este canal",
+                                createErrorData("permisos", "Usuario no autorizado"));
+                            return;
+                        }
+
+                        // 6. Llamar a la fachada
+                        ChannelResponseDto canalDirecto = chatFachada.crearCanalDirecto(user1Id, user2Id);
+
+                        // 7. Obtener información del otro usuario
+                        UUID otherUserId = authenticatedUserId.equals(user1Id) ? user2Id : user1Id;
+                        List<UserResponseDto> otherUsers = chatFachada.getUsersByIds(Set.of(otherUserId));
+
+                        // 8. Construir respuesta exitosa
+                        Map<String, Object> directResponseData = new HashMap<>();
+                        directResponseData.put("channelId", canalDirecto.getChannelId().toString());
+                        directResponseData.put("channelName", canalDirecto.getChannelName());
+                        directResponseData.put("channelType", canalDirecto.getChannelType());
+                        directResponseData.put("owner", Map.of(
+                            "userId", canalDirecto.getOwner().getUserId().toString(),
+                            "username", canalDirecto.getOwner().getUsername()
+                        ));
+                        if (canalDirecto.getPeerId() != null) {
+                            directResponseData.put("peerId", canalDirecto.getPeerId().toString());
+                        }
+
+                        // Agregar información del otro usuario
+                        if (!otherUsers.isEmpty()) {
+                            UserResponseDto otherUser = otherUsers.get(0);
+                            directResponseData.put("otherUser", Map.of(
+                                "userId", otherUser.getUserId().toString(),
+                                "username", otherUser.getUsername(),
+                                "email", otherUser.getEmail(),
+                                "photoAddress", otherUser.getPhotoAddress() != null ? otherUser.getPhotoAddress() : "",
+                                "conectado", otherUser.getEstado() != null ? otherUser.getEstado() : "false"
+                            ));
+                        }
+
+                        sendJsonResponse(handler, "crearCanalDirecto", true, "Canal directo creado/obtenido exitosamente", directResponseData);
+
+                    } catch (IllegalArgumentException e) {
+                        // Error de validación
+                        String errorMessage = e.getMessage();
+                        String campo = "general";
+                        
+                        if (errorMessage.contains("mismo")) {
+                            campo = "user2Id";
+                        } else if (errorMessage.contains("usuario") || errorMessage.contains("Usuario")) {
+                            campo = "usuarios";
+                        }
+                        
+                        sendJsonResponse(handler, "crearCanalDirecto", false, errorMessage,
+                            createErrorData(campo, errorMessage));
+                            
+                    } catch (Exception e) {
+                        // Error inesperado
+                        System.err.println("Error al crear canal directo: " + e.getMessage());
+                        e.printStackTrace();
+                        sendJsonResponse(handler, "crearCanalDirecto", false, "Error interno del servidor al crear canal directo", null);
                     }
                     break;
 
