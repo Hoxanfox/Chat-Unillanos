@@ -67,4 +67,20 @@ public interface IFachadaArchivos {
      * @return CompletableFuture que se completa con true si existe localmente
      */
     CompletableFuture<Boolean> existeArchivoLocalmente(String fileId);
+
+    /**
+     * Verifica si un archivo ya existe localmente (en disco y en BD).
+     *
+     * @param fileId El identificador del archivo en el servidor
+     * @return CompletableFuture que se completa con true si existe, false si no
+     */
+    CompletableFuture<Boolean> existeLocalmente(String fileId);
+
+    /**
+     * Obtiene la ruta local de un archivo si ya existe en disco.
+     *
+     * @param fileId El identificador del archivo en el servidor
+     * @return CompletableFuture que se completa con el archivo local, o null si no existe
+     */
+    CompletableFuture<File> obtenerRutaLocal(String fileId);
 }

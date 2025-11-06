@@ -87,22 +87,30 @@ public class ChannelServiceImpl implements IChannelService {
     @Override
     @Transactional
     public ChannelResponseDto crearCanalDirecto(UUID user1Id, UUID user2Id) throws Exception {
+        Channel channel = obtenerOCrearCanalDirecto(user1Id, user2Id);
+        return mapToChannelResponseDto(channel);
+    }
+
+    @Override
+    @Transactional
+    public Channel obtenerOCrearCanalDirecto(UUID user1Id, UUID user2Id) throws Exception {
         if (user1Id.equals(user2Id)) {
             throw new Exception("No se puede crear un canal directo con uno mismo.");
         }
-        //evitar duplicados
+
         // 1. Buscamos en ambas direcciones (A->B y B->A) por si ya existe.
         Optional<Channel> existingChannel = channelRepository.findDirectChannelBetweenUsers(TipoCanal.DIRECTO, user1Id, user2Id);
         if (existingChannel.isPresent()) {
             System.out.println("Canal directo ya existe entre " + user1Id + " y " + user2Id + ". Devolviendo existente.");
-            return mapToChannelResponseDto(existingChannel.get());
+            return existingChannel.get();
         }
         // Hacemos la búsqueda inversa por si se creó al revés
         existingChannel = channelRepository.findDirectChannelBetweenUsers(TipoCanal.DIRECTO, user2Id, user1Id);
         if (existingChannel.isPresent()) {
             System.out.println("Canal directo ya existe entre " + user2Id + " y " + user1Id + ". Devolviendo existente.");
-            return mapToChannelResponseDto(existingChannel.get());
+            return existingChannel.get();
         }
+
         // Si no existe, procedemos a crear uno nuevo
         User user1 = userRepository.findById(user1Id).orElseThrow(() -> new Exception("El usuario con ID " + user1Id + " no existe."));
         User user2 = userRepository.findById(user2Id).orElseThrow(() -> new Exception("El usuario con ID " + user2Id + " no existe."));
@@ -113,16 +121,16 @@ public class ChannelServiceImpl implements IChannelService {
                 .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress, 9000, "ONLINE")));
 
         String channelName = "Directo: " + user1.getUsername() + " - " + user2.getUsername();
-        Channel directChannel = new Channel(channelName, user1, TipoCanal.DIRECTO); // user1 es el "owner" simbólico
-        directChannel.setPeerId(currentPeer); // Asignamos el servidor padre
-        
-        //guardamos el canal
+        Channel directChannel = new Channel(channelName, user1, TipoCanal.DIRECTO);
+        directChannel.setPeerId(currentPeer);
+
+        // Guardamos el canal
         Channel savedChannel = channelRepository.save(directChannel);
         // Añadimos a ambos usuarios como miembros activos
         anadirMiembroConEstado(savedChannel, user1, EstadoMembresia.ACTIVO);
         anadirMiembroConEstado(savedChannel, user2, EstadoMembresia.ACTIVO);
-        // Volvemos a guardar para persistir las nuevas membresías
-        return mapToChannelResponseDto(savedChannel);
+
+        return savedChannel;
     }
     
     @Override
@@ -301,3 +309,4 @@ public class ChannelServiceImpl implements IChannelService {
     }
 
 }
+

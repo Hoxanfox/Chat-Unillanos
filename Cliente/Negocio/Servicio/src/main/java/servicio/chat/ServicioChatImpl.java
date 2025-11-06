@@ -223,7 +223,15 @@ public class ServicioChatImpl implements IServicioChat, IObservador {
     @Override
     public void actualizar(String tipoDeDato, Object datos) {
         System.out.println("📢 [ServicioChat]: Recibida notificación de la fachada - Tipo: " + tipoDeDato);
-        // Pasa la notificación (ej. "NUEVO_MENSAJE_PRIVADO") hacia arriba a la vista.
+
+        // ✅ CORRECCIÓN: Filtrar solo notificaciones relacionadas con MENSAJES
+        // No procesar notificaciones de actualización de contactos (eso lo hace ServicioContactos)
+        if ("ACTUALIZAR_CONTACTOS".equals(tipoDeDato)) {
+            System.out.println("⏭️ [ServicioChat]: Ignorando notificación de actualización de contactos (no es responsabilidad de ServicioChat)");
+            return;
+        }
+
+        // Pasa solo notificaciones relevantes de mensajes hacia arriba a la vista.
         notificarObservadores(tipoDeDato, datos);
     }
 

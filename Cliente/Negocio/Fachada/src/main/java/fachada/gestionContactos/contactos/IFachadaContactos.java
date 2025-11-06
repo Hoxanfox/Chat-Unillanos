@@ -13,6 +13,12 @@ public interface IFachadaContactos extends ISujeto {
     // Métodos para la lista de contactos
     void solicitarActualizacionContactos();
     List<DTOContacto> getContactos();
+    
+    /**
+     * Sincroniza los contactos con la base de datos local
+     * @param contactos Lista de contactos a sincronizar
+     */
+    void sincronizarContactosConBD(List<DTOContacto> contactos);
 
     // Métodos para el chat
     void solicitarHistorial(String contactoId);

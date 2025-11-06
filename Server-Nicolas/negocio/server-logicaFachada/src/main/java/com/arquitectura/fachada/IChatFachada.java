@@ -78,6 +78,16 @@ public interface IChatFachada {
     MessageResponseDto enviarMensajeTexto(SendMessageRequestDto requestDto, UUID autorId) throws Exception;
     MessageResponseDto enviarMensajeAudio(SendMessageRequestDto requestDto, UUID autorId) throws Exception;
     List<MessageResponseDto> obtenerMensajesDeCanal(UUID canalId, UUID userId) throws Exception;
+
+    /**
+     * Obtiene el historial de mensajes privados entre dos usuarios.
+     * @param remitenteId ID del usuario que solicita el historial
+     * @param destinatarioId ID del contacto con quien tiene la conversación
+     * @return Lista de MessageResponseDto con el historial privado
+     * @throws Exception en caso de error o falta de permisos
+     */
+    List<MessageResponseDto> obtenerHistorialPrivado(UUID remitenteId, UUID destinatarioId) throws Exception;
+
     String guardarArchivoDeAudio(String fileName, String base64Data, UUID autorId) throws IOException;
     List<TranscriptionResponseDto> obtenerTranscripciones();
 

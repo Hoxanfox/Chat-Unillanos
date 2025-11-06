@@ -206,6 +206,11 @@ public class ChatFachadaImpl implements IChatFachada {
     }
 
     @Override
+    public List<MessageResponseDto> obtenerHistorialPrivado(UUID remitenteId, UUID destinatarioId) throws Exception {
+        return messageService.obtenerHistorialPrivado(remitenteId, destinatarioId);
+    }
+
+    @Override
     public void enviarMensajeBroadcast(String contenido, UUID adminId) throws Exception {
         messageService.enviarMensajeBroadcast(contenido, adminId);
     }

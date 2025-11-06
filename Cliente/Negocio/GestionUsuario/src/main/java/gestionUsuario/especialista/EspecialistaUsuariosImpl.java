@@ -50,8 +50,8 @@ public class EspecialistaUsuariosImpl implements IEspecialistaUsuarios {
 
     @Override
     public void guardarUsuario(Usuario usuario) {
-        System.out.println("💾 [EspecialistaUsuarios]: Guardando usuario: " + usuario.getNombre());
-        
+        System.out.println("💾 [EspecialistaUsuarios]: Intentando guardar usuario: " + usuario.getNombre());
+
         // Validaciones de negocio
         if (usuario == null) {
             throw new IllegalArgumentException("El usuario no puede ser nulo");
@@ -65,11 +65,25 @@ public class EspecialistaUsuariosImpl implements IEspecialistaUsuarios {
             throw new IllegalArgumentException("El nombre es obligatorio");
         }
         
-        // Verificar si ya existe un usuario con ese email
-        if (repositorioUsuario.existePorEmail(usuario.getEmail())) {
-            throw new IllegalStateException("Ya existe un usuario con ese email: " + usuario.getEmail());
+        // 1. Verificar si ya existe un usuario con ese ID
+        if (usuario.getIdUsuario() != null) {
+            Usuario existentePorId = repositorioUsuario.obtenerPorId(usuario.getIdUsuario());
+            if (existentePorId != null) {
+                // Usuario ya existe por ID -> ignorar (no hacer nada)
+                System.out.println("ℹ️ [EspecialistaUsuarios]: Usuario ya existe (por ID), ignorando guardado.");
+                return;
+            }
         }
         
+        // 2. Verificar si ya existe un usuario con ese email
+        Usuario existentePorEmail = repositorioUsuario.obtenerPorEmail(usuario.getEmail());
+        if (existentePorEmail != null) {
+            // Usuario ya existe por email -> ignorar (no hacer nada)
+            System.out.println("ℹ️ [EspecialistaUsuarios]: Usuario ya existe (por email: " + usuario.getEmail() + "), ignorando guardado.");
+            return;
+        }
+
+        // 3. Usuario no existe -> crear nuevo
         repositorioUsuario.guardar(usuario);
         System.out.println("✅ [EspecialistaUsuarios]: Usuario guardado correctamente.");
     }

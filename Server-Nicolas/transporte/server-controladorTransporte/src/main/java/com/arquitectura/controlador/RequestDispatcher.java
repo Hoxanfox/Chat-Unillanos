@@ -29,6 +29,8 @@ public class RequestDispatcher {
 
     private final IChatFachada chatFachada;
     private final Gson gson;
+    private IContactListBroadcaster contactListBroadcaster;
+
     private static final Set<String> ACCIONES_PUBLICAS = Set.of(
             "authenticateuser",
             "registeruser",                // Registro de usuarios (público)
@@ -45,6 +47,14 @@ public class RequestDispatcher {
     public RequestDispatcher(IChatFachada chatFachada, Gson gson) {
         this.chatFachada = chatFachada;
         this.gson = gson;
+    }
+
+    /**
+     * Permite inyectar el broadcaster para evitar dependencias circulares
+     */
+    @Autowired
+    public void setContactListBroadcaster(IContactListBroadcaster broadcaster) {
+        this.contactListBroadcaster = broadcaster;
     }
 
     public void dispatch(String requestJson, IClientHandler handler) {
@@ -98,6 +108,77 @@ public class RequestDispatcher {
                     responseData.put("fileId", userDto.getPhotoAddress());
 
                     sendJsonResponse(handler, "authenticateUser", true, "Autenticación exitosa", responseData);
+
+                    // ============================================
+                    // PUSH AUTOMÁTICO: Enviar lista de contactos
+                    // ============================================
+                    try {
+                        System.out.println("🔄 [RequestDispatcher] Enviando lista de contactos (PUSH) para usuario: " + userDto.getUserId());
+                        List<UserResponseDto> contactos = chatFachada.listarContactos(userDto.getUserId());
+
+                        List<Map<String, Object>> contactosData = new ArrayList<>();
+                        for (UserResponseDto contacto : contactos) {
+                            Map<String, Object> contactoMap = new HashMap<>();
+                            contactoMap.put("id", contacto.getUserId().toString());
+                            contactoMap.put("idPeer", contacto.getPeerId() != null ? contacto.getPeerId().toString() : null);
+                            contactoMap.put("nombre", contacto.getUsername());
+                            contactoMap.put("email", contacto.getEmail());
+                            contactoMap.put("photoId", contacto.getPhotoAddress()); // Ruta de la foto para descarga
+
+                            // Obtener imagenBase64 si tiene foto (para visualización inmediata)
+                            String imagenBase64 = null;
+                            if (contacto.getPhotoAddress() != null && !contacto.getPhotoAddress().isEmpty()) {
+                                try {
+                                    imagenBase64 = chatFachada.getFileAsBase64(contacto.getPhotoAddress());
+                                } catch (Exception ex) {
+                                    System.out.println("⚠️ No se pudo cargar foto de " + contacto.getUsername());
+                                }
+                            }
+
+
+                            // Estado en múltiples formatos para compatibilidad
+                            String estadoStr = contacto.getEstado() != null ? contacto.getEstado() : "OFFLINE";
+                            contactoMap.put("estado", estadoStr); // ONLINE/OFFLINE como string
+                            contactoMap.put("conectado", estadoStr); // Duplicado para compatibilidad
+
+                            contactoMap.put("fechaRegistro", contacto.getFechaRegistro() != null ? contacto.getFechaRegistro().toString() : null);
+                            contactosData.add(contactoMap);
+                        }
+
+                        System.out.println("✅ [RequestDispatcher] Enviando " + contactosData.size() + " contactos al cliente que hizo login");
+                        // Enviar lista de contactos al usuario que hizo login
+                        sendJsonResponse(handler, "solicitarListaContactos", true, "Lista de contactos obtenida exitosamente", contactosData);
+
+                        // BROADCAST: Notificar a TODOS los clientes que este usuario está ONLINE
+                        if (contactListBroadcaster != null) {
+                            System.out.println("📢 [RequestDispatcher] Broadcasting lista completa de contactos a TODOS los clientes");
+                            // Obtener lista completa de TODOS los usuarios para el broadcast
+                            List<UserResponseDto> todosLosUsuarios = chatFachada.obtenerTodosLosUsuarios();
+                            List<Map<String, Object>> todosContactosData = new ArrayList<>();
+
+                            for (UserResponseDto usuario : todosLosUsuarios) {
+                                Map<String, Object> usuarioMap = new HashMap<>();
+                                usuarioMap.put("id", usuario.getUserId().toString());
+                                usuarioMap.put("idPeer", usuario.getPeerId() != null ? usuario.getPeerId().toString() : null);
+                                usuarioMap.put("nombre", usuario.getUsername());
+                                usuarioMap.put("email", usuario.getEmail());
+                                usuarioMap.put("photoId", usuario.getPhotoAddress());
+
+                                String estadoStr = usuario.getEstado() != null ? usuario.getEstado() : "OFFLINE";
+                                usuarioMap.put("estado", estadoStr);
+                                usuarioMap.put("conectado", estadoStr);
+                                usuarioMap.put("fechaRegistro", usuario.getFechaRegistro() != null ? usuario.getFechaRegistro().toString() : null);
+
+                                todosContactosData.add(usuarioMap);
+                            }
+
+                            // Broadcast a TODOS los clientes conectados
+                            contactListBroadcaster.broadcastContactListUpdate(todosContactosData);
+                        }
+                    } catch (Exception e) {
+                        System.out.println("❌ [RequestDispatcher] Error al enviar lista de contactos: " + e.getMessage());
+                        e.printStackTrace();
+                    }
                     break;
 
                 case "logoutuser":
@@ -130,6 +211,37 @@ public class RequestDispatcher {
                         handler.clearAuthenticatedUser();
 
                         sendJsonResponse(handler, "logoutUser", true, "Sesión cerrada exitosamente", null);
+
+                        // BROADCAST: Notificar a TODOS los clientes que este usuario está OFFLINE
+                        if (contactListBroadcaster != null) {
+                            System.out.println("📢 [RequestDispatcher] Broadcasting lista completa de contactos tras LOGOUT");
+                            try {
+                                // Obtener lista completa de TODOS los usuarios para el broadcast
+                                List<UserResponseDto> todosLosUsuarios = chatFachada.obtenerTodosLosUsuarios();
+                                List<Map<String, Object>> todosContactosData = new ArrayList<>();
+
+                                for (UserResponseDto usuario : todosLosUsuarios) {
+                                    Map<String, Object> usuarioMap = new HashMap<>();
+                                    usuarioMap.put("id", usuario.getUserId().toString());
+                                    usuarioMap.put("idPeer", usuario.getPeerId() != null ? usuario.getPeerId().toString() : null);
+                                    usuarioMap.put("nombre", usuario.getUsername());
+                                    usuarioMap.put("email", usuario.getEmail());
+                                    usuarioMap.put("photoId", usuario.getPhotoAddress());
+
+                                    String estadoStr = usuario.getEstado() != null ? usuario.getEstado() : "OFFLINE";
+                                    usuarioMap.put("estado", estadoStr);
+                                    usuarioMap.put("conectado", estadoStr);
+                                    usuarioMap.put("fechaRegistro", usuario.getFechaRegistro() != null ? usuario.getFechaRegistro().toString() : null);
+
+                                    todosContactosData.add(usuarioMap);
+                                }
+
+                                // Broadcast a TODOS los clientes conectados
+                                contactListBroadcaster.broadcastContactListUpdate(todosContactosData);
+                            } catch (Exception e) {
+                                System.err.println("❌ Error al hacer broadcast tras logout: " + e.getMessage());
+                            }
+                        }
                     } catch (IllegalArgumentException e) {
                         sendJsonResponse(handler, "logoutUser", false, "Error al cerrar sesión: userId inválido", null);
                     }
@@ -230,10 +342,11 @@ public class RequestDispatcher {
                 // SECCIÓN 2: RUTAS DE CONTACTOS Y USUARIOS (CLIENTES)
                 // ============================================
 
+                case "solicitarlistacontactos":
                 case "listarcontactos":
                     Object listarContactosDataObj = request.getPayload();
                     if (listarContactosDataObj == null) {
-                        sendJsonResponse(handler, "listarContactos", false, "Error al obtener contactos: Falta el usuarioId", null);
+                        sendJsonResponse(handler, "solicitarListaContactos", false, "Error al obtener contactos: Falta el usuarioId", null);
                         return;
                     }
 
@@ -241,7 +354,7 @@ public class RequestDispatcher {
                     String usuarioIdStr = listarContactosJson.has("usuarioId") ? listarContactosJson.get("usuarioId").getAsString() : null;
 
                     if (usuarioIdStr == null || usuarioIdStr.isEmpty()) {
-                        sendJsonResponse(handler, "listarContactos", false, "Error al obtener contactos: usuarioId requerido", null);
+                        sendJsonResponse(handler, "solicitarListaContactos", false, "Error al obtener contactos: usuarioId requerido", null);
                         return;
                     }
 
@@ -250,7 +363,7 @@ public class RequestDispatcher {
 
                         // Verificar que el usuarioId coincida con el usuario autenticado (seguridad)
                         if (!handler.getAuthenticatedUser().getUserId().equals(usuarioId)) {
-                            sendJsonResponse(handler, "listarContactos", false, "Usuario no autenticado o token inválido", null);
+                            sendJsonResponse(handler, "solicitarListaContactos", false, "Usuario no autenticado o token inválido", null);
                             return;
                         }
 
@@ -264,18 +377,69 @@ public class RequestDispatcher {
                             contactoMap.put("id", contacto.getUserId().toString());
                             contactoMap.put("nombre", contacto.getUsername());
                             contactoMap.put("email", contacto.getEmail());
-                            contactoMap.put("imagenBase64", contacto.getImagenBase64());
-                            contactoMap.put("conectado", contacto.getEstado());
+                            contactoMap.put("photoId", contacto.getPhotoAddress()); // Ruta de la foto
+                            contactoMap.put("estado", contacto.getEstado() != null ? contacto.getEstado() : "OFFLINE");
+                            contactoMap.put("fechaRegistro", contacto.getFechaRegistro() != null ? contacto.getFechaRegistro().toString() : null);
                             contactosData.add(contactoMap);
                         }
 
-                        sendJsonResponse(handler, "listarContactos", true, "Lista de contactos obtenida", contactosData);
+                        sendJsonResponse(handler, "solicitarListaContactos", true, "Lista de contactos obtenida exitosamente", contactosData);
                     } catch (IllegalArgumentException e) {
-                        sendJsonResponse(handler, "listarContactos", false, "Error al obtener contactos: usuarioId inválido", null);
+                        sendJsonResponse(handler, "solicitarListaContactos", false, "Error al obtener contactos: usuarioId inválido", null);
                     } catch (Exception e) {
-                        sendJsonResponse(handler, "listarContactos", false, "Error al obtener contactos: " + e.getMessage(), null);
+                        sendJsonResponse(handler, "solicitarListaContactos", false, "Error al obtener los contactos", null);
                     }
                     break;
+
+                case "solicitarhistorialprivado": {
+                    Object payloadObj = request.getPayload();
+                    if (payloadObj == null) {
+                        sendJsonResponse(handler, "solicitarHistorialPrivado", false, "Falta payload", null);
+                        return;
+                    }
+
+                    JsonObject payloadJson = gson.toJsonTree(payloadObj).getAsJsonObject();
+                    String remitenteIdStr = payloadJson.has("remitenteId") ? payloadJson.get("remitenteId").getAsString() : null;
+                    String destinatarioIdStr = payloadJson.has("destinatarioId") ? payloadJson.get("destinatarioId").getAsString() : null;
+
+                    if (remitenteIdStr == null || remitenteIdStr.isEmpty() || destinatarioIdStr == null || destinatarioIdStr.isEmpty()) {
+                        sendJsonResponse(handler, "solicitarHistorialPrivado", false, "remitenteId y destinatarioId son requeridos", null);
+                        return;
+                    }
+
+                    try {
+                        UUID remitenteId = UUID.fromString(remitenteIdStr);
+                        UUID destinatarioId = UUID.fromString(destinatarioIdStr);
+
+                        // Seguridad: el remitente debe coincidir con el usuario autenticado
+                        if (!handler.isAuthenticated() || !handler.getAuthenticatedUser().getUserId().equals(remitenteId)) {
+                            sendJsonResponse(handler, "solicitarHistorialPrivado", false, "No autorizado para ver este historial", null);
+                            return;
+                        }
+
+                        // NOTE: implement this method in IChatFachada / fachada implementation
+                        List<MessageResponseDto> mensajes = chatFachada.obtenerHistorialPrivado(remitenteId, destinatarioId);
+
+                        List<Map<String, Object>> mensajesData = new ArrayList<>();
+                        for (MessageResponseDto m : mensajes) {
+                            Map<String, Object> mm = new HashMap<>();
+                            mm.put("mensajeId", m.getMessageId().toString());
+                            mm.put("remitenteId", m.getAuthor() != null ? m.getAuthor().getUserId().toString() : null);
+                            mm.put("destinatarioId", destinatarioIdStr);
+                            mm.put("tipo", m.getMessageType());
+                            mm.put("contenido", m.getContent());
+                            // opcional: audioId / peer ids si disponible en el DTO
+                            mensajesData.add(mm);
+                        }
+
+                        sendJsonResponse(handler, "solicitarHistorialPrivado", true, "Historial privado obtenido exitosamente", mensajesData);
+                    } catch (IllegalArgumentException e) {
+                        sendJsonResponse(handler, "solicitarHistorialPrivado", false, "Formato de UUID inválido", null);
+                    } catch (Exception e) {
+                        sendJsonResponse(handler, "solicitarHistorialPrivado", false, "Error al obtener el historial: " + e.getMessage(), null);
+                    }
+                    break;
+                }
 
                 // ============================================
                 // SECCIÓN 3: RUTAS DE CANALES (CLIENTES)
@@ -410,6 +574,99 @@ public class RequestDispatcher {
                         System.err.println("Error al enviar mensaje: " + e.getMessage());
                         e.printStackTrace();
                         sendJsonResponse(handler, "enviarMensajeCanal", false, "Error interno del servidor al enviar mensaje", null);
+                    }
+                    break;
+
+                case "enviarmensajedirecto":
+                    // 1. Extraer payload
+                    Object mensajeDirectoDataObj = request.getPayload();
+                    if (mensajeDirectoDataObj == null) {
+                        sendJsonResponse(handler, "enviarMensajeDirecto", false, "Falta payload", null);
+                        return;
+                    }
+
+                    // 2. Convertir a JSON y extraer campos
+                    JsonObject mensajeDirectoJson = gson.toJsonTree(mensajeDirectoDataObj).getAsJsonObject();
+                    String remitenteIdMsgStr = mensajeDirectoJson.has("remitenteId") ? mensajeDirectoJson.get("remitenteId").getAsString() : null;
+                    String destinatarioIdMsgStr = mensajeDirectoJson.has("destinatarioId") ? mensajeDirectoJson.get("destinatarioId").getAsString() : null;
+                    String tipoMensaje = mensajeDirectoJson.has("tipo") ? mensajeDirectoJson.get("tipo").getAsString() : null;
+                    String contenidoMsg = mensajeDirectoJson.has("contenido") ? mensajeDirectoJson.get("contenido").getAsString() : null;
+
+                    // 3. Validar campos requeridos
+                    if (remitenteIdMsgStr == null || remitenteIdMsgStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "enviarMensajeDirecto", false, "Datos de mensaje inválidos",
+                            createErrorData("remitenteId", "El ID del remitente es requerido"));
+                        return;
+                    }
+
+                    if (destinatarioIdMsgStr == null || destinatarioIdMsgStr.trim().isEmpty()) {
+                        sendJsonResponse(handler, "enviarMensajeDirecto", false, "Datos de mensaje inválidos",
+                            createErrorData("destinatarioId", "El ID del destinatario es requerido"));
+                        return;
+                    }
+
+                    if (contenidoMsg == null || contenidoMsg.trim().isEmpty()) {
+                        sendJsonResponse(handler, "enviarMensajeDirecto", false, "Datos de mensaje inválidos",
+                            createErrorData("contenido", "El contenido no puede estar vacío"));
+                        return;
+                    }
+
+                    if (tipoMensaje == null || tipoMensaje.trim().isEmpty()) {
+                        tipoMensaje = "texto"; // valor por defecto
+                    }
+
+                    try {
+                        // 4. Convertir IDs a UUID
+                        UUID remitenteIdMsg = UUID.fromString(remitenteIdMsgStr);
+                        UUID destinatarioIdMsg = UUID.fromString(destinatarioIdMsgStr);
+
+                        // 5. Validar autenticación - el remitente debe ser el usuario autenticado
+                        if (!handler.isAuthenticated() || !handler.getAuthenticatedUser().getUserId().equals(remitenteIdMsg)) {
+                            sendJsonResponse(handler, "enviarMensajeDirecto", false, "No autorizado para enviar este mensaje",
+                                createErrorData("permisos", "Usuario no autorizado"));
+                            return;
+                        }
+
+                        // 6. Validar que el destinatario existe y está disponible
+                        Optional<UserResponseDto> destinatarioOpt = chatFachada.buscarUsuarioPorUsername(destinatarioIdMsgStr);
+
+                        // 7. Obtener o crear el canal directo entre los dos usuarios
+                        ChannelResponseDto canalDirecto = chatFachada.crearCanalDirecto(remitenteIdMsg, destinatarioIdMsg);
+
+                        // 8. Crear DTO de request para enviar el mensaje
+                        SendMessageRequestDto sendMsgDto = new SendMessageRequestDto(
+                            canalDirecto.getChannelId(),
+                            tipoMensaje.equalsIgnoreCase("audio") ? "AUDIO" : "TEXT",
+                            contenidoMsg
+                        );
+
+                        // 9. Llamar al método correspondiente según el tipo
+                        MessageResponseDto messageResponse;
+                        if (tipoMensaje.equalsIgnoreCase("audio")) {
+                            messageResponse = chatFachada.enviarMensajeAudio(sendMsgDto, remitenteIdMsg);
+                        } else {
+                            messageResponse = chatFachada.enviarMensajeTexto(sendMsgDto, remitenteIdMsg);
+                        }
+
+                        // 10. Construir respuesta exitosa
+                        Map<String, Object> dataResponse = new HashMap<>();
+                        dataResponse.put("mensajeId", messageResponse.getMessageId().toString());
+                        dataResponse.put("fechaEnvio", messageResponse.getTimestamp().toString());
+
+                        sendJsonResponse(handler, "enviarMensajeDirecto", true, "Mensaje enviado", dataResponse);
+
+                    } catch (IllegalArgumentException e) {
+                        sendJsonResponse(handler, "enviarMensajeDirecto", false, "Datos de mensaje inválidos",
+                            createErrorData("payload", "Formato UUID inválido"));
+                    } catch (Exception e) {
+                        String errorMsg = e.getMessage();
+                        if (errorMsg != null && (errorMsg.contains("no existe") || errorMsg.contains("not found"))) {
+                            sendJsonResponse(handler, "enviarMensajeDirecto", false, "Destinatario no encontrado o desconectado", null);
+                        } else {
+                            System.err.println("Error al enviar mensaje directo: " + errorMsg);
+                            e.printStackTrace();
+                            sendJsonResponse(handler, "enviarMensajeDirecto", false, "Error al enviar mensaje: " + errorMsg, null);
+                        }
                     }
                     break;
 

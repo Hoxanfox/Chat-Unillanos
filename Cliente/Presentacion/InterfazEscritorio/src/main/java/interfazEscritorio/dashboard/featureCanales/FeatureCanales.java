@@ -106,19 +106,27 @@ public class FeatureCanales extends VBox implements IObservador {
         System.out.println("🎨 [FeatureCanales]: Tamaño container: " + canalesContainer.getWidth() + "x" + canalesContainer.getHeight());
 
         canalesContainer.getChildren().clear();
-        System.out.println("🎨 [FeatureCanales]: Container limpiado. Canales a dibujar: " + canales.size());
+        System.out.println("🎨 [FeatureCanales]: Container limpiado. Canales totales recibidos: " + canales.size());
 
-        if (canales.isEmpty()) {
-            System.out.println("⚠️ [FeatureCanales]: Lista vacía, mostrando mensaje");
+        // 🔥 FILTRAR canales privados (que empiezan con "Directo:")
+        List<DTOCanalCreado> canalesGrupales = canales.stream()
+                .filter(canal -> !canal.getNombre().startsWith("Directo:"))
+                .collect(java.util.stream.Collectors.toList());
+
+        System.out.println("🔍 [FeatureCanales]: Canales grupales (filtrados): " + canalesGrupales.size());
+        System.out.println("🔍 [FeatureCanales]: Canales privados (excluidos): " + (canales.size() - canalesGrupales.size()));
+
+        if (canalesGrupales.isEmpty()) {
+            System.out.println("⚠️ [FeatureCanales]: No hay canales grupales, mostrando mensaje");
             Label sinCanales = new Label("No hay canales disponibles");
             sinCanales.setTextFill(Color.LIGHTGRAY);
             sinCanales.setStyle("-fx-font-size: 12px;");
             canalesContainer.getChildren().add(sinCanales);
             System.out.println("✅ [FeatureCanales]: Mensaje 'sin canales' agregado");
         } else {
-            System.out.println("✏️ [FeatureCanales]: Dibujando " + canales.size() + " canales...");
-            for (int i = 0; i < canales.size(); i++) {
-                DTOCanalCreado canal = canales.get(i);
+            System.out.println("✏️ [FeatureCanales]: Dibujando " + canalesGrupales.size() + " canales grupales...");
+            for (int i = 0; i < canalesGrupales.size(); i++) {
+                DTOCanalCreado canal = canalesGrupales.get(i);
                 System.out.println("   Dibujando canal " + (i + 1) + ": " + canal.getNombre());
                 HBox canalEntry = crearEntradaCanal(canal);
                 canalesContainer.getChildren().add(canalEntry);
