@@ -94,16 +94,23 @@ public class ChannelServiceImpl implements IChannelService {
         // 1. Buscamos en ambas direcciones (A->B y B->A) por si ya existe.
         Optional<Channel> existingChannel = channelRepository.findDirectChannelBetweenUsers(TipoCanal.DIRECTO, user1Id, user2Id);
         if (existingChannel.isPresent()) {
-            System.out.println("Canal directo ya existe entre " + user1Id + " y " + user2Id + ". Devolviendo existente.");
-            return mapToChannelResponseDto(existingChannel.get());
+            Channel channel = existingChannel.get();
+            System.out.println("✓ Canal directo ya existe entre " + user1Id + " y " + user2Id + ". ID: " + channel.getChannelId());
+            ChannelResponseDto dto = mapToChannelResponseDto(channel);
+            System.out.println("✓ Devolviendo DTO: channelId=" + dto.getChannelId() + ", channelName=" + dto.getChannelName());
+            return dto;
         }
         // Hacemos la búsqueda inversa por si se creó al revés
         existingChannel = channelRepository.findDirectChannelBetweenUsers(TipoCanal.DIRECTO, user2Id, user1Id);
         if (existingChannel.isPresent()) {
-            System.out.println("Canal directo ya existe entre " + user2Id + " y " + user1Id + ". Devolviendo existente.");
-            return mapToChannelResponseDto(existingChannel.get());
+            Channel channel = existingChannel.get();
+            System.out.println("✓ Canal directo ya existe entre " + user2Id + " y " + user1Id + ". ID: " + channel.getChannelId());
+            ChannelResponseDto dto = mapToChannelResponseDto(channel);
+            System.out.println("✓ Devolviendo DTO: channelId=" + dto.getChannelId() + ", channelName=" + dto.getChannelName());
+            return dto;
         }
         // Si no existe, procedemos a crear uno nuevo
+        System.out.println("→ Creando nuevo canal directo entre " + user1Id + " y " + user2Id);
         User user1 = userRepository.findById(user1Id).orElseThrow(() -> new Exception("El usuario con ID " + user1Id + " no existe."));
         User user2 = userRepository.findById(user2Id).orElseThrow(() -> new Exception("El usuario con ID " + user2Id + " no existe."));
         
@@ -118,11 +125,15 @@ public class ChannelServiceImpl implements IChannelService {
         
         //guardamos el canal
         Channel savedChannel = channelRepository.save(directChannel);
+        System.out.println("✓ Canal guardado con ID: " + savedChannel.getChannelId());
         // Añadimos a ambos usuarios como miembros activos
         anadirMiembroConEstado(savedChannel, user1, EstadoMembresia.ACTIVO);
         anadirMiembroConEstado(savedChannel, user2, EstadoMembresia.ACTIVO);
+        System.out.println("✓ Miembros agregados al canal");
         // Volvemos a guardar para persistir las nuevas membresías
-        return mapToChannelResponseDto(savedChannel);
+        ChannelResponseDto dto = mapToChannelResponseDto(savedChannel);
+        System.out.println("✓ Devolviendo DTO: channelId=" + dto.getChannelId() + ", channelName=" + dto.getChannelName());
+        return dto;
     }
     
     @Override
