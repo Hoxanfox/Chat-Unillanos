@@ -66,7 +66,7 @@ public class UserServiceImpl implements IUserService {
         String serverPeerAddress = networkUtils.getServerIPAddress();
 
         Peer currentPeer = peerRepository.findByIp(serverPeerAddress)
-                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress)));
+                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress, 9000, "ONLINE")));
 
         User newUserEntity = new User(
                 requestDto.getUsername(),

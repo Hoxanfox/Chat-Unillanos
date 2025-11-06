@@ -8,6 +8,7 @@ import com.arquitectura.DTO.archivos.DTOEndUpload;
 import com.arquitectura.DTO.archivos.DTOStartUpload;
 import com.arquitectura.DTO.archivos.DTOUploadChunk;
 import com.arquitectura.DTO.canales.ChannelResponseDto;
+import com.arquitectura.DTO.peers.PeerResponseDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.fachada.IChatFachada;
@@ -28,7 +29,11 @@ public class RequestDispatcher {
             "authenticateuser",
             "uploadfileforregistration",  // Subida sin autenticación para registro
             "uploadfilechunk",             // Los chunks pueden ser públicos
-            "endfileupload"                // Finalizar upload puede ser público
+            "endfileupload",               // Finalizar upload puede ser público
+            "reportarlatido",              // Los peers pueden reportar latido sin autenticación
+            "añadirpeer",                  // Añadir un nuevo peer a la red
+            "retransmitirpeticion",        // Retransmitir peticiones entre peers (P2P)
+            "actualizarlistapeers"         // Recibir actualizaciones push de la lista de peers
     );
 
     @Autowired
@@ -51,6 +56,9 @@ public class RequestDispatcher {
             }
 
             switch (action) {
+                // ============================================
+                // SECCIÓN 1: RUTAS DE AUTENTICACIÓN (CLIENTES)
+                // ============================================
                 case "authenticateuser":
                     Object dataObj = request.getPayload();
                     if (dataObj == null) {
@@ -122,6 +130,9 @@ public class RequestDispatcher {
                     }
                     break;
 
+                // ============================================
+                // SECCIÓN 2: RUTAS DE CONTACTOS Y USUARIOS (CLIENTES)
+                // ============================================
                 case "listarcontactos":
                     Object listarContactosDataObj = request.getPayload();
                     if (listarContactosDataObj == null) {
@@ -169,6 +180,9 @@ public class RequestDispatcher {
                     }
                     break;
 
+                // ============================================
+                // SECCIÓN 3: RUTAS DE CANALES (CLIENTES)
+                // ============================================
                 case "listarcanales":
                     Object listarCanalesDataObj = request.getPayload();
                     if (listarCanalesDataObj == null) {
@@ -214,6 +228,10 @@ public class RequestDispatcher {
                         sendJsonResponse(handler, "listarCanales", false, "Error al listar canales: " + e.getMessage(), null);
                     }
                     break;
+
+                // ============================================
+                // SECCIÓN 4: RUTAS DE TRANSFERENCIA DE ARCHIVOS (CLIENTES)
+                // ============================================
                 case "startfileupload": // Subida autenticada (ej. audio)
                 case "uploadfileforregistration": // Subida pública (ej. foto de registro)
                 {
@@ -289,6 +307,292 @@ public class RequestDispatcher {
                     // Respuesta PUSH (chunk dinámico)
                     String pushAction = "downloadFileChunk_" + downloadId + "_" + chunkNumber;
                     sendJsonResponse(handler, pushAction, true, "Enviando chunk", chunkData);
+                    break;
+                }
+
+                // ============================================
+                // SECCIÓN 5: RUTAS DE PEERS (P2P - SERVER TO SERVER)
+                // ============================================
+                case "reportarlatido":
+                {
+                    Object heartbeatDataObj = request.getPayload();
+                    if (heartbeatDataObj == null) {
+                        sendJsonResponse(handler, "reportarLatido", false, "Datos del peer inválidos",
+                            createErrorData("peerId", "El campo peerId es requerido"));
+                        return;
+                    }
+
+                    JsonObject heartbeatJson = gson.toJsonTree(heartbeatDataObj).getAsJsonObject();
+                    String heartbeatPeerIdStr = heartbeatJson.has("peerId") ? heartbeatJson.get("peerId").getAsString() : null;
+                    String heartbeatIp = heartbeatJson.has("ip") ? heartbeatJson.get("ip").getAsString() : null;
+                    Integer heartbeatPuerto = heartbeatJson.has("puerto") ? heartbeatJson.get("puerto").getAsInt() : null;
+
+                    if (heartbeatPeerIdStr == null || heartbeatIp == null || heartbeatPuerto == null) {
+                        sendJsonResponse(handler, "reportarLatido", false, "Datos del peer inválidos",
+                            createErrorData("datos", "peerId, ip y puerto son requeridos"));
+                        return;
+                    }
+
+                    try {
+                        UUID heartbeatPeerId = UUID.fromString(heartbeatPeerIdStr);
+
+                        com.arquitectura.DTO.peers.HeartbeatRequestDto heartbeatDto =
+                            new com.arquitectura.DTO.peers.HeartbeatRequestDto(heartbeatPeerId, heartbeatIp, heartbeatPuerto);
+
+                        com.arquitectura.DTO.peers.HeartbeatResponseDto heartbeatResponse = chatFachada.reportarLatido(heartbeatDto);
+
+                        Map<String, Object> heartbeatResponseData = new HashMap<>();
+                        heartbeatResponseData.put("proximoLatidoMs", heartbeatResponse.getProximoLatidoMs());
+
+                        sendJsonResponse(handler, "reportarLatido", true, "Latido recibido", heartbeatResponseData);
+                    } catch (IllegalArgumentException e) {
+                        sendJsonResponse(handler, "reportarLatido", false, "Datos del peer inválidos",
+                            createErrorData("formato", e.getMessage()));
+                    } catch (Exception e) {
+                        // Peer no reconocido o no registrado
+                        Map<String, Object> errorData = new HashMap<>();
+                        errorData.put("peerId", heartbeatPeerIdStr);
+                        sendJsonResponse(handler, "reportarLatido", false, "Peer no reconocido o no registrado", errorData);
+                    }
+                    break;
+                }
+
+                case "añadirpeer":
+                {
+                    Object addPeerDataObj = request.getPayload();
+                    if (addPeerDataObj == null) {
+                        sendJsonResponse(handler, "añadirPeer", false, "Datos del peer inválidos",
+                            createErrorData("datos", "ip y puerto son requeridos"));
+                        return;
+                    }
+
+                    JsonObject addPeerJson = gson.toJsonTree(addPeerDataObj).getAsJsonObject();
+                    String addPeerIp = addPeerJson.has("ip") ? addPeerJson.get("ip").getAsString() : null;
+                    Integer addPeerPuerto = addPeerJson.has("puerto") ? addPeerJson.get("puerto").getAsInt() : null;
+
+                    if (addPeerIp == null || addPeerPuerto == null) {
+                        sendJsonResponse(handler, "añadirPeer", false, "Datos del peer inválidos",
+                            createErrorData("datos", "ip y puerto son requeridos"));
+                        return;
+                    }
+
+                    try {
+                        com.arquitectura.DTO.peers.AddPeerRequestDto addPeerDto =
+                            new com.arquitectura.DTO.peers.AddPeerRequestDto(addPeerIp, addPeerPuerto);
+
+                        PeerResponseDto newPeer = chatFachada.añadirPeer(addPeerDto);
+
+                        Map<String, Object> peerData = new HashMap<>();
+                        peerData.put("peerId", newPeer.getPeerId().toString());
+                        peerData.put("ip", newPeer.getIp());
+                        peerData.put("puerto", newPeer.getPuerto());
+                        peerData.put("conectado", newPeer.getConectado());
+
+                        sendJsonResponse(handler, "añadirPeer", true, "Peer añadido exitosamente", peerData);
+                    } catch (IllegalArgumentException e) {
+                        // Error de validación (IP o puerto inválido)
+                        sendJsonResponse(handler, "añadirPeer", false, "Datos del peer inválidos",
+                            createErrorData("ip", "Formato de IP inválido"));
+                    } catch (Exception e) {
+                        // El peer ya existe
+                        Map<String, Object> errorData = new HashMap<>();
+                        errorData.put("ip", addPeerIp);
+                        errorData.put("puerto", addPeerPuerto);
+                        sendJsonResponse(handler, "añadirPeer", false, "El peer ya se encuentra en la lista", errorData);
+                    }
+                    break;
+                }
+
+                case "listarpeersdisponibles":
+                {
+                    Object listarPeersDataObj = request.getPayload();
+                    if (listarPeersDataObj == null) {
+                        sendJsonResponse(handler, "listarPeersDisponibles", false, "Error al obtener la lista de peers", null);
+                        return;
+                    }
+
+                    JsonObject listarPeersJson = gson.toJsonTree(listarPeersDataObj).getAsJsonObject();
+                    String peerIdStr = listarPeersJson.has("peerId") ? listarPeersJson.get("peerId").getAsString() : null;
+
+                    if (peerIdStr == null || peerIdStr.isEmpty()) {
+                        sendJsonResponse(handler, "listarPeersDisponibles", false, "Error al obtener la lista de peers", null);
+                        return;
+                    }
+
+                    try {
+                        UUID peerId = UUID.fromString(peerIdStr);
+
+                        // Obtener la lista de peers disponibles (excluyendo el peer actual)
+                        List<PeerResponseDto> peers = chatFachada.listarPeersDisponibles(peerId);
+
+                        // Construir la respuesta según el formato del API
+                        List<Map<String, Object>> peersData = new ArrayList<>();
+                        for (PeerResponseDto peer : peers) {
+                            Map<String, Object> peerMap = new HashMap<>();
+                            peerMap.put("peerId", peer.getPeerId().toString());
+                            peerMap.put("ip", peer.getIp());
+                            peerMap.put("puerto", peer.getPuerto());
+                            peerMap.put("conectado", peer.getConectado());
+                            peersData.add(peerMap);
+                        }
+
+                        sendJsonResponse(handler, "listarPeersDisponibles", true, "Lista de peers y su estado obtenida", peersData);
+                    } catch (IllegalArgumentException e) {
+                        sendJsonResponse(handler, "listarPeersDisponibles", false, "Error al obtener la lista de peers", null);
+                    } catch (Exception e) {
+                        sendJsonResponse(handler, "listarPeersDisponibles", false, "Error al obtener la lista de peers", null);
+                    }
+                    break;
+                }
+
+                case "verificarestadopeer":
+                {
+                    Object verifyPeerDataObj = request.getPayload();
+                    if (verifyPeerDataObj == null) {
+                        sendJsonResponse(handler, "verificarEstadoPeer", false, "Datos del peer inválidos",
+                            createErrorData("peerId", "El campo peerId es requerido"));
+                        return;
+                    }
+
+                    JsonObject verifyPeerJson = gson.toJsonTree(verifyPeerDataObj).getAsJsonObject();
+                    String verifyPeerIdStr = verifyPeerJson.has("peerId") ? verifyPeerJson.get("peerId").getAsString() : null;
+
+                    if (verifyPeerIdStr == null) {
+                        sendJsonResponse(handler, "verificarEstadoPeer", false, "Datos del peer inválidos",
+                            createErrorData("peerId", "El campo peerId es requerido"));
+                        return;
+                    }
+
+                    try {
+                        UUID verifyPeerId = UUID.fromString(verifyPeerIdStr);
+                        PeerResponseDto peerStatus = chatFachada.verificarEstadoPeer(verifyPeerId);
+
+                        Map<String, Object> statusData = new HashMap<>();
+                        statusData.put("peerId", peerStatus.getPeerId().toString());
+                        statusData.put("ip", peerStatus.getIp());
+                        statusData.put("puerto", peerStatus.getPuerto());
+                        statusData.put("conectado", peerStatus.getConectado());
+
+                        sendJsonResponse(handler, "verificarEstadoPeer", true, "Estado del peer obtenido", statusData);
+                    } catch (IllegalArgumentException e) {
+                        sendJsonResponse(handler, "verificarEstadoPeer", false, "Datos del peer inválidos",
+                            createErrorData("peerId", "Formato de peerId inválido"));
+                    } catch (Exception e) {
+                        sendJsonResponse(handler, "verificarEstadoPeer", false, "Peer no encontrado",
+                            Map.of("peerId", verifyPeerIdStr));
+                    }
+                    break;
+                }
+
+                case "retransmitirpeticion":
+                {
+                    Object retransmitDataObj = request.getPayload();
+                    if (retransmitDataObj == null) {
+                        sendJsonResponse(handler, "retransmitirPeticion", false, "Datos de retransmisión inválidos", null);
+                        return;
+                    }
+
+                    try {
+                        // Parsear el DTO de retransmisión
+                        com.arquitectura.DTO.peers.RetransmitRequestDto retransmitDto =
+                            gson.fromJson(gson.toJsonTree(retransmitDataObj), com.arquitectura.DTO.peers.RetransmitRequestDto.class);
+
+                        // Validar el peer de origen en la fachada
+                        chatFachada.retransmitirPeticion(retransmitDto);
+
+                        // Procesar la petición del cliente (está anidada en peticionCliente)
+                        Object clientRequest = retransmitDto.getPeticionCliente();
+                        if (clientRequest == null) {
+                            sendJsonResponse(handler, "retransmitirPeticion", false,
+                                "Petición del cliente procesada, pero resultó en un error.",
+                                Map.of("respuestaCliente", Map.of(
+                                    "status", "error",
+                                    "message", "Petición del cliente vacía o inválida",
+                                    "data", null
+                                )));
+                            return;
+                        }
+
+                        // Convertir la petición del cliente a DTORequest
+                        DTORequest clientDtoRequest = gson.fromJson(gson.toJsonTree(clientRequest), DTORequest.class);
+                        String clientAction = clientDtoRequest.getAction() != null ?
+                            clientDtoRequest.getAction().toLowerCase() : "unknown";
+
+                        // Crear un handler temporal para capturar la respuesta
+                        RetransmitClientHandler tempHandler = new RetransmitClientHandler();
+
+                        // Procesar la petición del cliente usando el dispatcher recursivamente
+                        String clientRequestJson = gson.toJson(clientDtoRequest);
+                        dispatch(clientRequestJson, tempHandler);
+
+                        // Obtener la respuesta del cliente procesada
+                        String clientResponseJson = tempHandler.getResponse();
+                        Object clientResponse = gson.fromJson(clientResponseJson, Object.class);
+
+                        // Construir la respuesta de retransmisión
+                        Map<String, Object> retransmitResponseData = new HashMap<>();
+                        retransmitResponseData.put("respuestaCliente", clientResponse);
+
+                        sendJsonResponse(handler, "retransmitirPeticion", true,
+                            "Petición del cliente procesada exitosamente.", retransmitResponseData);
+
+                    } catch (IllegalArgumentException e) {
+                        // Error de validación
+                        sendJsonResponse(handler, "retransmitirPeticion", false,
+                            "Datos de retransmisión inválidos",
+                            createErrorData("formato", e.getMessage()));
+                    } catch (Exception e) {
+                        // Error al procesar (peer no conectado, etc.)
+                        sendJsonResponse(handler, "retransmitirPeticion", false,
+                            e.getMessage(), null);
+                    }
+                    break;
+                }
+
+                case "actualizarlistapeers":
+                {
+                    Object updatePeerListDataObj = request.getPayload();
+                    if (updatePeerListDataObj == null) {
+                        sendJsonResponse(handler, "actualizarListaPeers", false, "Datos del peer inválidos",
+                            createErrorData("listaPeers", "La lista de peers es requerida"));
+                        return;
+                    }
+
+                    try {
+                        // Parsear el DTO con la lista de peers
+                        com.arquitectura.DTO.peers.UpdatePeerListRequestDto updatePeerListDto =
+                            gson.fromJson(gson.toJsonTree(updatePeerListDataObj),
+                                com.arquitectura.DTO.peers.UpdatePeerListRequestDto.class);
+
+                        // Actualizar la lista de peers en la base de datos
+                        com.arquitectura.DTO.peers.UpdatePeerListResponseDto responseDto =
+                            chatFachada.actualizarListaPeers(updatePeerListDto);
+
+                        // Construir la respuesta con la lista actualizada
+                        List<Map<String, Object>> listaPeersData = new ArrayList<>();
+                        for (PeerResponseDto peer : responseDto.getListaPeers()) {
+                            Map<String, Object> peerMap = new HashMap<>();
+                            peerMap.put("peerId", peer.getPeerId().toString());
+                            peerMap.put("ip", peer.getIp());
+                            peerMap.put("puerto", peer.getPuerto());
+                            peerMap.put("conectado", peer.getConectado());
+                            listaPeersData.add(peerMap);
+                        }
+
+                        Map<String, Object> data = new HashMap<>();
+                        data.put("listaPeers", listaPeersData);
+
+                        sendJsonResponse(handler, "actualizarListaPeers", true,
+                            "Peer añadido y lista de peers actualizada", data);
+                    } catch (IllegalArgumentException e) {
+                        // Error de validación
+                        sendJsonResponse(handler, "actualizarListaPeers", false, "Datos del peer inválidos",
+                            createErrorData("validacion", e.getMessage()));
+                    } catch (Exception e) {
+                        // Error general
+                        sendJsonResponse(handler, "actualizarListaPeers", false,
+                            "Error interno del servidor al actualizar la lista de peers", null);
+                    }
                     break;
                 }
 

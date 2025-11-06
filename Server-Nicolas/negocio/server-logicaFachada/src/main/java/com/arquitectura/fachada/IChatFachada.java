@@ -14,6 +14,14 @@ import com.arquitectura.DTO.canales.RespondToInviteRequestDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
+import com.arquitectura.DTO.peers.AddPeerRequestDto;
+import com.arquitectura.DTO.peers.HeartbeatRequestDto;
+import com.arquitectura.DTO.peers.HeartbeatResponseDto;
+import com.arquitectura.DTO.peers.PeerResponseDto;
+import com.arquitectura.DTO.peers.RetransmitRequestDto;
+import com.arquitectura.DTO.peers.RetransmitResponseDto;
+import com.arquitectura.DTO.peers.UpdatePeerListRequestDto;
+import com.arquitectura.DTO.peers.UpdatePeerListResponseDto;
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
 
 
@@ -36,6 +44,14 @@ public interface IChatFachada {
     void cambiarEstadoUsuario(UUID userId, boolean nuevoEstado) throws Exception;
     List<UserResponseDto> listarContactos(UUID excludeUserId);
 
+
+    // --- Métodos de Peer ---
+    List<PeerResponseDto> listarPeersDisponibles(UUID excludePeerId) throws Exception;
+    HeartbeatResponseDto reportarLatido(HeartbeatRequestDto requestDto) throws Exception;
+    PeerResponseDto añadirPeer(AddPeerRequestDto requestDto) throws Exception;
+    PeerResponseDto verificarEstadoPeer(UUID peerId) throws Exception;
+    RetransmitResponseDto retransmitirPeticion(RetransmitRequestDto requestDto) throws Exception;
+    UpdatePeerListResponseDto actualizarListaPeers(UpdatePeerListRequestDto requestDto) throws Exception;
 
     // --- Métodos de Canal ---
     ChannelResponseDto crearCanal(CreateChannelRequestDto requestDto, UUID ownerId) throws Exception;
