@@ -1,0 +1,143 @@
+╔════════════════════════════════════════════════════════════════════════╗
+║                                                                        ║
+║              SISTEMA DE CHAT P2P - GUÍA DE INICIO VISUAL              ║
+║                                                                        ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  PASO 1: ABRIR TERMINAL                                                │
+└────────────────────────────────────────────────────────────────────────┘
+
+    1. Presiona Win + R
+    2. Escribe: cmd
+    3. Presiona Enter
+    4. Navega a la carpeta: cd Server-Nicolas
+
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  PASO 2: INICIAR SERVIDORES                                            │
+└────────────────────────────────────────────────────────────────────────┘
+
+    Ejecuta:
+    
+        iniciar-ambos-servidores.bat
+
+    Se abrirán 2 ventanas nuevas:
+    
+    ┌─────────────────────┐     ┌─────────────────────┐
+    │   SERVIDOR 1        │     │   SERVIDOR 2        │
+    │   Puerto: 22100     │     │   Puerto: 22101     │
+    │                     │     │                     │
+    │   [Logs aquí...]    │     │   [Logs aquí...]    │
+    └─────────────────────┘     └─────────────────────┘
+
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  PASO 3: VERIFICAR CONEXIÓN                                            │
+└────────────────────────────────────────────────────────────────────────┘
+
+    Espera 30 segundos y busca en CUALQUIERA de las ventanas:
+
+    ✓ [HeartbeatService] Heartbeats enviados: 1 exitosos, 0 fallidos
+    ✓ [HeartbeatService] Estadísticas de red P2P:
+    - Total de peers: 2
+    - Peers activos: 2      ← ¡ESTO ES LO IMPORTANTE!
+    - Peers offline: 0
+
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  ¿QUÉ SIGNIFICA CADA COSA?                                             │
+└────────────────────────────────────────────────────────────────────────┘
+
+    ✓ = Operación exitosa
+    ⚠ = Advertencia
+    ✗ = Error
+    ? = Información
+
+    "Peers activos: 2" = Los 2 servidores están conectados entre sí
+    "Heartbeats enviados: 1 exitosos" = La comunicación P2P funciona
+
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  ARQUITECTURA DEL SISTEMA                                              │
+└────────────────────────────────────────────────────────────────────────┘
+
+         ┌─────────────────┐         ┌─────────────────┐
+         │   SERVIDOR 1    │◄───────►│   SERVIDOR 2    │
+         │  Puerto: 22100  │ Heartbt │  Puerto: 22101  │
+         │  DB: chatdb     │  Sync   │  DB: chatdb2    │
+         └────────┬────────┘         └────────┬────────┘
+                  │                           │
+                  │                           │
+             ┌────▼────┐                 ┌────▼────┐
+             │Cliente 1│                 │Cliente 2│
+             └─────────┘                 └─────────┘
+
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  SCRIPTS DISPONIBLES                                                   │
+└────────────────────────────────────────────────────────────────────────┘
+
+    iniciar-ambos-servidores.bat  → Inicia todo automáticamente ⭐
+    server1.bat                    → Solo Servidor 1
+    server2.bat                    → Solo Servidor 2
+    verificar-puertos.bat          → Verifica si están corriendo
+    detener-servidores.bat         → Detiene todos los servidores
+
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  SOLUCIÓN DE PROBLEMAS COMUNES                                         │
+└────────────────────────────────────────────────────────────────────────┘
+
+    ❌ "Address already in use"
+       → Ya hay un servidor en ese puerto
+       → Ejecuta: detener-servidores.bat
+
+    ❌ "Heartbeats enviados: 0 exitosos"
+       → El otro servidor no está corriendo
+       → Verifica con: verificar-puertos.bat
+
+    ❌ "Peers activos: 1" (en lugar de 2)
+       → Uno de los servidores no inició correctamente
+       → Revisa ambas ventanas de servidores
+
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  CHECKLIST DE VERIFICACIÓN                                             │
+└────────────────────────────────────────────────────────────────────────┘
+
+    [ ] Ambas ventanas de servidores están abiertas
+    [ ] No hay errores rojos en los logs
+    [ ] Ves "Servidor de Chat iniciado en el puerto 22100" en Servidor 1
+    [ ] Ves "Servidor de Chat iniciado en el puerto 22101" en Servidor 2
+    [ ] Ves "Peers activos: 2" en ambos servidores
+    [ ] Ves "Heartbeats enviados: 1 exitosos" (no 0)
+
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  PARA DETENER LOS SERVIDORES                                           │
+└────────────────────────────────────────────────────────────────────────┘
+
+    Opción 1: Presiona Ctrl+C en cada ventana de servidor
+
+    Opción 2: Ejecuta detener-servidores.bat
+
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  DOCUMENTACIÓN ADICIONAL                                               │
+└────────────────────────────────────────────────────────────────────────┘
+
+    README_INICIO.md          → Guía completa de inicio
+    GUIA_P2P.md              → Funcionalidades P2P detalladas
+    INSTRUCCIONES_RAPIDAS.md → Referencia rápida
+    CAMBIOS_REALIZADOS.md    → Qué se cambió y por qué
+
+
+╔════════════════════════════════════════════════════════════════════════╗
+║                                                                        ║
+║  ¿TODO FUNCIONANDO? Deberías ver "Peers activos: 2" en los logs       ║
+║                                                                        ║
+║  Si tienes problemas, lee: README_INICIO.md                           ║
+║                                                                        ║
+╚════════════════════════════════════════════════════════════════════════╝
