@@ -37,7 +37,8 @@ public class RequestDispatcher {
             UserController userController,
             ChannelController channelController,
             MessageController messageController,
-            FileController fileController) {
+            FileController fileController,
+            PeerController peerController) {
         this.chatFachada = chatFachada;
         this.gson = gson;
         
@@ -46,7 +47,8 @@ public class RequestDispatcher {
             userController,
             channelController,
             messageController,
-            fileController
+            fileController,
+            peerController
         );
     }
 

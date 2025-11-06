@@ -1,5 +1,7 @@
 package com.arquitectura.fachada;
 
+import com.arquitectura.DTO.Comunicacion.DTORequest;
+import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 import com.arquitectura.DTO.Mensajes.TranscriptionResponseDto;
 import com.arquitectura.DTO.archivos.DTODownloadInfo;
@@ -11,6 +13,7 @@ import com.arquitectura.DTO.canales.CreateChannelRequestDto;
 import com.arquitectura.DTO.Mensajes.SendMessageRequestDto;
 import com.arquitectura.DTO.canales.InviteMemberRequestDto;
 import com.arquitectura.DTO.canales.RespondToInviteRequestDto;
+import com.arquitectura.DTO.p2p.PeerResponseDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
@@ -18,6 +21,7 @@ import com.arquitectura.events.ConnectedUsersRequestEvent;
 import com.arquitectura.logicaCanales.IChannelService;
 import com.arquitectura.logicaMensajes.IMessageService;
 import com.arquitectura.logicaMensajes.transcripcionAudio.IAudioTranscriptionService;
+import com.arquitectura.logicaPeers.IPeerService;
 import com.arquitectura.logicaUsuarios.IUserService;
 import com.arquitectura.utils.chunkManager.FileChunkManager;
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
@@ -41,11 +45,11 @@ public class ChatFachadaImpl implements IChatFachada {
     private final IFileStorageService fileStorageService;
     private final ApplicationEventPublisher eventPublisher;
     private final FileChunkManager fileChunkManager;
-
-    private final ILogService logService ;
+    private final ILogService logService;
+    private final IPeerService peerService;
 
     @Autowired
-    public ChatFachadaImpl(IUserService userService, IChannelService channelService, IMessageService messageService, IAudioTranscriptionService transcriptionService, IFileStorageService fileStorageService, ApplicationEventPublisher eventPublisher, FileChunkManager fileChunkManager, ILogService logService) {
+    public ChatFachadaImpl(IUserService userService, IChannelService channelService, IMessageService messageService, IAudioTranscriptionService transcriptionService, IFileStorageService fileStorageService, ApplicationEventPublisher eventPublisher, FileChunkManager fileChunkManager, ILogService logService, IPeerService peerService) {
         this.userService = userService;
         this.channelService = channelService;
         this.messageService = messageService;
@@ -54,6 +58,7 @@ public class ChatFachadaImpl implements IChatFachada {
         this.eventPublisher = eventPublisher;
         this.fileChunkManager = fileChunkManager;
         this.logService = logService;
+        this.peerService = peerService;
     }
 
     // Metodos de usuario
@@ -232,5 +237,46 @@ public class ChatFachadaImpl implements IChatFachada {
         return fileChunkManager.getChunk(downloadId, chunkNumber);
     }
 
+    // --- IMPLEMENTACIÓN DE MÉTODOS P2P ---
+    
+    @Override
+    public PeerResponseDto agregarPeer(String ip, int puerto) throws Exception {
+        return peerService.agregarPeer(ip, puerto);
+    }
+    
+    @Override
+    public PeerResponseDto agregarPeer(String ip, int puerto, String nombreServidor) throws Exception {
+        return peerService.agregarPeer(ip, puerto, nombreServidor);
+    }
+    
+    @Override
+    public List<PeerResponseDto> listarPeersDisponibles() {
+        return peerService.listarPeersDisponibles();
+    }
+    
+    @Override
+    public List<PeerResponseDto> listarPeersActivos() {
+        return peerService.listarPeersActivos();
+    }
+    
+    @Override
+    public void reportarLatido(UUID peerId) throws Exception {
+        peerService.reportarLatido(peerId);
+    }
+    
+    @Override
+    public void reportarLatido(UUID peerId, String ip, int puerto) throws Exception {
+        peerService.reportarLatido(peerId, ip, puerto);
+    }
+    
+    @Override
+    public long obtenerIntervaloHeartbeat() {
+        return peerService.obtenerIntervaloHeartbeat();
+    }
+    
+    @Override
+    public DTOResponse retransmitirPeticion(UUID peerDestinoId, DTORequest peticionOriginal) throws Exception {
+        return peerService.retransmitirPeticion(peerDestinoId, peticionOriginal);
+    }
 
 }
