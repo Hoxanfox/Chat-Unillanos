@@ -17,6 +17,14 @@ import com.arquitectura.DTO.p2p.PeerResponseDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
+import com.arquitectura.DTO.peers.AddPeerRequestDto;
+import com.arquitectura.DTO.peers.HeartbeatRequestDto;
+import com.arquitectura.DTO.peers.HeartbeatResponseDto;
+import com.arquitectura.DTO.peers.PeerResponseDto;
+import com.arquitectura.DTO.peers.RetransmitRequestDto;
+import com.arquitectura.DTO.peers.RetransmitResponseDto;
+import com.arquitectura.DTO.peers.UpdatePeerListRequestDto;
+import com.arquitectura.DTO.peers.UpdatePeerListResponseDto;
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
 
 
@@ -39,6 +47,14 @@ public interface IChatFachada {
     void cambiarEstadoUsuario(UUID userId, boolean nuevoEstado) throws Exception;
     List<UserResponseDto> listarContactos(UUID excludeUserId);
 
+
+    // --- Métodos de Peer ---
+    List<PeerResponseDto> listarPeersDisponibles(UUID excludePeerId) throws Exception;
+    HeartbeatResponseDto reportarLatido(HeartbeatRequestDto requestDto) throws Exception;
+    PeerResponseDto añadirPeer(AddPeerRequestDto requestDto) throws Exception;
+    PeerResponseDto verificarEstadoPeer(UUID peerId) throws Exception;
+    RetransmitResponseDto retransmitirPeticion(RetransmitRequestDto requestDto) throws Exception;
+    UpdatePeerListResponseDto actualizarListaPeers(UpdatePeerListRequestDto requestDto) throws Exception;
 
     // --- Métodos de Canal ---
     ChannelResponseDto crearCanal(CreateChannelRequestDto requestDto, UUID ownerId) throws Exception;
@@ -65,6 +81,16 @@ public interface IChatFachada {
     MessageResponseDto enviarMensajeTexto(SendMessageRequestDto requestDto, UUID autorId) throws Exception;
     MessageResponseDto enviarMensajeAudio(SendMessageRequestDto requestDto, UUID autorId) throws Exception;
     List<MessageResponseDto> obtenerMensajesDeCanal(UUID canalId, UUID userId) throws Exception;
+
+    /**
+     * Obtiene el historial de mensajes privados entre dos usuarios.
+     * @param remitenteId ID del usuario que solicita el historial
+     * @param destinatarioId ID del contacto con quien tiene la conversación
+     * @return Lista de MessageResponseDto con el historial privado
+     * @throws Exception en caso de error o falta de permisos
+     */
+    List<MessageResponseDto> obtenerHistorialPrivado(UUID remitenteId, UUID destinatarioId) throws Exception;
+
     String guardarArchivoDeAudio(String fileName, String base64Data, UUID autorId) throws IOException;
     List<TranscriptionResponseDto> obtenerTranscripciones();
 

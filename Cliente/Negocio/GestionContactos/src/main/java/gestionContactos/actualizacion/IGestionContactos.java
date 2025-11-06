@@ -28,4 +28,10 @@ public interface IGestionContactos extends ISujeto {
      * @param usuarioId ID del usuario
      */
     void setUsuarioId(String usuarioId);
+
+    /**
+     * Sincroniza los contactos con la base de datos local
+     * @param contactos Lista de contactos a sincronizar
+     */
+    void sincronizarContactosConBD(List<DTOContacto> contactos);
 }

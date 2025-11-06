@@ -1,13 +1,17 @@
+// language: java
+// File: src/main/java/com/arquitectura/logicaMensajes/MessageServiceImpl.java
 package com.arquitectura.logicaMensajes;
 
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 import com.arquitectura.DTO.Mensajes.SendMessageRequestDto;
 import com.arquitectura.DTO.Mensajes.TranscriptionResponseDto;
+import com.arquitectura.DTO.canales.ChannelResponseDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.domain.*;
 import com.arquitectura.domain.enums.EstadoMembresia;
 import com.arquitectura.events.BroadcastMessageEvent;
 import com.arquitectura.events.NewMessageEvent;
+import com.arquitectura.logicaCanales.IChannelService;
 import com.arquitectura.logicaMensajes.transcripcionAudio.AudioTranscriptionService;
 import com.arquitectura.persistence.repository.*;
 import com.arquitectura.utils.file.FileStorageService;
@@ -34,9 +38,18 @@ public class MessageServiceImpl implements IMessageService {
     private final FileStorageService fileStorageService;
     private final AudioTranscriptionService transcriptionService;
     private final TranscripcionAudioRepository transcripcionAudioRepository;
+    private final IChannelService channelService; // nueva dependencia
 
     @Autowired
-    public MessageServiceImpl(MessageRepository messageRepository, UserRepository userRepository, ChannelRepository channelRepository, MembresiaCanalRepository membresiaCanalRepository, ApplicationEventPublisher eventPublisher, FileStorageService fileStorageService, AudioTranscriptionService transcriptionService, TranscripcionAudioRepository transcripcionAudioRepository) {
+    public MessageServiceImpl(MessageRepository messageRepository,
+                              UserRepository userRepository,
+                              ChannelRepository channelRepository,
+                              MembresiaCanalRepository membresiaCanalRepository,
+                              ApplicationEventPublisher eventPublisher,
+                              FileStorageService fileStorageService,
+                              AudioTranscriptionService transcriptionService,
+                              TranscripcionAudioRepository transcripcionAudioRepository,
+                              IChannelService channelService) { // inyectado
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
         this.channelRepository = channelRepository;
@@ -45,19 +58,29 @@ public class MessageServiceImpl implements IMessageService {
         this.fileStorageService = fileStorageService;
         this.transcriptionService = transcriptionService;
         this.transcripcionAudioRepository = transcripcionAudioRepository;
+        this.channelService = channelService;
     }
 
     @Override
     @Transactional
     public MessageResponseDto enviarMensajeTexto(SendMessageRequestDto requestDto, UUID autorId) throws Exception {
-        User autor = userRepository.findById(autorId)
+
+        // NO USES ESTE:
+        // User autor = userRepository.findById(autorId)
+        //        .orElseThrow(() -> new Exception("El autor..."));
+
+        // USA ESTE NUEVO MÉTODO:
+        User autor = userRepository.findByIdWithPeer(autorId)
                 .orElseThrow(() -> new Exception("El autor con ID " + autorId + " no existe."));
-        
+
+        // ... (el resto de tu método sigue igual)
         Channel canal = channelRepository.findById(requestDto.getChannelId())
-                .orElseThrow(() -> new Exception("El canal con ID " + requestDto.getChannelId() + " no existe."));
+                .orElseThrow(() -> new Exception("El canal..."));
 
         TextMessage nuevoMensaje = new TextMessage(autor, canal, requestDto.getContent());
         Message mensajeGuardado = messageRepository.save(nuevoMensaje);
+
+        // Esta línea ahora es segura, porque autor.getPeerId() ya está cargado
         MessageResponseDto responseDto = getMessageResponseDto(mensajeGuardado);
 
         return responseDto;
@@ -117,7 +140,6 @@ public class MessageServiceImpl implements IMessageService {
     @Transactional(readOnly = true)
     public List<MessageResponseDto> obtenerMensajesPorCanal(UUID canalId, UUID userId) throws Exception {
         // 1. Lógica de seguridad (verificar que el usuario es miembro del canal).
-        //    Esto no cambia y está perfecto como lo tienes.
         MembresiaCanalId membresiaId = new MembresiaCanalId(canalId, userId);
         if (!membresiaCanalRepository.existsById(membresiaId)) {
             throw new Exception("Acceso denegado. No eres miembro de este canal.");
@@ -127,6 +149,27 @@ public class MessageServiceImpl implements IMessageService {
         List<Message> messages = messageRepository.findByChannelIdWithAuthors(canalId);
 
         // 3. La conversión a DTO ahora es 100% segura y no causará un error de "no Session".
+        return messages.stream()
+                .map(this::mapToMessageResponseDto)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MessageResponseDto> obtenerHistorialPrivado(UUID remitenteId, UUID destinatarioId) throws Exception {
+        // 1. Obtener o crear el canal directo (esto mantiene la lógica en ChannelService)
+        Channel canalDirecto = channelService.obtenerOCrearCanalDirecto(remitenteId, destinatarioId);
+
+        // 2. Verificar que el remitente es miembro del canal
+        MembresiaCanalId membresiaId = new MembresiaCanalId(canalDirecto.getChannelId(), remitenteId);
+        if (!membresiaCanalRepository.existsById(membresiaId)) {
+            throw new Exception("Acceso denegado. No tienes permiso para ver este historial.");
+        }
+
+        // 3. Obtener los mensajes del canal directo
+        List<Message> messages = messageRepository.findByChannelIdWithAuthors(canalDirecto.getChannelId());
+
+        // 4. Convertir a DTO y retornar
         return messages.stream()
                 .map(this::mapToMessageResponseDto)
                 .collect(Collectors.toList());
@@ -156,9 +199,6 @@ public class MessageServiceImpl implements IMessageService {
     @Override
     @Transactional(readOnly = true)
     public List<TranscriptionResponseDto> getAllTranscriptions() {
-        // --- ¡AQUÍ ESTÁ LA SIMPLIFICACIÓN! ---
-        // Volvemos a usar el método simple. Ahora funcionará porque
-        // las entidades se encargarán de cargar toda la información.
         List<TranscripcionAudio> transcripciones = transcripcionAudioRepository.findAll();
 
         return transcripciones.stream()
@@ -167,7 +207,6 @@ public class MessageServiceImpl implements IMessageService {
     }
 
     private TranscriptionResponseDto mapToDto(TranscripcionAudio transcripcion) {
-        // Este método ahora funcionará sin error.
         UserResponseDto authorDto = new UserResponseDto(
                 transcripcion.getMensaje().getAuthor().getUserId(),
                 transcripcion.getMensaje().getAuthor().getUsername(),
@@ -185,20 +224,25 @@ public class MessageServiceImpl implements IMessageService {
         );
     }
 
+    // language: java
     private MessageResponseDto mapToMessageResponseDto(Message message) {
-        // Mapea el autor a su DTO correspondiente para no exponer la entidad User
+        // Load the author entity explicitly to avoid "no Session" lazy init errors
+        User authorEntity = null;
+        if (message.getAuthor() != null && message.getAuthor().getUserId() != null) {
+            authorEntity = userRepository.findById(message.getAuthor().getUserId()).orElse(null);
+        }
+
         UserResponseDto authorDto = new UserResponseDto(
-                message.getAuthor().getUserId(),
-                message.getAuthor().getUsername(),
-                message.getAuthor().getEmail(),
-                message.getAuthor().getPhotoAddress(),
-                message.getAuthor().getFechaRegistro()
+                authorEntity != null ? authorEntity.getUserId() : null,
+                authorEntity != null ? authorEntity.getUsername() : null,
+                authorEntity != null ? authorEntity.getEmail() : null,
+                authorEntity != null ? authorEntity.getPhotoAddress() : null,
+                authorEntity != null ? authorEntity.getFechaRegistro() : null
         );
 
         String messageType = "";
         String content = "";
 
-        // Determina el tipo y contenido basado en la clase hija
         if (message instanceof TextMessage) {
             messageType = "TEXT";
             content = ((TextMessage) message).getContent();
@@ -216,5 +260,5 @@ public class MessageServiceImpl implements IMessageService {
                 content
         );
     }
-}
 
+}

@@ -1,18 +1,22 @@
 package repositorio.conexion;
 
+import org.h2.jdbcx.JdbcConnectionPool; // 1. Importar el Pool de H2
+
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
  * Gestor de conexión a la base de datos H2 embebida.
- * Singleton para mantener una única conexión durante la ejecución.
+ * Singleton para mantener un POOL de conexiones (solución al error "session closed").
  */
 public class GestorConexionH2 {
 
     private static GestorConexionH2 instancia;
-    private Connection conexion;
+
+    // 2. Reemplazar la conexión única por un Pool
+    // private Connection conexion; // <-- ESTO CAUSA EL ERROR
+    private JdbcConnectionPool pool; // <-- ESTA ES LA SOLUCIÓN
 
     // Configuración de la base de datos H2
     private static final String DB_URL = "jdbc:h2:./data/chat_unillanos;AUTO_SERVER=TRUE";
@@ -31,25 +35,27 @@ public class GestorConexionH2 {
     }
 
     /**
-     * Inicializa la conexión y crea las tablas si no existen.
+     * Inicializa el pool de conexiones y crea las tablas si no existen.
      */
     private void inicializarBaseDatos() {
         try {
             // Cargar el driver de H2
             Class.forName("org.h2.Driver");
 
-            // Establecer conexión
-            conexion = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-            System.out.println("✅ [GestorConexionH2]: Conexión establecida con la base de datos.");
+            // 3. Establecer el POOL de conexiones
+            pool = JdbcConnectionPool.create(DB_URL, DB_USER, DB_PASSWORD);
+            pool.setMaxConnections(20); // Configura cuántas conexiones simultáneas permites
 
-            // Crear las tablas
+            System.out.println("✅ [GestorConexionH2]: Pool de conexiones H2 inicializado.");
+
+            // Crear las tablas (usando una conexión del pool)
             crearTablas();
 
         } catch (ClassNotFoundException e) {
             System.err.println("❌ [GestorConexionH2]: Driver H2 no encontrado: " + e.getMessage());
             throw new RuntimeException("Error al cargar el driver de H2", e);
         } catch (SQLException e) {
-            System.err.println("❌ [GestorConexionH2]: Error al conectar con la base de datos: " + e.getMessage());
+            System.err.println("❌ [GestorConexionH2]: Error al crear tablas: " + e.getMessage());
             throw new RuntimeException("Error al inicializar la base de datos", e);
         }
     }
@@ -58,7 +64,10 @@ public class GestorConexionH2 {
      * Crea todas las tablas necesarias según el esquema SQL.
      */
     private void crearTablas() throws SQLException {
-        try (Statement stmt = conexion.createStatement()) {
+        // 4. Pedir una conexión al pool SÓLO para este método
+        // Se usa try-with-resources para que la conexión se devuelva al pool automáticamente
+        try (Connection conn = pool.getConnection();
+             Statement stmt = conn.createStatement()) {
 
             // Tabla Usuarios
             stmt.execute("""
@@ -89,7 +98,11 @@ public class GestorConexionH2 {
                 CREATE TABLE IF NOT EXISTS contactos (
                     id_contacto UUID DEFAULT RANDOM_UUID() PRIMARY KEY,
                     nombre VARCHAR(255) NOT NULL,
-                    estado BOOLEAN DEFAULT TRUE
+                    email VARCHAR(255),
+                    estado BOOLEAN DEFAULT TRUE,
+                    photo_id VARCHAR(255),
+                    peer_id VARCHAR(255),
+                    fecha_registro VARCHAR(50)
                 )
             """);
 
@@ -241,36 +254,27 @@ public class GestorConexionH2 {
 
             System.out.println("✅ [GestorConexionH2]: Todas las tablas verificadas/creadas correctamente.");
         }
+        // 5. La conexión se devuelve al pool automáticamente aquí
     }
 
     /**
-     * Obtiene la conexión activa.
+     * Obtiene una conexión activa del pool.
+     * @throws SQLException si hay un error al obtener la conexión.
      */
-    public Connection getConexion() {
-        try {
-            // Verificar si la conexión está cerrada y reconectar si es necesario
-            if (conexion == null || conexion.isClosed()) {
-                System.out.println("🔄 [GestorConexionH2]: Reconectando...");
-                conexion = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-            }
-        } catch (SQLException e) {
-            System.err.println("❌ [GestorConexionH2]: Error al verificar/reconectar: " + e.getMessage());
-            throw new RuntimeException("Error con la conexión a la base de datos", e);
-        }
-        return conexion;
+    public Connection getConexion() throws SQLException {
+        // 6. Simplemente pedimos una conexión al pool.
+        // El pool se encarga de darnos una que sea válida.
+        return pool.getConnection();
     }
 
     /**
-     * Cierra la conexión con la base de datos.
+     * Cierra el pool de conexiones (llamar al cerrar la aplicación).
      */
     public void cerrarConexion() {
-        try {
-            if (conexion != null && !conexion.isClosed()) {
-                conexion.close();
-                System.out.println("✅ [GestorConexionH2]: Conexión cerrada correctamente.");
-            }
-        } catch (SQLException e) {
-            System.err.println("❌ [GestorConexionH2]: Error al cerrar conexión: " + e.getMessage());
+        // 7. Cierra todo el pool
+        if (pool != null) {
+            pool.dispose();
+            System.out.println("✅ [GestorConexionH2]: Pool de conexiones cerrado.");
         }
     }
 }

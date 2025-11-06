@@ -3,6 +3,7 @@ package com.arquitectura.transporte;
 import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 import com.arquitectura.controlador.IClientHandler;
+import com.arquitectura.controlador.IContactListBroadcaster;
 import com.arquitectura.controlador.RequestDispatcher;
 import com.arquitectura.events.*;
 import com.google.gson.Gson;
@@ -24,7 +25,7 @@ import java.util.concurrent.Executors;
 
 @PropertySource("file:./config/server.properties")
 @Component
-public class ServerListener {
+public class ServerListener implements IContactListBroadcaster {
 
     private static final Logger log = LoggerFactory.getLogger(ServerListener.class);
 
@@ -102,7 +103,7 @@ public class ServerListener {
             log.info("Mensaje de audio ID {} codificado a Base64 para su propagación.", originalDto.getMessageId());
         }
 
-        DTOResponse response = new DTOResponse("nuevoMensajeCanal", "success", "Nuevo mensaje recibido", dtoParaPropagar);
+        DTOResponse response = new DTOResponse("nuevoMensajeDirecto", "success", "Nuevo mensaje recibido", dtoParaPropagar);
         String notification = gson.toJson(response);
 
         memberIds.forEach(memberId -> {
@@ -131,6 +132,12 @@ public class ServerListener {
         event.getResponseContainer().addAll(this.activeClientsById.keySet());
     }
 
+    @EventListener
+    public void handleContactListUpdate(ContactListUpdateEvent event) {
+        log.info("Evento de actualización de lista de contactos recibido. Enviando a todos los clientes conectados.");
+        // Este evento será manejado por el RequestDispatcher para construir y enviar la lista
+    }
+
     // --- MÉTODOS PÚBLICOS PARA GESTIÓN DE SESIONES ---
     public void registerAuthenticatedClient(IClientHandler handler) {
         if (handler.getAuthenticatedUser() != null) {
@@ -154,6 +161,24 @@ public class ServerListener {
         } else {
             log.warn("Se intentó desconectar al usuario ID: {}, pero no se encontraron sesiones activas.", userId);
         }
+    }
+
+    /**
+     * Envía la lista de contactos actualizada a TODOS los clientes conectados
+     */
+    public void broadcastContactListUpdate(Object contactListData) {
+        log.info("📢 Broadcasting actualización de lista de contactos a {} usuarios conectados", activeClientsById.size());
+        DTOResponse response = new DTOResponse("solicitarListaContactos", "success", "Lista de contactos obtenida exitosamente", contactListData);
+        String notification = gson.toJson(response);
+
+        int totalNotifications = 0;
+        for (List<IClientHandler> handlerList : activeClientsById.values()) {
+            for (IClientHandler handler : handlerList) {
+                handler.sendMessage(notification);
+                totalNotifications++;
+            }
+        }
+        log.info("✅ Lista de contactos enviada a {} sesiones activas", totalNotifications);
     }
 
     // --- MÉTODO PRIVADO DE LIMPIEZA ---

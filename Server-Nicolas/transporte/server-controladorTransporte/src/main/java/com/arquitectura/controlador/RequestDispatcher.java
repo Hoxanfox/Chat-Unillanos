@@ -3,7 +3,9 @@ package com.arquitectura.controlador;
 import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
+
 import com.arquitectura.controlador.controllers.*;
+
 import com.arquitectura.fachada.IChatFachada;
 import com.google.gson.Gson;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +22,7 @@ public class RequestDispatcher {
 
     private final IChatFachada chatFachada;
     private final Gson gson;
+
     private final List<IController> controllers;
     
     private static final Set<String> ACCIONES_PUBLICAS = Set.of(
@@ -28,7 +31,9 @@ public class RequestDispatcher {
             "uploadfileforregistration",
             "uploadfilechunk",
             "endfileupload"
+
     );
+    private IContactListBroadcaster contactListBroadcaster;
 
     @Autowired
     public RequestDispatcher(
@@ -50,6 +55,14 @@ public class RequestDispatcher {
             fileController,
             peerController
         );
+    }
+
+    /**
+     * Permite inyectar el broadcaster para evitar dependencias circulares
+     */
+    @Autowired
+    public void setContactListBroadcaster(IContactListBroadcaster broadcaster) {
+        this.contactListBroadcaster = broadcaster;
     }
 
     public void dispatch(String requestJson, IClientHandler handler) {

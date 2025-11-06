@@ -84,4 +84,7 @@ public interface PeerRepository extends JpaRepository<Peer, UUID> {
      */
     @Query("SELECT COUNT(p) FROM Peer p WHERE p.conectado = 'ONLINE'")
     long contarPeersActivos();
+
+    Optional<Peer> findByIpAndPuerto(String ip, Integer puerto);
+
 }

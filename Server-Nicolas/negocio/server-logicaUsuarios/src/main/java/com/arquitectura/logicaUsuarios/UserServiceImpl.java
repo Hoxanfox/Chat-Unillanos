@@ -72,7 +72,7 @@ public class UserServiceImpl implements IUserService {
         String serverPeerAddress = networkUtils.getServerIPAddress();
 
         Peer currentPeer = peerRepository.findByIp(serverPeerAddress)
-                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress)));
+                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress, 9000, "ONLINE")));
 
         User newUserEntity = new User(
                 requestDto.getUsername(),
@@ -201,7 +201,7 @@ public class UserServiceImpl implements IUserService {
                 .filter(user -> !user.getUserId().equals(excludeUserId)) // Excluir al usuario actual
                 .map(user -> {
                     String imagenBase64 = getImagenBase64(user);
-                    return new UserResponseDto(
+                    UserResponseDto dto = new UserResponseDto(
                             user.getUserId(),
                             user.getUsername(),
                             user.getEmail(),
@@ -210,6 +210,11 @@ public class UserServiceImpl implements IUserService {
                             user.getFechaRegistro(),
                             user.getConectado() ? "ONLINE" : "OFFLINE"
                     );
+                    // Establecer el peerId si el usuario tiene un servidor padre
+                    if (user.getPeerId() != null) {
+                        dto.setPeerId(user.getPeerId().getPeerId());
+                    }
+                    return dto;
                 })
                 .collect(Collectors.toList());
     }

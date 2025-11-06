@@ -17,17 +17,25 @@ import com.arquitectura.DTO.p2p.PeerResponseDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
+import com.arquitectura.DTO.peers.AddPeerRequestDto;
+import com.arquitectura.DTO.peers.HeartbeatRequestDto;
+import com.arquitectura.DTO.peers.HeartbeatResponseDto;
+import com.arquitectura.DTO.peers.PeerResponseDto;
+import com.arquitectura.DTO.peers.RetransmitRequestDto;
+import com.arquitectura.DTO.peers.RetransmitResponseDto;
+import com.arquitectura.DTO.peers.UpdatePeerListRequestDto;
+import com.arquitectura.DTO.peers.UpdatePeerListResponseDto;
 import com.arquitectura.events.ConnectedUsersRequestEvent;
 import com.arquitectura.logicaCanales.IChannelService;
 import com.arquitectura.logicaMensajes.IMessageService;
 import com.arquitectura.logicaMensajes.transcripcionAudio.IAudioTranscriptionService;
 import com.arquitectura.logicaPeers.IPeerService;
 import com.arquitectura.logicaUsuarios.IUserService;
+import com.arquitectura.logicaUsuarios.IPeerService;
 import com.arquitectura.utils.chunkManager.FileChunkManager;
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
 import com.arquitectura.utils.file.IFileStorageService;
 import com.arquitectura.utils.logs.ILogService;
-import com.arquitectura.utils.logs.LogService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -107,6 +115,37 @@ public class ChatFachadaImpl implements IChatFachada {
         return userService.listarContactos(excludeUserId);
     }
 
+    // --- MÉTODOS DE PEER ---
+    @Override
+    public List<PeerResponseDto> listarPeersDisponibles(UUID excludePeerId) throws Exception {
+        return peerService.listarPeersDisponibles(excludePeerId);
+    }
+
+    @Override
+    public HeartbeatResponseDto reportarLatido(HeartbeatRequestDto requestDto) throws Exception {
+        return peerService.reportarLatido(requestDto);
+    }
+
+    @Override
+    public PeerResponseDto añadirPeer(AddPeerRequestDto requestDto) throws Exception {
+        return peerService.añadirPeer(requestDto);
+    }
+
+    @Override
+    public PeerResponseDto verificarEstadoPeer(UUID peerId) throws Exception {
+        return peerService.verificarEstadoPeer(peerId);
+    }
+
+    @Override
+    public RetransmitResponseDto retransmitirPeticion(RetransmitRequestDto requestDto) throws Exception {
+        return peerService.retransmitirPeticion(requestDto);
+    }
+
+    @Override
+    public UpdatePeerListResponseDto actualizarListaPeers(UpdatePeerListRequestDto requestDto) throws Exception {
+        return peerService.actualizarListaPeers(requestDto);
+    }
+
     // --- MÉTODOS DE Canales ---
     @Override
     public ChannelResponseDto crearCanal(CreateChannelRequestDto requestDto, UUID ownerId) throws Exception {
@@ -168,6 +207,11 @@ public class ChatFachadaImpl implements IChatFachada {
     @Override
     public List<MessageResponseDto> obtenerMensajesDeCanal(UUID canalId, UUID userId) throws Exception {
         return messageService.obtenerMensajesPorCanal(canalId, userId);
+    }
+
+    @Override
+    public List<MessageResponseDto> obtenerHistorialPrivado(UUID remitenteId, UUID destinatarioId) throws Exception {
+        return messageService.obtenerHistorialPrivado(remitenteId, destinatarioId);
     }
 
     @Override

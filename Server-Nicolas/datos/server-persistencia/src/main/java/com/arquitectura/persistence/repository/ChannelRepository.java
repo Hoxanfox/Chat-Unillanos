@@ -13,7 +13,11 @@ import java.util.UUID;
 
 @Repository
 public interface ChannelRepository extends JpaRepository<Channel, UUID> {
-    @Query("SELECT c FROM Channel c JOIN c.membresias m1 JOIN c.membresias m2 " +
+
+    // --- CONSULTA CORREGIDA ---
+    @Query("SELECT c FROM Channel c " +
+            "JOIN FETCH c.owner " + // <-- ¡AQUÍ ESTÁ LA SOLUCIÓN!
+            "JOIN c.membresias m1 JOIN c.membresias m2 " +
             "WHERE c.tipo = :tipo " +
             "AND m1.usuario.userId = :user1Id " +
             "AND m2.usuario.userId = :user2Id " +
@@ -22,6 +26,7 @@ public interface ChannelRepository extends JpaRepository<Channel, UUID> {
                                                     @Param("user1Id") UUID user1Id,
                                                     @Param("user2Id") UUID user2Id);
 
+    // Esta consulta ya estaba bien escrita, ¡usa la misma técnica!
     @Query("SELECT DISTINCT c FROM Channel c LEFT JOIN FETCH c.owner o LEFT JOIN FETCH c.membresias m LEFT JOIN FETCH m.usuario u")
     List<Channel> findAllWithMembresiasAndUsuarios();
 }

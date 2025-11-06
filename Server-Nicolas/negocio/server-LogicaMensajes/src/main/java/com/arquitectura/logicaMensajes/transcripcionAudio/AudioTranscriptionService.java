@@ -24,30 +24,53 @@ import java.util.stream.Collectors;
 public class AudioTranscriptionService implements IAudioTranscriptionService {
 
     private static final String VOSK_MODEL_PATH = "vosk-model-small-es-0.42";
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AudioTranscriptionService.class);
 
     private final TranscripcionAudioRepository transcripcionRepository;
     private Model voskModel;
+    private boolean modelAvailable = false;
 
     @Autowired
     public AudioTranscriptionService(TranscripcionAudioRepository transcripcionRepository) {
         this.transcripcionRepository = transcripcionRepository;
         try {
+            File modelDir = new File(VOSK_MODEL_PATH);
+            if (!modelDir.exists() || !modelDir.isDirectory()) {
+                log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                log.warn("⚠️  Modelo Vosk no encontrado en: {}", modelDir.getAbsolutePath());
+                log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                log.warn("La transcripción de audio NO estará disponible.");
+                log.warn("Para habilitar transcripciones:");
+                log.warn("  1. Descarga el modelo desde: https://alphacephei.com/vosk/models");
+                log.warn("  2. Descomprime 'vosk-model-small-es-0.42' en la carpeta del servidor");
+                log.warn("  3. Reinicia el servidor");
+                log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                this.voskModel = null;
+                this.modelAvailable = false;
+                return;
+            }
+
             this.voskModel = new Model(VOSK_MODEL_PATH);
+            this.modelAvailable = true;
+            log.info("✓ Modelo Vosk cargado correctamente desde: {}", VOSK_MODEL_PATH);
         } catch (IOException e) {
-            System.err.println("ERROR CRÍTICO: No se pudo cargar el modelo de Vosk. Asegúrate de que la carpeta '" + VOSK_MODEL_PATH + "' existe junto al JAR.");
-            // e.printStackTrace(); // Descomentar para depuración
+            log.error("Error al cargar el modelo de Vosk: {}", e.getMessage());
+            log.warn("La transcripción de audio NO estará disponible.");
+            this.voskModel = null;
+            this.modelAvailable = false;
         }
     }
 
     public void transcribeAndSave(AudioMessage audioMessage, String audioFilePath) {
-        if (voskModel == null) {
-            System.err.println("Modelo de Vosk no cargado. Abortando transcripción.");
+        if (!modelAvailable || voskModel == null) {
+            log.debug("Modelo de Vosk no disponible. Saltando transcripción del mensaje ID: {}",
+                     audioMessage.getIdMensaje());
             return;
         }
 
         File audioFile = new File(audioFilePath);
         if (!audioFile.exists()) {
-            System.err.println("Archivo de audio a transcribir no existe: " + audioFilePath);
+            log.error("Archivo de audio no existe: {}", audioFilePath);
             return;
         }
 
@@ -72,13 +95,14 @@ public class AudioTranscriptionService implements IAudioTranscriptionService {
             if (!textoTranscribido.isEmpty()) {
                 TranscripcionAudio transcripcion = new TranscripcionAudio(audioMessage, textoTranscribido);
                 transcripcionRepository.save(transcripcion);
-                System.out.println("Transcripción guardada para mensaje ID " + audioMessage.getIdMensaje() + ": " + textoTranscribido);
+                log.info("Transcripción guardada para mensaje ID {}: {}",
+                        audioMessage.getIdMensaje(), textoTranscribido);
             } else {
-                System.out.println("Vosk no devolvió texto para el mensaje ID " + audioMessage.getIdMensaje());
+                log.debug("Vosk no devolvió texto para el mensaje ID {}", audioMessage.getIdMensaje());
             }
 
         } catch (Exception e) {
-            System.err.println("Error durante la transcripción con Vosk: " + e.getMessage());
+            log.error("Error durante la transcripción con Vosk: {}", e.getMessage(), e);
         }
     }
     @Override

@@ -22,26 +22,35 @@ public class Peer {
     private String ip;
 
     @Column(name = "puerto", nullable = false)
+
     private int puerto;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "conectado", nullable = false, length = 20)
     private EstadoPeer conectado;
 
+
     @Column(name = "ultimo_latido")
     private LocalDateTime ultimoLatido;
+
 
     @Column(name = "nombre_servidor", length = 100)
     private String nombreServidor;
 
     // Constructores
+
     public Peer() {
         this.conectado = EstadoPeer.DESCONOCIDO;
     }
 
-    public Peer(String ip) {
+    public Peer(String ip, Integer puerto, String conectado) {
         this.ip = ip;
+
         this.conectado = EstadoPeer.DESCONOCIDO;
+
+        this.puerto = puerto;
+        this.ultimoLatido = LocalDateTime.now();
+
     }
 
     public Peer(String ip, int puerto) {
@@ -89,6 +98,7 @@ public class Peer {
     }
 
     public void setConectado(EstadoPeer conectado) {
+
         this.conectado = conectado;
     }
 
@@ -99,6 +109,7 @@ public class Peer {
     public void setUltimoLatido(LocalDateTime ultimoLatido) {
         this.ultimoLatido = ultimoLatido;
     }
+
 
     public String getNombreServidor() {
         return nombreServidor;

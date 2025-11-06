@@ -12,6 +12,7 @@ public class UserResponseDto {
     private LocalDateTime fechaRegistro;
     private String estado;
     private String rol; // "ADMIN" o "MIEMBRO"
+    private UUID peerId; // ID del servidor padre (peer)
 
     // Constructor con 5 parámetros
     public UserResponseDto(UUID userId, String username, String email, String photoAddress, LocalDateTime fechaRegistro) {
@@ -67,5 +68,11 @@ public class UserResponseDto {
     }
     public void setRol(String rol) {
         this.rol = rol;
+    }
+    public UUID getPeerId() {
+        return peerId;
+    }
+    public void setPeerId(UUID peerId) {
+        this.peerId = peerId;
     }
 }

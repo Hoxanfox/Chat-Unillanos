@@ -40,4 +40,16 @@ public class ServicioArchivosImpl implements IServicioArchivos {
         System.out.println("➡️ [ServicioArchivos]: Solicitando archivo con directorio auto - FileId: " + fileId);
         return fachadaArchivos.obtenerArchivoPorFileId(fileId);
     }
+
+    @Override
+    public CompletableFuture<Boolean> existeLocalmente(String fileId) {
+        System.out.println("➡️ [ServicioArchivos]: Verificando existencia local - FileId: " + fileId);
+        return fachadaArchivos.existeLocalmente(fileId);
+    }
+
+    @Override
+    public CompletableFuture<File> obtenerRutaLocal(String fileId) {
+        System.out.println("➡️ [ServicioArchivos]: Obteniendo ruta local - FileId: " + fileId);
+        return fachadaArchivos.obtenerRutaLocal(fileId);
+    }
 }
