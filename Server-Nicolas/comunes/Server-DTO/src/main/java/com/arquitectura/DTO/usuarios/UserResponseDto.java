@@ -11,9 +11,16 @@ public class UserResponseDto {
     private String imagenBase64; // Imagen codificada (para enviar al cliente)
     private LocalDateTime fechaRegistro;
     private String estado;
+    private String rol; // "ADMIN" o "MIEMBRO"
 
-    // Constructor vacío
-    public UserResponseDto(UUID userId, String username, String email, String photoAddress, LocalDateTime fechaRegistro) {}
+    // Constructor con 5 parámetros
+    public UserResponseDto(UUID userId, String username, String email, String photoAddress, LocalDateTime fechaRegistro) {
+        this.userId = userId;
+        this.username = username;
+        this.email = email;
+        this.photoAddress = photoAddress;
+        this.fechaRegistro = fechaRegistro;
+    }
 
     // Constructor con campos
     public UserResponseDto(UUID userId, String username, String email, String photoAddress, LocalDateTime fechaRegistro, String estado) {
@@ -54,5 +61,11 @@ public class UserResponseDto {
     }
     public void setEstado(String estado) {
         this.estado = estado;
+    }
+    public String getRol() {
+        return rol;
+    }
+    public void setRol(String rol) {
+        this.rol = rol;
     }
 }

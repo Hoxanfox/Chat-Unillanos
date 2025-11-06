@@ -10,4 +10,6 @@ public interface PeerRepository  extends JpaRepository<Peer, UUID> {
     Peer findByPeerId(UUID peerId);
 
     Optional<Peer> findByIp(String ip);
+
+    Optional<Peer> findByIpAndPuerto(String ip, Integer puerto);
 }

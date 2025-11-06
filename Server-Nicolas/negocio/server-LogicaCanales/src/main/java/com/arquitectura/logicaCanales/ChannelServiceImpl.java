@@ -66,8 +66,8 @@ public class ChannelServiceImpl implements IChannelService {
         // Obtener el Peer (servidor) actual
         String serverPeerAddress = networkUtils.getServerIPAddress();
         Peer currentPeer = peerRepository.findByIp(serverPeerAddress)
-                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress)));
-        
+                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress, 9000, "ONLINE")));
+
         Channel newChannel = new Channel(requestDto.getChannelName(), owner, tipo);
         newChannel.setPeerId(currentPeer); // Asignamos el servidor padre
         
@@ -110,8 +110,8 @@ public class ChannelServiceImpl implements IChannelService {
         // Obtener el Peer (servidor) actual
         String serverPeerAddress = networkUtils.getServerIPAddress();
         Peer currentPeer = peerRepository.findByIp(serverPeerAddress)
-                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress)));
-        
+                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress, 9000, "ONLINE")));
+
         String channelName = "Directo: " + user1.getUsername() + " - " + user2.getUsername();
         Channel directChannel = new Channel(channelName, user1, TipoCanal.DIRECTO); // user1 es el "owner" simbólico
         directChannel.setPeerId(currentPeer); // Asignamos el servidor padre
@@ -256,6 +256,48 @@ public class ChannelServiceImpl implements IChannelService {
         MembresiaCanalId membresiaId = new MembresiaCanalId(channel.getChannelId(), user.getUserId());
         MembresiaCanal nuevaMembresia = new MembresiaCanal(membresiaId, user, channel, estado);
         membresiaCanalRepository.save(nuevaMembresia);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserResponseDto> obtenerMiembrosDeCanal(UUID canalId, UUID solicitanteId) throws Exception {
+        // 1. Validar que el canal exista
+        Channel channel = channelRepository.findById(canalId)
+                .orElseThrow(() -> new IllegalArgumentException("Canal no encontrado"));
+
+        // 2. Validar que el solicitante sea miembro del canal
+        boolean isMember = membresiaCanalRepository
+                .findAllByUsuarioUserIdAndEstado(solicitanteId, EstadoMembresia.ACTIVO)
+                .stream()
+                .anyMatch(m -> m.getCanal().getChannelId().equals(canalId));
+
+        if (!isMember) {
+            throw new IllegalArgumentException("No eres miembro de este canal");
+        }
+
+        // 3. Obtener todas las membresías ACTIVAS del canal
+        List<MembresiaCanal> membresias = membresiaCanalRepository
+                .findAllByCanal_ChannelIdAndEstado(canalId, EstadoMembresia.ACTIVO);
+
+        // 4. Convertir a UserResponseDto
+        return membresias.stream()
+                .map(membresia -> {
+                    User usuario = membresia.getUsuario();
+                    UserResponseDto dto = mapToUserResponseDto(usuario);
+                    
+                    // Determinar el rol (si es el owner del canal, es ADMIN)
+                    if (channel.getOwner().getUserId().equals(usuario.getUserId())) {
+                        dto.setRol("ADMIN");
+                    } else {
+                        dto.setRol("MIEMBRO");
+                    }
+                    
+                    // Agregar estado de conexión
+                    dto.setEstado(usuario.getConectado() != null ? usuario.getConectado().toString() : "false");
+                    
+                    return dto;
+                })
+                .collect(Collectors.toList());
     }
 
 }

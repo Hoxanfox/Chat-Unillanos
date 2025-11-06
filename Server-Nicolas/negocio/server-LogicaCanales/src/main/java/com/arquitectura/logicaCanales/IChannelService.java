@@ -29,4 +29,13 @@ public interface IChannelService {
 
     Map<ChannelResponseDto, List<UserResponseDto>> obtenerCanalesConMiembros();
 
+    /**
+     * Obtiene la lista de miembros de un canal.
+     * @param canalId El ID del canal.
+     * @param solicitanteId El ID del usuario que solicita la lista.
+     * @return Lista de usuarios que son miembros del canal.
+     * @throws Exception si el canal no existe o el solicitante no es miembro.
+     */
+    List<UserResponseDto> obtenerMiembrosDeCanal(UUID canalId, UUID solicitanteId) throws Exception;
+
 }

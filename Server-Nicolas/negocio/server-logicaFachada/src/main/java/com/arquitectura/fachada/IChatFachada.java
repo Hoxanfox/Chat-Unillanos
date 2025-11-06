@@ -14,6 +14,14 @@ import com.arquitectura.DTO.canales.RespondToInviteRequestDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
+import com.arquitectura.DTO.peers.AddPeerRequestDto;
+import com.arquitectura.DTO.peers.HeartbeatRequestDto;
+import com.arquitectura.DTO.peers.HeartbeatResponseDto;
+import com.arquitectura.DTO.peers.PeerResponseDto;
+import com.arquitectura.DTO.peers.RetransmitRequestDto;
+import com.arquitectura.DTO.peers.RetransmitResponseDto;
+import com.arquitectura.DTO.peers.UpdatePeerListRequestDto;
+import com.arquitectura.DTO.peers.UpdatePeerListResponseDto;
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
 
 
@@ -37,6 +45,14 @@ public interface IChatFachada {
     List<UserResponseDto> listarContactos(UUID excludeUserId);
 
 
+    // --- Métodos de Peer ---
+    List<PeerResponseDto> listarPeersDisponibles(UUID excludePeerId) throws Exception;
+    HeartbeatResponseDto reportarLatido(HeartbeatRequestDto requestDto) throws Exception;
+    PeerResponseDto añadirPeer(AddPeerRequestDto requestDto) throws Exception;
+    PeerResponseDto verificarEstadoPeer(UUID peerId) throws Exception;
+    RetransmitResponseDto retransmitirPeticion(RetransmitRequestDto requestDto) throws Exception;
+    UpdatePeerListResponseDto actualizarListaPeers(UpdatePeerListRequestDto requestDto) throws Exception;
+
     // --- Métodos de Canal ---
     ChannelResponseDto crearCanal(CreateChannelRequestDto requestDto, UUID ownerId) throws Exception;
     ChannelResponseDto crearCanalDirecto(UUID user1Id, UUID user2Id) throws Exception;
@@ -47,6 +63,15 @@ public interface IChatFachada {
     List<ChannelResponseDto> getPendingInvitationsForUser(UUID userId);
     void agregarMiembroACanal(InviteMemberRequestDto inviteMemberRequestDto, UUID userId) throws Exception;
     List<ChannelResponseDto> obtenerTodosLosCanales();
+    
+    /**
+     * Obtiene la lista de miembros de un canal.
+     * @param canalId El ID del canal.
+     * @param solicitanteId El ID del usuario que solicita la lista.
+     * @return Lista de usuarios que son miembros del canal.
+     * @throws Exception si el canal no existe o el solicitante no es miembro.
+     */
+    List<UserResponseDto> obtenerMiembrosDeCanal(UUID canalId, UUID solicitanteId) throws Exception;
 
     // --- MÉTODOS DE MENSAJE (ACTUALIZADOS) ---
     void enviarMensajeBroadcast(String contenido, UUID adminId) throws Exception;

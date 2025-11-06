@@ -4,6 +4,7 @@ import com.arquitectura.controlador.ServerViewController;
 import com.arquitectura.utils.mail.MailConfig;
 import com.arquitectura.configdb.ConfiguracionPersistencia;
 import com.arquitectura.transporte.ServerListener;
+import com.arquitectura.transporte.PeerConnectionManager;
 import com.arquitectura.vista.ServerMainWindow;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
@@ -26,12 +27,30 @@ public class ServerLauncher {
 
         // 2. Obtener los beans principales que necesitamos para arrancar.
         ServerListener serverListener = context.getBean(ServerListener.class);
+        PeerConnectionManager peerConnectionManager = context.getBean(PeerConnectionManager.class);
         ServerViewController viewController = context.getBean(ServerViewController.class);
 
         // 3. Iniciar el servidor de sockets en un hilo separado para no bloquear la GUI.
         Thread serverThread = new Thread(serverListener::startServer);
         serverThread.setDaemon(true); // Esto permite que la JVM se cierre aunque este hilo esté corriendo
         serverThread.start();
+
+        // 3.1. Iniciar el servidor P2P en un hilo separado
+        Thread peerServerThread = new Thread(peerConnectionManager::startPeerServer);
+        peerServerThread.setDaemon(true);
+        peerServerThread.start();
+
+        // 3.2. Conectar a peers conocidos después de un pequeño delay
+        Thread peerConnectorThread = new Thread(() -> {
+            try {
+                Thread.sleep(2000); // Dar tiempo al servidor P2P para iniciar
+                peerConnectionManager.connectToAllKnownPeers();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        peerConnectorThread.setDaemon(true);
+        peerConnectorThread.start();
 
         // 4. Lanzar la interfaz gráfica de administrador en el hilo de eventos de Swing.
         SwingUtilities.invokeLater(() -> {
