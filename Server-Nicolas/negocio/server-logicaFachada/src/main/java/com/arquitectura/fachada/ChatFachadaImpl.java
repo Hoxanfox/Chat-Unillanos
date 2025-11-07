@@ -32,6 +32,7 @@ import com.arquitectura.utils.chunkManager.FileChunkManager;
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
 import com.arquitectura.utils.file.IFileStorageService;
 import com.arquitectura.utils.logs.ILogService;
+import com.google.gson.Gson;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
@@ -53,9 +54,20 @@ public class ChatFachadaImpl implements IChatFachada {
     private final ILogService logService;
     private final com.arquitectura.logicaUsuarios.IPeerService peerServiceUsuarios;
     private final com.arquitectura.logicaPeers.IPeerService peerServicePeers;
+    private final Gson gson;
 
     @Autowired
-    public ChatFachadaImpl(IUserService userService, IChannelService channelService, IMessageService messageService, IAudioTranscriptionService transcriptionService, IFileStorageService fileStorageService, ApplicationEventPublisher eventPublisher, FileChunkManager fileChunkManager, ILogService logService, @Qualifier("peerServiceUsuarios") com.arquitectura.logicaUsuarios.IPeerService peerServiceUsuarios, @Qualifier("peerServiceP2P") com.arquitectura.logicaPeers.IPeerService peerServicePeers) {
+    public ChatFachadaImpl(IUserService userService,
+                          IChannelService channelService,
+                          IMessageService messageService,
+                          IAudioTranscriptionService transcriptionService,
+                          IFileStorageService fileStorageService,
+                          ApplicationEventPublisher eventPublisher,
+                          FileChunkManager fileChunkManager,
+                          ILogService logService,
+                          @Qualifier("peerServiceUsuarios") com.arquitectura.logicaUsuarios.IPeerService peerServiceUsuarios,
+                          @Qualifier("peerServiceP2P") com.arquitectura.logicaPeers.IPeerService peerServicePeers,
+                          Gson gson) {
         this.userService = userService;
         this.channelService = channelService;
         this.messageService = messageService;
@@ -66,6 +78,7 @@ public class ChatFachadaImpl implements IChatFachada {
         this.logService = logService;
         this.peerServiceUsuarios = peerServiceUsuarios;
         this.peerServicePeers = peerServicePeers;
+        this.gson = gson;
     }
 
     // Metodos de usuario

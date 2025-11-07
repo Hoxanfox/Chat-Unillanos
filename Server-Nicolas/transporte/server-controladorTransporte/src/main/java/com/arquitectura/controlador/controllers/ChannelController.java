@@ -1,12 +1,14 @@
 package com.arquitectura.controlador.controllers;
 
 import com.arquitectura.DTO.Comunicacion.DTORequest;
+import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.canales.ChannelResponseDto;
 import com.arquitectura.DTO.canales.InviteMemberRequestDto;
 import com.arquitectura.DTO.canales.RespondToInviteRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.controlador.IClientHandler;
 import com.arquitectura.fachada.IChatFachada;
+import com.arquitectura.logicaCanales.exceptions.FederationRequiredException;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,7 +45,7 @@ public class ChannelController extends BaseController {
         "listarmiembros",
         "obtenermiembroscanal"
     );
-    
+
     @Autowired
     public ChannelController(IChatFachada chatFachada, Gson gson) {
         super(chatFachada, gson);
@@ -178,13 +180,17 @@ public class ChannelController extends BaseController {
             }
 
             System.out.println("→ [ChannelController] Llamando a chatFachada.crearCanalDirecto...");
+
+            // Intentar crear el canal - Si es remoto, la excepción se propagará hacia arriba
+            // para que un componente de más alto nivel (RequestDispatcher) la maneje
             ChannelResponseDto canalDirecto = chatFachada.crearCanalDirecto(user1Id, user2Id);
-            System.out.println("✓ [ChannelController] Canal obtenido: " + canalDirecto.getChannelId());
-            
+
+            System.out.println("✓ [ChannelController] Canal creado: " + canalDirecto.getChannelId());
+
             UUID otherUserId = authenticatedUserId.equals(user1Id) ? user2Id : user1Id;
             List<UserResponseDto> otherUsers = chatFachada.getUsersByIds(Set.of(otherUserId));
 
-            // Formato compatible con el cliente (similar a crearCanal)
+            // Formato compatible con el cliente
             Map<String, Object> directResponseData = new HashMap<>();
             directResponseData.put("id", canalDirecto.getChannelId().toString());
             directResponseData.put("nombre", canalDirecto.getChannelName());
@@ -215,9 +221,13 @@ public class ChannelController extends BaseController {
             }
 
             System.out.println("✓ [ChannelController] Enviando respuesta exitosa al cliente");
-            System.out.println("  Response data: " + gson.toJson(directResponseData));
             sendJsonResponse(handler, "crearCanalDirecto", true, "Canal directo creado/obtenido exitosamente", directResponseData);
-            System.out.println("✓ [ChannelController] Respuesta enviada");
+
+        } catch (FederationRequiredException e) {
+            // La federación será manejada por un componente de más alto nivel
+            // Por ahora, re-lanzamos la excepción para que suba
+            System.out.println("→ [ChannelController] Detectada necesidad de federación - propagando excepción hacia arriba");
+            throw new RuntimeException("Federación P2P requerida", e);
 
         } catch (Exception e) {
             System.err.println("✗ [ChannelController] Error al crear canal directo: " + e.getMessage());
