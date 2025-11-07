@@ -16,6 +16,7 @@ import com.arquitectura.DTO.canales.RespondToInviteRequestDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
+<<<<<<< HEAD
 import com.arquitectura.DTO.peers.AddPeerRequestDto;
 import com.arquitectura.DTO.peers.HeartbeatRequestDto;
 import com.arquitectura.DTO.peers.HeartbeatResponseDto;
@@ -23,6 +24,8 @@ import com.arquitectura.DTO.peers.RetransmitRequestDto;
 import com.arquitectura.DTO.peers.RetransmitResponseDto;
 import com.arquitectura.DTO.peers.UpdatePeerListRequestDto;
 import com.arquitectura.DTO.peers.UpdatePeerListResponseDto;
+=======
+>>>>>>> parent of 498f2db (feat: Agregar pestañas de monitoreo P2P a la GUI del servidor)
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
 
 
@@ -103,6 +106,7 @@ public interface IChatFachada {
     DTODownloadInfo startDownload(String fileId) throws Exception;
     byte[] getChunk(String downloadId, int chunkNumber) throws Exception;
 
+<<<<<<< HEAD
     // --- MÉTODOS P2P (PEER-TO-PEER) usando com.arquitectura.DTO.p2p ---
 
     /**
@@ -168,3 +172,6 @@ public interface IChatFachada {
     DTOResponse retransmitirPeticion(UUID peerDestinoId, DTORequest peticionOriginal) throws Exception;
 }
 
+=======
+}
+>>>>>>> parent of 498f2db (feat: Agregar pestañas de monitoreo P2P a la GUI del servidor)
