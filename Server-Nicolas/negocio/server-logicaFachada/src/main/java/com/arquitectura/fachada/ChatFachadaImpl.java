@@ -11,6 +11,11 @@ import com.arquitectura.DTO.canales.CreateChannelRequestDto;
 import com.arquitectura.DTO.Mensajes.SendMessageRequestDto;
 import com.arquitectura.DTO.canales.InviteMemberRequestDto;
 import com.arquitectura.DTO.canales.RespondToInviteRequestDto;
+<<<<<<< Updated upstream
+=======
+import com.arquitectura.DTO.p2p.PeerResponseDto;
+import com.arquitectura.DTO.PeerDTO;
+>>>>>>> Stashed changes
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
@@ -227,5 +232,22 @@ public class ChatFachadaImpl implements IChatFachada {
         return fileChunkManager.getChunk(downloadId, chunkNumber);
     }
 
+
+    // --- MÉTODOS ADICIONALES PARA MONITOREO P2P ---
+    
+    @Override
+    public List<PeerDTO> getAllPeers() {
+        return peerService.getAllPeers();
+    }
+    
+    @Override
+    public int getTotalPeers() {
+        return peerService.getTotalPeers();
+    }
+    
+    @Override
+    public int getActivePeers() {
+        return peerService.getActivePeers();
+    }
 
 }

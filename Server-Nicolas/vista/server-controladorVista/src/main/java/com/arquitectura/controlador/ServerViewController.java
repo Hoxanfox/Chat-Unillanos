@@ -4,6 +4,7 @@ import com.arquitectura.DTO.Mensajes.TranscriptionResponseDto;
 import com.arquitectura.DTO.canales.ChannelResponseDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
+import com.arquitectura.DTO.PeerDTO;
 import com.arquitectura.events.ForceDisconnectEvent;
 import com.arquitectura.fachada.IChatFachada;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -69,6 +70,17 @@ public class ServerViewController {
         return chatFachada.obtenerUsuariosConectados();
     }
 
+    // MÉTODOS PARA P2P
+    public List<PeerDTO> getAllPeers() {
+        return chatFachada.getAllPeers();
+    }
 
+    public int getTotalPeers() {
+        return chatFachada.getTotalPeers();
+    }
+
+    public int getActivePeers() {
+        return chatFachada.getActivePeers();
+    }
 
 }
