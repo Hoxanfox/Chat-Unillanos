@@ -32,31 +32,31 @@ import java.util.stream.Collectors;
  * Gestor del pool de conexiones P2P
  * Maneja conexiones entrantes y salientes con otros servidores de la red
  */
-@PropertySource("file:./config/server.properties")
+@PropertySource(value = "file:./config/server.properties", ignoreResourceNotFound = true)
 @Component
 public class PeerConnectionManager {
     
     private static final Logger log = LoggerFactory.getLogger(PeerConnectionManager.class);
     
-    @Value("${peer.server.port}")
+    @Value("${peer.server.port:22200}")
     private int peerPort;
     
-    @Value("${peer.max.connections}")
+    @Value("${peer.max.connections:50}")
     private int maxPeerConnections;
     
-    @Value("${peer.heartbeat.interval.ms}")
+    @Value("${peer.heartbeat.interval.ms:30000}")
     private long heartbeatIntervalMs;
     
-    @Value("${peer.heartbeat.timeout.seconds}")
+    @Value("${peer.heartbeat.timeout.seconds:60}")
     private long heartbeatTimeoutSeconds;
     
-    @Value("${peer.reconnect.attempts}")
+    @Value("${peer.reconnect.attempts:3}")
     private int reconnectAttempts;
     
-    @Value("${peer.reconnect.delay.ms}")
+    @Value("${peer.reconnect.delay.ms:5000}")
     private long reconnectDelayMs;
     
-    @Value("${server.port}")
+    @Value("${server.port:22100}")
     private int clientPort;
     
     @Value("${peer.bootstrap.nodes:}")

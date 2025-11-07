@@ -344,4 +344,9 @@ public class ChatFachadaImpl implements IChatFachada {
         return peerServicePeers.descargarArchivoDesdePeer(peerDestinoId, fileId);
     }
 
+    @Override
+    public com.arquitectura.DTO.p2p.UserLocationResponseDto buscarUsuario(UUID usuarioId) throws Exception {
+        return peerServicePeers.buscarUsuario(usuarioId);
+    }
+
 }

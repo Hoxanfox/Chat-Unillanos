@@ -23,15 +23,15 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-@PropertySource("file:./config/server.properties")
+@PropertySource(value = "file:./config/server.properties", ignoreResourceNotFound = true)
 @Component
 public class ServerListener implements IContactListBroadcaster {
 
     private static final Logger log = LoggerFactory.getLogger(ServerListener.class);
 
-    @Value("${server.port}")
+    @Value("${server.port:22100}")
     private int port;
-    @Value("${server.max.connections}")
+    @Value("${server.max.connections:100}")
     private int maxConnectedUsers;
 
     private final Gson gson;

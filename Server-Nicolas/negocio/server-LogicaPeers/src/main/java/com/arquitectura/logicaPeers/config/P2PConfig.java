@@ -11,7 +11,7 @@ import org.springframework.context.annotation.PropertySource;
  * para los servicios P2P.
  */
 @Configuration
-@PropertySource("file:./config/p2p.properties")
+@PropertySource(value = "file:./config/p2p.properties", ignoreResourceNotFound = true)
 public class P2PConfig {
     
     // ==================== CONFIGURACIÓN GENERAL P2P ====================

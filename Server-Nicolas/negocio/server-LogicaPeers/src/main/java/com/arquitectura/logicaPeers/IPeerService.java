@@ -153,6 +153,17 @@ public interface IPeerService {
      */
     UUID obtenerPeerActualId();
     
+    // ==================== BÚSQUEDA DE USUARIOS ====================
+    
+    /**
+     * Busca en qué peer está conectado un usuario específico.
+     * 
+     * @param usuarioId ID del usuario a buscar
+     * @return DTO con información del usuario y el peer donde está conectado
+     * @throws Exception si el usuario no existe
+     */
+    com.arquitectura.DTO.p2p.UserLocationResponseDto buscarUsuario(UUID usuarioId) throws Exception;
+    
     // ==================== ESTADÍSTICAS ====================
     
     /**

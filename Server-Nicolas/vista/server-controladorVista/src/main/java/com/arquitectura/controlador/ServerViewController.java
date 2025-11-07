@@ -69,6 +69,185 @@ public class ServerViewController {
         return chatFachada.obtenerUsuariosConectados();
     }
 
-
+    // MÉTODOS P2P
+    
+    public Map<String, Object> listarPeersDisponibles() {
+        try {
+            List<com.arquitectura.DTO.p2p.PeerResponseDto> peers = chatFachada.listarPeersDisponibles();
+            
+            java.util.List<java.util.Map<String, Object>> peersData = new java.util.ArrayList<>();
+            for (com.arquitectura.DTO.p2p.PeerResponseDto peer : peers) {
+                java.util.Map<String, Object> peerMap = new java.util.HashMap<>();
+                peerMap.put("peerId", peer.getPeerId().toString());
+                peerMap.put("ip", peer.getIp());
+                peerMap.put("puerto", peer.getPuerto());
+                peerMap.put("conectado", peer.getConectado());
+                peersData.add(peerMap);
+            }
+            
+            return java.util.Map.of("peers", peersData);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return java.util.Map.of("peers", java.util.List.of());
+        }
+    }
+    
+    public Map<String, Object> obtenerEstadoRed(boolean incluirDetalles) {
+        try {
+            // Obtener peers
+            List<com.arquitectura.DTO.p2p.PeerResponseDto> peers = chatFachada.listarPeersDisponibles();
+            
+            int peersOnline = 0;
+            int peersOffline = 0;
+            java.util.List<java.util.Map<String, Object>> peersData = new java.util.ArrayList<>();
+            
+            for (com.arquitectura.DTO.p2p.PeerResponseDto peer : peers) {
+                if ("ONLINE".equalsIgnoreCase(peer.getConectado())) {
+                    peersOnline++;
+                } else {
+                    peersOffline++;
+                }
+                
+                if (incluirDetalles) {
+                    java.util.Map<String, Object> peerMap = new java.util.HashMap<>();
+                    peerMap.put("peerId", peer.getPeerId().toString());
+                    peerMap.put("ip", peer.getIp());
+                    peerMap.put("puerto", peer.getPuerto());
+                    peerMap.put("estado", peer.getConectado());
+                    peerMap.put("usuariosConectados", 0); // Por defecto
+                    peersData.add(peerMap);
+                }
+            }
+            
+            java.util.Map<String, Object> topologia = new java.util.HashMap<>();
+            topologia.put("totalPeers", peers.size());
+            topologia.put("peersOnline", peersOnline);
+            topologia.put("peersOffline", peersOffline);
+            if (incluirDetalles) {
+                topologia.put("peers", peersData);
+            }
+            
+            // Obtener usuarios
+            List<UserResponseDto> usuarios = chatFachada.obtenerTodosLosUsuarios();
+            int usuariosConectados = (int) usuarios.stream()
+                .filter(u -> "ONLINE".equalsIgnoreCase(u.getEstado()))
+                .count();
+            
+            java.util.Map<String, Object> usuariosData = new java.util.HashMap<>();
+            usuariosData.put("totalUsuarios", usuarios.size());
+            usuariosData.put("usuariosConectados", usuariosConectados);
+            usuariosData.put("usuariosOffline", usuarios.size() - usuariosConectados);
+            
+            if (incluirDetalles) {
+                // Aquí se podría agregar distribución por peer
+                usuariosData.put("distribucion", new java.util.ArrayList<>());
+            }
+            
+            java.util.Map<String, Object> result = new java.util.HashMap<>();
+            result.put("topologia", topologia);
+            result.put("usuarios", usuariosData);
+            result.put("fechaConsulta", java.time.LocalDateTime.now().toString());
+            
+            return result;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return java.util.Map.of();
+        }
+    }
+    
+    public Map<String, Object> pingPeer(String peerId) {
+        try {
+            // Aquí implementarías la lógica de ping a un peer específico
+            // Por ahora retornamos un resultado simulado
+            java.util.Map<String, Object> result = new java.util.HashMap<>();
+            result.put("peerId", peerId);
+            result.put("success", true);
+            result.put("latencia", 50); // ms
+            result.put("timestamp", java.time.LocalDateTime.now().toString());
+            return result;
+        } catch (Exception e) {
+            java.util.Map<String, Object> result = new java.util.HashMap<>();
+            result.put("peerId", peerId);
+            result.put("success", false);
+            result.put("error", e.getMessage());
+            return result;
+        }
+    }
+    
+    public java.util.List<Map<String, Object>> pingAllPeers() {
+        try {
+            List<com.arquitectura.DTO.p2p.PeerResponseDto> peers = chatFachada.listarPeersDisponibles();
+            java.util.List<Map<String, Object>> results = new java.util.ArrayList<>();
+            
+            for (com.arquitectura.DTO.p2p.PeerResponseDto peer : peers) {
+                if ("ONLINE".equalsIgnoreCase(peer.getConectado())) {
+                    Map<String, Object> pingResult = pingPeer(peer.getPeerId().toString());
+                    results.add(pingResult);
+                }
+            }
+            
+            return results;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new java.util.ArrayList<>();
+        }
+    }
+    
+    public Map<String, Object> sincronizarUsuarios() {
+        try {
+            List<UserResponseDto> usuarios = chatFachada.obtenerTodosLosUsuarios();
+            
+            java.util.List<java.util.Map<String, Object>> usuariosData = new java.util.ArrayList<>();
+            int usuariosConectados = 0;
+            
+            for (UserResponseDto usuario : usuarios) {
+                java.util.Map<String, Object> usuarioMap = new java.util.HashMap<>();
+                usuarioMap.put("usuarioId", usuario.getUserId().toString());
+                usuarioMap.put("username", usuario.getUsername());
+                
+                boolean conectado = "ONLINE".equalsIgnoreCase(usuario.getEstado());
+                usuarioMap.put("conectado", conectado);
+                
+                if (conectado) {
+                    usuariosConectados++;
+                    try {
+                        com.arquitectura.DTO.p2p.UserLocationResponseDto ubicacion = 
+                            chatFachada.buscarUsuario(usuario.getUserId());
+                        
+                        if (ubicacion.getPeerId() != null) {
+                            usuarioMap.put("peerId", ubicacion.getPeerId().toString());
+                            usuarioMap.put("peerIp", ubicacion.getPeerIp());
+                            usuarioMap.put("peerPuerto", ubicacion.getPeerPuerto());
+                        } else {
+                            usuarioMap.put("peerId", null);
+                            usuarioMap.put("peerIp", null);
+                            usuarioMap.put("peerPuerto", null);
+                        }
+                    } catch (Exception e) {
+                        usuarioMap.put("peerId", null);
+                        usuarioMap.put("peerIp", null);
+                        usuarioMap.put("peerPuerto", null);
+                    }
+                } else {
+                    usuarioMap.put("peerId", null);
+                    usuarioMap.put("peerIp", null);
+                    usuarioMap.put("peerPuerto", null);
+                }
+                
+                usuariosData.add(usuarioMap);
+            }
+            
+            java.util.Map<String, Object> result = new java.util.HashMap<>();
+            result.put("usuarios", usuariosData);
+            result.put("totalUsuarios", usuarios.size());
+            result.put("usuariosConectados", usuariosConectados);
+            result.put("fechaSincronizacion", java.time.LocalDateTime.now().toString());
+            
+            return result;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return java.util.Map.of("usuarios", java.util.List.of());
+        }
+    }
 
 }

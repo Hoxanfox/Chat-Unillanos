@@ -11,13 +11,13 @@ import java.util.Properties;
 
 // En una clase de configuración, por ejemplo una nueva 'MailConfig.java'
 @Configuration
-@PropertySource("file:./config/mail.properties")
+@PropertySource(value = "file:./config/mail.properties", ignoreResourceNotFound = true)
 public class MailConfig {
 
-    @Value("${mail.host}") private String host;
-    @Value("${mail.port}") private int port;
-    @Value("${mail.username}") private String username;
-    @Value("${mail.password}") private String password;
+    @Value("${mail.host:smtp.gmail.com}") private String host;
+    @Value("${mail.port:587}") private int port;
+    @Value("${mail.username:}") private String username;
+    @Value("${mail.password:}") private String password;
 
     @Bean
     public JavaMailSender getJavaMailSender() {

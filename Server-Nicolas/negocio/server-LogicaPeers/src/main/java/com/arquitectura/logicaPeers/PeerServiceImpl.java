@@ -28,16 +28,20 @@ public class PeerServiceImpl implements IPeerService {
     private final NetworkUtils networkUtils;
     private final P2PConfig p2pConfig;
     private final com.arquitectura.utils.p2p.PeerConnectionPool peerConnectionPool;
+    private final com.arquitectura.persistence.repository.UserRepository userRepository;
 
     // Cache del peer actual
     private Peer peerActual;
 
     @Autowired
-    public PeerServiceImpl(PeerRepository peerRepository, NetworkUtils networkUtils, P2PConfig p2pConfig, com.arquitectura.utils.p2p.PeerConnectionPool peerConnectionPool) {
+    public PeerServiceImpl(PeerRepository peerRepository, NetworkUtils networkUtils, P2PConfig p2pConfig, 
+                          com.arquitectura.utils.p2p.PeerConnectionPool peerConnectionPool,
+                          com.arquitectura.persistence.repository.UserRepository userRepository) {
         this.peerRepository = peerRepository;
         this.networkUtils = networkUtils;
         this.p2pConfig = p2pConfig;
         this.peerConnectionPool = peerConnectionPool;
+        this.userRepository = userRepository;
 
         // Inicializar al construir
         System.out.println("✓ [PeerService] Servicio de peers inicializado");
@@ -377,6 +381,45 @@ public class PeerServiceImpl implements IPeerService {
             System.err.println("✗ [PeerService] Error al inicializar peer actual: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    // ==================== BÚSQUEDA DE USUARIOS ====================
+
+    @Override
+    @Transactional(readOnly = true)
+    public com.arquitectura.DTO.p2p.UserLocationResponseDto buscarUsuario(UUID usuarioId) throws Exception {
+        System.out.println("→ [PeerService] Buscando ubicación del usuario: " + usuarioId);
+        
+        // Obtener el usuario con su peer asociado
+        com.arquitectura.domain.User usuario = userRepository.findByIdWithPeer(usuarioId)
+                .orElseThrow(() -> new Exception("Usuario no encontrado: " + usuarioId));
+        
+        // Obtener el peer asociado
+        Peer peerAsociado = usuario.getPeerId();
+        
+        if (peerAsociado == null) {
+            System.out.println("✗ [PeerService] Usuario no tiene peer asociado");
+            // Usuario existe pero no está asociado a ningún peer
+            return new com.arquitectura.DTO.p2p.UserLocationResponseDto(
+                usuario.getUserId(),
+                usuario.getUsername(),
+                null,
+                null,
+                null,
+                usuario.getConectado()
+            );
+        }
+        
+        System.out.println("✓ [PeerService] Usuario encontrado en peer: " + peerAsociado.getPeerId());
+        
+        return new com.arquitectura.DTO.p2p.UserLocationResponseDto(
+            usuario.getUserId(),
+            usuario.getUsername(),
+            peerAsociado.getPeerId(),
+            peerAsociado.getIp(),
+            peerAsociado.getPuerto(),
+            usuario.getConectado()
+        );
     }
 
     // ==================== ESTADÍSTICAS ====================
