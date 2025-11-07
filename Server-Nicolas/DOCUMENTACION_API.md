@@ -1640,6 +1640,51 @@ Las notificaciones push son mensajes que el servidor envía proactivamente a los
 
 ---
 
+## Arquitectura del Sistema
+
+### Descripción General
+El servidor está construido con una arquitectura modular en capas usando Spring Framework y Maven:
+
+**Capas principales:**
+- **Vista**: Interfaz de usuario del servidor (ServerMainWindow)
+- **Transporte**: Manejo de conexiones WebSocket y comunicación de red
+  - `ClientHandler`: Gestiona conexiones de clientes
+  - `PeerHandler`: Gestiona conexiones entre servidores P2P
+  - `ServerListener`: Escucha conexiones entrantes
+- **Controladores**: Procesan las peticiones y delegan a la lógica de negocio
+  - `UserController`: Autenticación, registro, contactos
+  - `ChannelController`: Gestión de canales y membresías
+  - `MessageController`: Envío y recepción de mensajes
+  - `FileController`: Subida/descarga de archivos
+  - `PeerController`: Operaciones P2P
+- **Negocio**: Lógica de negocio (fachadas y servicios)
+- **Datos**: Persistencia con Hibernate/JPA y MySQL
+
+**Tecnologías:**
+- Java 21
+- Spring Framework 6.2.11
+- Hibernate 6.2.7
+- MySQL 8.0
+- WebSocket para comunicación en tiempo real
+- Gson para serialización JSON
+
+**Puertos:**
+- Puerto principal del servidor: 22100 (configurable en `server.properties`)
+- Puerto P2P: 22200 (configurable en `peer.server.port`)
+- Base de datos MySQL: 3306
+
+### Protocolo de Comunicación
+El servidor usa WebSocket para comunicación bidireccional en tiempo real. Todas las peticiones y respuestas usan formato JSON.
+
+**Flujo de comunicación:**
+1. Cliente establece conexión WebSocket
+2. Cliente envía petición JSON con `action` y `payload`
+3. Servidor procesa mediante `RequestDispatcher` que delega a controladores
+4. Servidor responde con JSON que incluye `action`, `status`, `message` y `data`
+5. Servidor puede enviar notificaciones push proactivamente
+
+---
+
 ## Versionado
 
 **Versión de la API:** 1.0  
@@ -1648,7 +1693,12 @@ Las notificaciones push son mensajes que el servidor envía proactivamente a los
 
 ---
 
-## Soporte
+## Información de Contacto y Soporte
 
 Para reportar problemas o sugerencias sobre la API, contactar al equipo de desarrollo.
+
+**Repositorio del proyecto:** Chat Unillanos Server  
+**Arquitectura:** Modular en capas con Spring Framework  
+**Base de datos:** MySQL 8.0  
+**Protocolo:** WebSocket con JSON
 

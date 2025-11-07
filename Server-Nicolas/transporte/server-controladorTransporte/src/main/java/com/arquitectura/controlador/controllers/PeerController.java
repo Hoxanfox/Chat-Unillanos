@@ -27,8 +27,7 @@ public class PeerController extends BaseController {
         "añadirpeer",
         "listarPeersDisponibles",
         "reportarlatido",
-        "retransmitirpeticion",
-        "actualizarlistapeers"
+        "retransmitirpeticion"
     );
     
     @Autowired
@@ -59,9 +58,6 @@ public class PeerController extends BaseController {
             case "retransmitirpeticion":
                 handleRetransmitirPeticion(request, handler);
                 break;
-            case "actualizarlistapeers":
-                handleActualizarListaPeers(request, handler);
-                break;
             default:
                 return false;
         }
@@ -78,11 +74,11 @@ public class PeerController extends BaseController {
     /**
      * Maneja la acción de añadir un nuevo peer a la red P2P.
      * 
-     * Request payload esperado:
+     * Request data esperado:
      * {
+     *   "usuarioId": "uuid-del-usuario",
      *   "ip": "192.168.1.10",
-     *   "puerto": 22100,
-     *   "nombreServidor": "Servidor-A" (opcional)
+     *   "puerto": 9000
      * }
      */
     private void handleAñadirPeer(DTORequest request, IClientHandler handler) {
@@ -98,144 +94,119 @@ public class PeerController extends BaseController {
             // Validar campos requeridos
             if (!payload.has("ip") || !payload.has("puerto")) {
                 sendJsonResponse(handler, "añadirPeer", false, 
-                    "Faltan campos requeridos: ip y puerto", 
-                    createErrorData("ip/puerto", "Campos requeridos"));
+                    "Datos del peer inválidos", 
+                    Map.of("campo", "ip/puerto", "motivo", "Campos requeridos"));
                 return;
             }
             
             String ip = payload.get("ip").getAsString();
             int puerto = payload.get("puerto").getAsInt();
-            String nombreServidor = payload.has("nombreServidor") ? 
-                payload.get("nombreServidor").getAsString() : null;
             
             // Validar IP
             if (ip == null || ip.trim().isEmpty()) {
                 sendJsonResponse(handler, "añadirPeer", false, 
-                    "La IP no puede estar vacía", 
-                    createErrorData("ip", "Campo requerido"));
+                    "Datos del peer inválidos", 
+                    Map.of("campo", "ip", "motivo", "Formato de IP inválido"));
                 return;
             }
             
             // Validar puerto
             if (puerto <= 0 || puerto > 65535) {
                 sendJsonResponse(handler, "añadirPeer", false, 
-                    "Puerto inválido. Debe estar entre 1 y 65535", 
-                    createErrorData("puerto", "Valor inválido"));
+                    "Datos del peer inválidos", 
+                    Map.of("campo", "puerto", "motivo", "Puerto inválido"));
                 return;
             }
             
             // Agregar peer usando la fachada
-            PeerResponseDto peerDto;
-            if (nombreServidor != null && !nombreServidor.trim().isEmpty()) {
-                peerDto = chatFachada.agregarPeer(ip, puerto, nombreServidor);
-            } else {
-                peerDto = chatFachada.agregarPeer(ip, puerto);
-            }
+            PeerResponseDto peerDto = chatFachada.agregarPeer(ip, puerto);
             
-            // Preparar respuesta
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("peerId", peerDto.getPeerId().toString());
-            responseData.put("ip", peerDto.getIp());
-            responseData.put("puerto", peerDto.getPuerto());
-            responseData.put("conectado", peerDto.getConectado());
-            responseData.put("ultimoLatido", peerDto.getUltimoLatido() != null ? 
-                peerDto.getUltimoLatido().toString() : null);
+            // Obtener lista completa de peers después de agregar
+            List<PeerResponseDto> todosLosPeers = chatFachada.listarPeersDisponibles();
             
-            if (peerDto.getNombreServidor() != null) {
-                responseData.put("nombreServidor", peerDto.getNombreServidor());
+            // Preparar respuesta con lista completa de peers
+            List<Map<String, Object>> peersData = new ArrayList<>();
+            for (PeerResponseDto peer : todosLosPeers) {
+                Map<String, Object> peerMap = new HashMap<>();
+                peerMap.put("peerId", peer.getPeerId().toString());
+                peerMap.put("ip", peer.getIp());
+                peerMap.put("puerto", peer.getPuerto());
+                peerMap.put("conectado", peer.getConectado()); // Ya es String
+                
+                peersData.add(peerMap);
             }
             
             System.out.println("✓ [PeerController] Peer añadido exitosamente: " + peerDto.getPeerId());
             sendJsonResponse(handler, "añadirPeer", true, 
-                "Peer añadido exitosamente", responseData);
+                "Peer añadido y lista de peers actualizada", peersData);
             
         } catch (IllegalArgumentException e) {
             System.err.println("✗ [PeerController] Error de validación: " + e.getMessage());
-            sendJsonResponse(handler, "añadirPeer", false, 
-                e.getMessage(), 
-                createErrorData("validacion", e.getMessage()));
+            
+            // Verificar si es error de peer duplicado
+            if (e.getMessage() != null && e.getMessage().toLowerCase().contains("ya existe")) {
+                sendJsonResponse(handler, "añadirPeer", false, 
+                    "El peer ya se encuentra en la lista", null);
+            } else {
+                sendJsonResponse(handler, "añadirPeer", false, 
+                    "Error al añadir el peer: " + e.getMessage(), null);
+            }
                 
         } catch (Exception e) {
             System.err.println("✗ [PeerController] Error al añadir peer: " + e.getMessage());
             e.printStackTrace();
             sendJsonResponse(handler, "añadirPeer", false, 
-                "Error interno al añadir peer", null);
+                "Error interno del servidor al añadir el peer", null);
         }
     }
     
     /**
      * Maneja la acción de listar todos los peers disponibles en la red.
      * 
-     * Request payload esperado:
+     * Request data esperado:
      * {
-     *   "soloActivos": true/false (opcional, default: false)
+     *   "usuarioId": "uuid-del-usuario"
      * }
      */
     private void handleListarPeersDisponibles(DTORequest request, IClientHandler handler) {
         System.out.println("→ [PeerController] Procesando listarPeersDisponibles");
         
         try {
-            boolean soloActivos = false;
+            // Obtener lista de todos los peers
+            List<PeerResponseDto> peers = chatFachada.listarPeersDisponibles();
             
-            // Verificar si se solicita solo peers activos
-            if (request.getPayload() != null) {
-                JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
-                if (payload.has("soloActivos")) {
-                    soloActivos = payload.get("soloActivos").getAsBoolean();
-                }
-            }
-            
-            // Obtener lista de peers
-            List<PeerResponseDto> peers;
-            if (soloActivos) {
-                peers = chatFachada.listarPeersActivos();
-            } else {
-                peers = chatFachada.listarPeersDisponibles();
-            }
-            
-            // Preparar respuesta
+            // Preparar respuesta como array directo
             List<Map<String, Object>> peersData = new ArrayList<>();
             for (PeerResponseDto peer : peers) {
                 Map<String, Object> peerMap = new HashMap<>();
                 peerMap.put("peerId", peer.getPeerId().toString());
                 peerMap.put("ip", peer.getIp());
                 peerMap.put("puerto", peer.getPuerto());
-                peerMap.put("conectado", peer.getConectado());
-                peerMap.put("ultimoLatido", peer.getUltimoLatido() != null ? 
-                    peer.getUltimoLatido().toString() : null);
-                
-                if (peer.getNombreServidor() != null) {
-                    peerMap.put("nombreServidor", peer.getNombreServidor());
-                }
+                peerMap.put("conectado", peer.getConectado()); // Ya es String
                 
                 peersData.add(peerMap);
             }
             
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("peers", peersData);
-            responseData.put("total", peers.size());
-            responseData.put("soloActivos", soloActivos);
-            
             System.out.println("✓ [PeerController] Lista de peers obtenida: " + peers.size() + " peers");
             sendJsonResponse(handler, "listarPeersDisponibles", true, 
-                "Lista de peers obtenida exitosamente", responseData);
+                "Lista de peers y su estado obtenida", peersData);
             
         } catch (Exception e) {
             System.err.println("✗ [PeerController] Error al listar peers: " + e.getMessage());
             e.printStackTrace();
             sendJsonResponse(handler, "listarPeersDisponibles", false, 
-                "Error interno al listar peers", null);
+                "Error al obtener la lista de peers", null);
         }
     }
     
     /**
      * Maneja la acción de reportar un heartbeat (latido) de un peer.
      * 
-     * Request payload esperado:
+     * Request data esperado:
      * {
      *   "peerId": "uuid-del-peer",
-     *   "ip": "192.168.1.10" (opcional),
-     *   "puerto": 22100 (opcional)
+     *   "ip": "192.168.1.5",
+     *   "puerto": 9000
      * }
      */
     private void handleReportarLatido(DTORequest request, IClientHandler handler) {
@@ -251,15 +222,24 @@ public class PeerController extends BaseController {
             // Validar peerId
             if (!payload.has("peerId")) {
                 sendJsonResponse(handler, "reportarLatido", false, 
-                    "Campo requerido: peerId", 
-                    createErrorData("peerId", "Campo requerido"));
+                    "Peer no reconocido o no registrado", 
+                    Map.of("peerId", "DESCONOCIDO"));
                 return;
             }
             
             String peerIdStr = payload.get("peerId").getAsString();
-            UUID peerId = UUID.fromString(peerIdStr);
+            UUID peerId;
             
-            // Reportar latido
+            try {
+                peerId = UUID.fromString(peerIdStr);
+            } catch (IllegalArgumentException e) {
+                sendJsonResponse(handler, "reportarLatido", false, 
+                    "Peer no reconocido o no registrado", 
+                    Map.of("peerId", peerIdStr));
+                return;
+            }
+            
+            // Reportar latido con ip y puerto si están presentes
             if (payload.has("ip") && payload.has("puerto")) {
                 String ip = payload.get("ip").getAsString();
                 int puerto = payload.get("puerto").getAsInt();
@@ -273,25 +253,26 @@ public class PeerController extends BaseController {
             
             // Preparar respuesta
             Map<String, Object> responseData = new HashMap<>();
-            responseData.put("peerId", peerId.toString());
             responseData.put("proximoLatidoMs", intervaloHeartbeat);
-            responseData.put("timestamp", java.time.LocalDateTime.now().toString());
             
             System.out.println("✓ [PeerController] Latido reportado para peer: " + peerId);
             sendJsonResponse(handler, "reportarLatido", true, 
-                "Latido recibido exitosamente", responseData);
+                "Latido recibido", responseData);
             
-        } catch (IllegalArgumentException e) {
-            System.err.println("✗ [PeerController] PeerId inválido: " + e.getMessage());
-            sendJsonResponse(handler, "reportarLatido", false, 
-                "PeerId inválido", 
-                createErrorData("peerId", "Formato UUID inválido"));
-                
         } catch (Exception e) {
             System.err.println("✗ [PeerController] Error al reportar latido: " + e.getMessage());
             e.printStackTrace();
-            sendJsonResponse(handler, "reportarLatido", false, 
-                "Error interno al reportar latido", null);
+            
+            // Verificar si el peer no existe
+            if (e.getMessage() != null && (e.getMessage().contains("no encontrado") || 
+                                          e.getMessage().contains("no existe"))) {
+                sendJsonResponse(handler, "reportarLatido", false, 
+                    "Peer no reconocido o no registrado", 
+                    Map.of("peerId", "DESCONOCIDO"));
+            } else {
+                sendJsonResponse(handler, "reportarLatido", false, 
+                    "Error al reportar latido", null);
+            }
         }
     }
 
@@ -299,12 +280,16 @@ public class PeerController extends BaseController {
     /**
      * Maneja la acción de retransmitir una petición a otro peer.
      * 
-     * Request payload esperado:
+     * Request data esperado:
      * {
-     *   "peerDestinoId": "uuid-del-peer-destino",
-     *   "peticionOriginal": {
-     *     "action": "accion",
-     *     "payload": { ... }
+     *   "peerOrigen": {
+     *     "peerId": "uuid-servidor-A",
+     *     "ip": "192.168.1.10",
+     *     "puerto": 9000
+     *   },
+     *   "peticionCliente": {
+     *     "action": "enviarMensajeDirecto",
+     *     "data": { ... }
      *   }
      * }
      */
@@ -319,180 +304,83 @@ public class PeerController extends BaseController {
             JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
             
             // Validar campos requeridos
-            if (!payload.has("peerDestinoId") || !payload.has("peticionOriginal")) {
+            if (!payload.has("peerOrigen") || !payload.has("peticionCliente")) {
                 sendJsonResponse(handler, "retransmitirPeticion", false, 
-                    "Faltan campos requeridos: peerDestinoId y peticionOriginal", 
-                    createErrorData("peerDestinoId/peticionOriginal", "Campos requeridos"));
+                    "Faltan campos requeridos: peerOrigen y peticionCliente", null);
                 return;
             }
             
-            String peerDestinoIdStr = payload.get("peerDestinoId").getAsString();
+            // Extraer información del peer origen
+            JsonObject peerOrigenJson = payload.get("peerOrigen").getAsJsonObject();
+            String peerOrigenId = peerOrigenJson.has("peerId") ? peerOrigenJson.get("peerId").getAsString() : null;
+            
+            // Parsear la petición del cliente
+            JsonObject peticionClienteJson = payload.get("peticionCliente").getAsJsonObject();
+            DTORequest peticionCliente = gson.fromJson(peticionClienteJson, DTORequest.class);
+            
+            // Validar petición del cliente
+            if (peticionCliente.getAction() == null || peticionCliente.getAction().trim().isEmpty()) {
+                sendJsonResponse(handler, "retransmitirPeticion", false, 
+                    "La petición del cliente debe tener una acción válida", null);
+                return;
+            }
+            
+            // Extraer peerDestinoId del payload de la petición del cliente
+            JsonObject peticionPayload = gson.toJsonTree(peticionCliente.getPayload()).getAsJsonObject();
+            String peerDestinoIdStr = peticionPayload.has("peerDestinoId") ? 
+                peticionPayload.get("peerDestinoId").getAsString() : null;
+            
+            if (peerDestinoIdStr == null) {
+                sendJsonResponse(handler, "retransmitirPeticion", false, 
+                    "La petición del cliente debe incluir peerDestinoId", null);
+                return;
+            }
+            
             UUID peerDestinoId = UUID.fromString(peerDestinoIdStr);
             
-            // Parsear la petición original
-            JsonObject peticionOriginalJson = payload.get("peticionOriginal").getAsJsonObject();
-            DTORequest peticionOriginal = gson.fromJson(peticionOriginalJson, DTORequest.class);
-            
-            // Validar petición original
-            if (peticionOriginal.getAction() == null || peticionOriginal.getAction().trim().isEmpty()) {
-                sendJsonResponse(handler, "retransmitirPeticion", false, 
-                    "La petición original debe tener una acción válida", 
-                    createErrorData("peticionOriginal.action", "Campo requerido"));
-                return;
-            }
-            
             System.out.println("→ [PeerController] Retransmitiendo acción '" + 
-                peticionOriginal.getAction() + "' al peer: " + peerDestinoId);
+                peticionCliente.getAction() + "' al peer: " + peerDestinoId);
             
             // Retransmitir usando la fachada
-            DTOResponse respuestaPeer = chatFachada.retransmitirPeticion(peerDestinoId, peticionOriginal);
+            DTOResponse respuestaPeer = chatFachada.retransmitirPeticion(peerDestinoId, peticionCliente);
             
-            // Preparar respuesta
+            // Preparar respuesta según el formato del documento
             Map<String, Object> responseData = new HashMap<>();
-            responseData.put("peerDestinoId", peerDestinoId.toString());
-            responseData.put("accionRetransmitida", peticionOriginal.getAction());
-            responseData.put("respuestaPeer", Map.of(
-                "action", respuestaPeer.getAction(),
-                "status", respuestaPeer.getStatus(),
-                "message", respuestaPeer.getMessage(),
-                "data", respuestaPeer.getData() != null ? respuestaPeer.getData() : new HashMap<>()
-            ));
+            
+            // Crear objeto respuestaCliente con la respuesta del peer
+            Map<String, Object> respuestaCliente = new HashMap<>();
+            respuestaCliente.put("action", respuestaPeer.getAction());
+            respuestaCliente.put("status", respuestaPeer.getStatus());
+            respuestaCliente.put("message", respuestaPeer.getMessage());
+            respuestaCliente.put("data", respuestaPeer.getData() != null ? respuestaPeer.getData() : null);
+            
+            responseData.put("respuestaCliente", respuestaCliente);
             
             System.out.println("✓ [PeerController] Petición retransmitida exitosamente");
             sendJsonResponse(handler, "retransmitirPeticion", true, 
-                "Petición retransmitida exitosamente", responseData);
+                "Petición del cliente procesada exitosamente.", responseData);
             
         } catch (IllegalArgumentException e) {
             System.err.println("✗ [PeerController] Error de validación: " + e.getMessage());
             sendJsonResponse(handler, "retransmitirPeticion", false, 
-                "Error de validación: " + e.getMessage(), 
-                createErrorData("validacion", e.getMessage()));
+                "Error de validación: " + e.getMessage(), null);
                 
         } catch (Exception e) {
             System.err.println("✗ [PeerController] Error al retransmitir petición: " + e.getMessage());
             e.printStackTrace();
             
-            // Determinar si es un error de comunicación con el peer
-            String errorMessage = e.getMessage();
-            if (errorMessage != null && (errorMessage.contains("no está activo") || 
-                                        errorMessage.contains("no encontrado") ||
-                                        errorMessage.contains("comunicación"))) {
-                sendJsonResponse(handler, "retransmitirPeticion", false, 
-                    errorMessage, 
-                    createErrorData("peer", errorMessage));
-            } else {
-                sendJsonResponse(handler, "retransmitirPeticion", false, 
-                    "Error interno al retransmitir petición", null);
-            }
+            // Si hay error, devolver con status success pero con respuestaCliente de error
+            Map<String, Object> responseData = new HashMap<>();
+            Map<String, Object> respuestaCliente = new HashMap<>();
+            respuestaCliente.put("status", "error");
+            respuestaCliente.put("message", e.getMessage() != null ? e.getMessage() : "Error al procesar petición");
+            respuestaCliente.put("data", null);
+            
+            responseData.put("respuestaCliente", respuestaCliente);
+            
+            sendJsonResponse(handler, "retransmitirPeticion", true, 
+                "Petición del cliente procesada, pero resultó en un error.", responseData);
         }
     }
     
-    /**
-     * Maneja la acción de actualizar la lista de peers.
-     * Permite sincronizar la lista de peers conocidos con otro servidor.
-     * 
-     * Request payload esperado:
-     * {
-     *   "peers": [
-     *     {
-     *       "peerId": "uuid",
-     *       "ip": "192.168.1.10",
-     *       "puerto": 22100,
-     *       "nombreServidor": "Servidor-A" (opcional)
-     *     },
-     *     ...
-     *   ]
-     * }
-     */
-    private void handleActualizarListaPeers(DTORequest request, IClientHandler handler) {
-        System.out.println("→ [PeerController] Procesando actualizarListaPeers");
-        
-        if (!validatePayload(request.getPayload(), handler, "actualizarListaPeers")) {
-            return;
-        }
-        
-        try {
-            JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
-            
-            // Validar que exista el array de peers
-            if (!payload.has("peers") || !payload.get("peers").isJsonArray()) {
-                sendJsonResponse(handler, "actualizarListaPeers", false, 
-                    "Se requiere un array de peers", 
-                    createErrorData("peers", "Array requerido"));
-                return;
-            }
-            
-            var peersArray = payload.get("peers").getAsJsonArray();
-            
-            int peersAgregados = 0;
-            int peersActualizados = 0;
-            int peersError = 0;
-            List<String> errores = new ArrayList<>();
-            
-            // Procesar cada peer
-            for (var peerElement : peersArray) {
-                try {
-                    JsonObject peerJson = peerElement.getAsJsonObject();
-                    
-                    // Validar campos requeridos
-                    if (!peerJson.has("ip") || !peerJson.has("puerto")) {
-                        peersError++;
-                        errores.add("Peer sin IP o puerto");
-                        continue;
-                    }
-                    
-                    String ip = peerJson.get("ip").getAsString();
-                    int puerto = peerJson.get("puerto").getAsInt();
-                    String nombreServidor = peerJson.has("nombreServidor") ? 
-                        peerJson.get("nombreServidor").getAsString() : null;
-                    
-                    // Intentar agregar el peer
-                    PeerResponseDto peerDto;
-                    if (nombreServidor != null && !nombreServidor.trim().isEmpty()) {
-                        peerDto = chatFachada.agregarPeer(ip, puerto, nombreServidor);
-                    } else {
-                        peerDto = chatFachada.agregarPeer(ip, puerto);
-                    }
-                    
-                    // Determinar si fue agregado o actualizado
-                    // (esto depende de la implementación del servicio)
-                    peersAgregados++;
-                    
-                } catch (Exception e) {
-                    peersError++;
-                    errores.add("Error con peer: " + e.getMessage());
-                    System.err.println("✗ [PeerController] Error al procesar peer: " + e.getMessage());
-                }
-            }
-            
-            // Preparar respuesta
-            Map<String, Object> responseData = new HashMap<>();
-            responseData.put("totalRecibidos", peersArray.size());
-            responseData.put("peersAgregados", peersAgregados);
-            responseData.put("peersActualizados", peersActualizados);
-            responseData.put("peersError", peersError);
-            
-            if (!errores.isEmpty()) {
-                responseData.put("errores", errores);
-            }
-            
-            // Obtener lista actualizada de peers
-            List<PeerResponseDto> peersActuales = chatFachada.listarPeersDisponibles();
-            responseData.put("totalPeersActuales", peersActuales.size());
-            
-            String mensaje = String.format(
-                "Lista actualizada: %d agregados, %d errores de %d recibidos",
-                peersAgregados, peersError, peersArray.size()
-            );
-            
-            System.out.println("✓ [PeerController] " + mensaje);
-            sendJsonResponse(handler, "actualizarListaPeers", true, mensaje, responseData);
-            
-        } catch (Exception e) {
-            System.err.println("✗ [PeerController] Error al actualizar lista de peers: " + e.getMessage());
-            e.printStackTrace();
-            sendJsonResponse(handler, "actualizarListaPeers", false, 
-                "Error interno al actualizar lista de peers", null);
-        }
-    }
 }
