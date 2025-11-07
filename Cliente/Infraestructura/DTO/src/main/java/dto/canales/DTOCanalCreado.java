@@ -1,5 +1,6 @@
 package dto.canales;
 
+import dto.featureContactos.DTOContacto;
 import java.io.Serializable;
 
 /**
@@ -10,6 +11,8 @@ import java.io.Serializable;
 public class DTOCanalCreado implements Serializable {
     private final String id;
     private final String nombre;
+    private String tipo;
+    private DTOContacto owner;
 
     /**
      * Constructor para el DTO del canal creado.
@@ -32,11 +35,28 @@ public class DTOCanalCreado implements Serializable {
         return nombre;
     }
 
+    public String getTipo() {
+        return tipo;
+    }
+
+    public void setTipo(String tipo) {
+        this.tipo = tipo;
+    }
+
+    public DTOContacto getOwner() {
+        return owner;
+    }
+
+    public void setOwner(DTOContacto owner) {
+        this.owner = owner;
+    }
+
     @Override
     public String toString() {
         return "DTOCanalCreado{" +
                 "id='" + id + '\'' +
                 ", nombre='" + nombre + '\'' +
+                ", tipo='" + tipo + '\'' +
                 '}';
     }
 }

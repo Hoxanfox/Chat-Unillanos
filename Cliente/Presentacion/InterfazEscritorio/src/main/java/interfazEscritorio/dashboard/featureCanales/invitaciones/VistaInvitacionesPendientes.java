@@ -17,7 +17,6 @@ import java.util.*;
 /**
  * Vista para gestionar invitaciones pendientes a canales.
  * Muestra las invitaciones recibidas y permite aceptarlas o rechazarlas.
- * Implementa IObservador para recibir notificaciones de nuevas invitaciones en tiempo real.
  */
 public class VistaInvitacionesPendientes extends BorderPane implements IObservador {
 
@@ -31,95 +30,77 @@ public class VistaInvitacionesPendientes extends BorderPane implements IObservad
         this.setPadding(new Insets(15));
         this.setStyle("-fx-background-color: #f4f4f4;");
 
-        // Registrarse como observador para recibir notificaciones de nuevas invitaciones
+        // Registrarse como observador
         controladorCanales.registrarObservadorInvitaciones(this);
-        System.out.println("✅ [VistaInvitacionesPendientes]: Registrada como observador de invitaciones");
 
         VBox mainLayout = new VBox(15);
         mainLayout.setAlignment(Pos.TOP_CENTER);
 
-        // Header con título y badge
+        // Header
         HBox headerBox = new HBox(10);
         headerBox.setAlignment(Pos.CENTER_LEFT);
-        
+
         Label titulo = new Label("📨 Pending Invitations");
         titulo.setFont(Font.font("Arial", FontWeight.BOLD, 18));
-        
+
         badgeInvitaciones = new Badge();
         badgeInvitaciones.setVisible(false);
-        
+
         headerBox.getChildren().addAll(titulo, badgeInvitaciones);
         mainLayout.getChildren().add(headerBox);
 
-        // Instrucciones
         Label instrucciones = new Label("You have been invited to join the following channels:");
         instrucciones.setTextFill(Color.GRAY);
         instrucciones.setFont(Font.font("Arial", 12));
         mainLayout.getChildren().add(instrucciones);
 
-        // Lista de invitaciones
         invitacionesBox = new VBox(10);
         invitacionesBox.setPadding(new Insets(10));
-        invitacionesBox.setStyle("-fx-background-color: white; -fx-border-color: #cccccc; -fx-border-radius: 5; -fx-background-radius: 5;");
-
-        Label cargando = new Label("⏳ Cargando invitaciones...");
-        cargando.setTextFill(Color.GRAY);
-        invitacionesBox.getChildren().add(cargando);
+        invitacionesBox.setStyle("-fx-background-color: white; -fx-border-color: #cccccc; -fx-border-radius: 5;");
 
         ScrollPane scrollPane = new ScrollPane(invitacionesBox);
         scrollPane.setFitToWidth(true);
         scrollPane.setPrefHeight(400);
-        scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
         mainLayout.getChildren().add(scrollPane);
 
-        // Estado
         lblEstado = new Label();
         lblEstado.setFont(Font.font("Arial", FontWeight.BOLD, 12));
         mainLayout.getChildren().add(lblEstado);
 
         this.setCenter(mainLayout);
 
-        // Botón volver
+        // Botones
         HBox botonesBox = new HBox(10);
         botonesBox.setAlignment(Pos.CENTER_RIGHT);
         botonesBox.setPadding(new Insets(15, 0, 0, 0));
 
         Button btnVolver = new Button("← Volver");
-        btnVolver.setStyle("-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-padding: 8 15;");
         btnVolver.setOnAction(e -> onVolver.run());
 
         Button btnRefrescar = new Button("🔄 Refresh");
-        btnRefrescar.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-padding: 8 15;");
         btnRefrescar.setOnAction(e -> cargarInvitaciones());
 
         botonesBox.getChildren().addAll(btnRefrescar, btnVolver);
         this.setBottom(botonesBox);
 
-        // Solicitar invitaciones pendientes
         cargarInvitaciones();
     }
 
     private void cargarInvitaciones() {
-        System.out.println("📡 [VistaInvitacionesPendientes]: Solicitando invitaciones pendientes...");
         lblEstado.setText("⏳ Cargando invitaciones...");
         lblEstado.setTextFill(Color.BLUE);
 
         controladorCanales.solicitarInvitacionesPendientes()
-                .thenAccept(invitaciones -> {
-                    Platform.runLater(() -> {
-                        System.out.println("✅ [VistaInvitacionesPendientes]: Recibidas " + invitaciones.size() + " invitaciones");
-                        mostrarInvitaciones(invitaciones);
-                        actualizarBadge(invitaciones.size());
-                        lblEstado.setText("");
-                    });
-                })
+                .thenAccept(invitaciones -> Platform.runLater(() -> {
+                    mostrarInvitaciones(invitaciones);
+                    actualizarBadge(invitaciones.size());
+                    lblEstado.setText("");
+                }))
                 .exceptionally(ex -> {
                     Platform.runLater(() -> {
-                        System.err.println("❌ [VistaInvitacionesPendientes]: Error al cargar invitaciones: " + ex.getMessage());
-                        lblEstado.setText("❌ Error al cargar invitaciones: " + ex.getMessage());
+                        lblEstado.setText("❌ Error: " + ex.getMessage());
                         lblEstado.setTextFill(Color.RED);
-                        mostrarError("No se pudieron cargar las invitaciones");
                     });
                     return null;
                 });
@@ -127,45 +108,102 @@ public class VistaInvitacionesPendientes extends BorderPane implements IObservad
 
     @Override
     public void actualizar(String tipoDeDato, Object datos) {
-        System.out.println("📥 [VistaInvitacionesPendientes]: Notificación recibida - Tipo: " + tipoDeDato);
-
         Platform.runLater(() -> {
             switch (tipoDeDato) {
                 case "NUEVA_INVITACION_CANAL":
-                    // Nueva invitación recibida en tiempo real
                     if (datos instanceof Map) {
-                        Map<String, String> invitacionData = (Map<String, String>) datos;
-                        System.out.println("🔔 [VistaInvitacionesPendientes]: Nueva invitación recibida en tiempo real");
-                        System.out.println("   → Canal: " + invitacionData.get("channelName"));
-                        
-                        mostrarNotificacionNuevaInvitacion(invitacionData);
-                        
-                        // Recargar la lista completa
                         cargarInvitaciones();
                     }
                     break;
-
-                case "INVITACIONES_PENDIENTES":
-                    // Lista completa de invitaciones
-                    if (datos instanceof List) {
-                        List<DTOCanalCreado> invitaciones = (List<DTOCanalCreado>) datos;
-                        System.out.println("✅ [VistaInvitacionesPendientes]: Lista actualizada con " + invitaciones.size() + " invitaciones");
-                        mostrarInvitaciones(invitaciones);
-                        actualizarBadge(invitaciones.size());
-                    }
-                    break;
-
                 case "INVITACION_ACEPTADA":
-                    lblEstado.setText("✅ Invitación aceptada. ¡Ahora eres miembro del canal!");
-                    lblEstado.setTextFill(Color.GREEN);
-                    // Recargar invitaciones
-                    new Thread(() -> {
-                        try {
-                            Thread.sleep(1500);
-                            Platform.runLater(this::cargarInvitaciones);
-                        } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                        }
-                    }).start();
+                case "INVITACION_RECHAZADA":
+                    cargarInvitaciones();
                     break;
+            }
+        });
+    }
+
+    private void mostrarInvitaciones(List<DTOCanalCreado> invitaciones) {
+        invitacionesBox.getChildren().clear();
+
+        if (invitaciones == null || invitaciones.isEmpty()) {
+            Label mensaje = new Label("📭 No hay invitaciones pendientes");
+            mensaje.setFont(Font.font("Arial", FontWeight.BOLD, 14));
+            mensaje.setTextFill(Color.GRAY);
+            invitacionesBox.getChildren().add(mensaje);
+            return;
+        }
+
+        for (DTOCanalCreado invitacion : invitaciones) {
+            invitacionesBox.getChildren().add(crearTarjetaInvitacion(invitacion));
+        }
+    }
+
+    private VBox crearTarjetaInvitacion(DTOCanalCreado canal) {
+        VBox tarjeta = new VBox(10);
+        tarjeta.setPadding(new Insets(15));
+        tarjeta.setStyle("-fx-background-color: #ffffff; -fx-border-color: #3498db; -fx-border-width: 2; -fx-border-radius: 8;");
+
+        Label nombreLabel = new Label(canal.getNombre());
+        nombreLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16));
+
+        HBox botonesBox = new HBox(10);
+        botonesBox.setAlignment(Pos.CENTER_RIGHT);
+
+        Button btnAceptar = new Button("✓ Accept");
+        btnAceptar.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white;");
+        btnAceptar.setOnAction(e -> responderInvitacion(canal.getId(), true));
+
+        Button btnRechazar = new Button("✗ Decline");
+        btnRechazar.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white;");
+        btnRechazar.setOnAction(e -> responderInvitacion(canal.getId(), false));
+
+        botonesBox.getChildren().addAll(btnRechazar, btnAceptar);
+        tarjeta.getChildren().addAll(nombreLabel, botonesBox);
+
+        return tarjeta;
+    }
+
+    private void responderInvitacion(String canalId, boolean aceptar) {
+        controladorCanales.responderInvitacion(canalId, aceptar)
+                .thenRun(() -> Platform.runLater(() -> {
+                    lblEstado.setText(aceptar ? "✅ Invitación aceptada" : "❌ Invitación rechazada");
+                    lblEstado.setTextFill(aceptar ? Color.GREEN : Color.ORANGE);
+                    cargarInvitaciones();
+                }))
+                .exceptionally(ex -> {
+                    Platform.runLater(() -> {
+                        lblEstado.setText("❌ Error: " + ex.getMessage());
+                        lblEstado.setTextFill(Color.RED);
+                    });
+                    return null;
+                });
+    }
+
+    private void actualizarBadge(int cantidad) {
+        if (cantidad > 0) {
+            badgeInvitaciones.setCount(cantidad);
+            badgeInvitaciones.setVisible(true);
+        } else {
+            badgeInvitaciones.setVisible(false);
+        }
+    }
+
+    private static class Badge extends StackPane {
+        private final Label label;
+
+        public Badge() {
+            label = new Label();
+            label.setFont(Font.font("Arial", FontWeight.BOLD, 10));
+            label.setTextFill(Color.WHITE);
+            this.setStyle("-fx-background-color: #e74c3c; -fx-background-radius: 10;");
+            this.setMinSize(20, 20);
+            this.getChildren().add(label);
+        }
+
+        public void setCount(int count) {
+            label.setText(String.valueOf(count));
+        }
+    }
+}
 

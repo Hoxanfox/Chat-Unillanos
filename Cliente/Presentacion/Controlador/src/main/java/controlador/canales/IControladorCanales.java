@@ -18,4 +18,9 @@ public interface IControladorCanales {
     CompletableFuture<Void> invitarMiembro(String canalId, String contactoId);
     void solicitarMiembrosCanal(String canalId);
     void registrarObservadorMiembros(IObservador observador);
+
+    // Métodos para gestión de invitaciones
+    CompletableFuture<List<DTOCanalCreado>> solicitarInvitacionesPendientes();
+    CompletableFuture<Void> responderInvitacion(String canalId, boolean aceptar);
+    void registrarObservadorInvitaciones(IObservador observador);
 }
