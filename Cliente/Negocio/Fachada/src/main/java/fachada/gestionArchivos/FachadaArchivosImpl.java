@@ -100,4 +100,16 @@ public class FachadaArchivosImpl implements IFachadaArchivos {
         System.out.println("➡️ [FachadaArchivos]: Verificando existencia local - FileId: " + fileId);
         return archivoService.existeLocalmente(fileId);
     }
+
+    @Override
+    public CompletableFuture<Boolean> existeLocalmente(String fileId) {
+        System.out.println("➡️ [FachadaArchivos]: Verificando existencia local (nuevo método) - FileId: " + fileId);
+        return archivoService.existeLocalmente(fileId);
+    }
+
+    @Override
+    public CompletableFuture<File> obtenerRutaLocal(String fileId) {
+        System.out.println("➡️ [FachadaArchivos]: Obteniendo ruta local - FileId: " + fileId);
+        return archivoService.obtenerRutaLocal(fileId);
+    }
 }

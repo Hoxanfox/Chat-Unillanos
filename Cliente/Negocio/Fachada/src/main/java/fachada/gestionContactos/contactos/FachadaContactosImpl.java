@@ -69,6 +69,12 @@ public class FachadaContactosImpl implements IFachadaContactos, IObservador {
         return contactos;
     }
 
+    @Override
+    public void sincronizarContactosConBD(List<DTOContacto> contactos) {
+        System.out.println("🔄 [FachadaContactos]: Delegando sincronización de contactos al gestor");
+        gestionContactos.sincronizarContactosConBD(contactos);
+    }
+
     /**
      * Este método es llamado por GestionContactos cuando hay datos nuevos.
      */

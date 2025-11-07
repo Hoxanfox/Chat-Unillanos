@@ -16,6 +16,7 @@
         <module>negocio/server-logicaUsuarios</module>
         <module>negocio/server-LogicaCanales</module>
         <module>negocio/server-LogicaMensajes</module>
+        <module>negocio/server-LogicaPeers</module>
         <module>transporte/server-Transporte</module>
         <module>transporte/server-controladorTransporte</module>
         <module>vista/server-controladorVista</module>

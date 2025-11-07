@@ -127,6 +127,16 @@ public interface IPeerService {
      */
     DTOResponse retransmitirPeticion(UUID peerDestinoId, DTORequest peticionOriginal) throws Exception;
     
+    /**
+     * Descarga un archivo completo desde otro peer usando las rutas startFileDownload y requestFileChunk.
+     *
+     * @param peerDestinoId ID del peer desde donde descargar el archivo
+     * @param fileId ID del archivo a descargar
+     * @return Bytes del archivo completo descargado
+     * @throws Exception si hay error en la descarga
+     */
+    byte[] descargarArchivoDesdePeer(UUID peerDestinoId, String fileId) throws Exception;
+
     // ==================== PEER ACTUAL ====================
     
     /**
@@ -165,27 +175,4 @@ public interface IPeerService {
      * @return Número de peers inactivos
      */
     long contarPeersInactivos();
-    
-    // ==================== MÉTODOS PARA MONITOREO GUI ====================
-    
-    /**
-     * Obtiene todos los peers en formato DTO para la GUI.
-     * 
-     * @return Lista de PeerDTO con información de todos los peers
-     */
-    List<com.arquitectura.DTO.PeerDTO> getAllPeers();
-    
-    /**
-     * Obtiene el número total de peers.
-     * 
-     * @return Cantidad total de peers
-     */
-    int getTotalPeers();
-    
-    /**
-     * Obtiene el número de peers activos.
-     * 
-     * @return Cantidad de peers activos
-     */
-    int getActivePeers();
 }

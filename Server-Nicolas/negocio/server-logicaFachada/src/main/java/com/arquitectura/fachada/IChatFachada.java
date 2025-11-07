@@ -1,5 +1,7 @@
 package com.arquitectura.fachada;
 
+import com.arquitectura.DTO.Comunicacion.DTORequest;
+import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 import com.arquitectura.DTO.Mensajes.TranscriptionResponseDto;
 import com.arquitectura.DTO.archivos.DTODownloadInfo;
@@ -14,7 +16,13 @@ import com.arquitectura.DTO.canales.RespondToInviteRequestDto;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
-import com.arquitectura.DTO.PeerDTO;
+import com.arquitectura.DTO.peers.AddPeerRequestDto;
+import com.arquitectura.DTO.peers.HeartbeatRequestDto;
+import com.arquitectura.DTO.peers.HeartbeatResponseDto;
+import com.arquitectura.DTO.peers.RetransmitRequestDto;
+import com.arquitectura.DTO.peers.RetransmitResponseDto;
+import com.arquitectura.DTO.peers.UpdatePeerListRequestDto;
+import com.arquitectura.DTO.peers.UpdatePeerListResponseDto;
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
 
 
@@ -37,6 +45,21 @@ public interface IChatFachada {
     void cambiarEstadoUsuario(UUID userId, boolean nuevoEstado) throws Exception;
     List<UserResponseDto> listarContactos(UUID excludeUserId);
 
+    /**
+     * Envía una notificación push al cliente para forzar su logout.
+     * @param userId ID del usuario al que se le pedirá cerrar sesión
+     * @param motivo Motivo del logout forzado (opcional)
+     * @throws Exception si el usuario no existe
+     */
+    void enviarPedidoLogout(UUID userId, String motivo) throws Exception;
+
+    // --- Métodos de Peer (usando com.arquitectura.DTO.peers) ---
+    List<com.arquitectura.DTO.peers.PeerResponseDto> listarPeersDisponibles(UUID excludePeerId) throws Exception;
+    HeartbeatResponseDto reportarLatido(HeartbeatRequestDto requestDto) throws Exception;
+    com.arquitectura.DTO.peers.PeerResponseDto añadirPeer(AddPeerRequestDto requestDto) throws Exception;
+    com.arquitectura.DTO.peers.PeerResponseDto verificarEstadoPeer(UUID peerId) throws Exception;
+    RetransmitResponseDto retransmitirPeticion(RetransmitRequestDto requestDto) throws Exception;
+    UpdatePeerListResponseDto actualizarListaPeers(UpdatePeerListRequestDto requestDto) throws Exception;
 
     // --- Métodos de Canal ---
     ChannelResponseDto crearCanal(CreateChannelRequestDto requestDto, UUID ownerId) throws Exception;
@@ -48,12 +71,31 @@ public interface IChatFachada {
     List<ChannelResponseDto> getPendingInvitationsForUser(UUID userId);
     void agregarMiembroACanal(InviteMemberRequestDto inviteMemberRequestDto, UUID userId) throws Exception;
     List<ChannelResponseDto> obtenerTodosLosCanales();
+    
+    /**
+     * Obtiene la lista de miembros de un canal.
+     * @param canalId El ID del canal.
+     * @param solicitanteId El ID del usuario que solicita la lista.
+     * @return Lista de usuarios que son miembros del canal.
+     * @throws Exception si el canal no existe o el solicitante no es miembro.
+     */
+    List<UserResponseDto> obtenerMiembrosDeCanal(UUID canalId, UUID solicitanteId) throws Exception;
 
     // --- MÉTODOS DE MENSAJE (ACTUALIZADOS) ---
     void enviarMensajeBroadcast(String contenido, UUID adminId) throws Exception;
     MessageResponseDto enviarMensajeTexto(SendMessageRequestDto requestDto, UUID autorId) throws Exception;
     MessageResponseDto enviarMensajeAudio(SendMessageRequestDto requestDto, UUID autorId) throws Exception;
     List<MessageResponseDto> obtenerMensajesDeCanal(UUID canalId, UUID userId) throws Exception;
+
+    /**
+     * Obtiene el historial de mensajes privados entre dos usuarios.
+     * @param remitenteId ID del usuario que solicita el historial
+     * @param destinatarioId ID del contacto con quien tiene la conversación
+     * @return Lista de MessageResponseDto con el historial privado
+     * @throws Exception en caso de error o falta de permisos
+     */
+    List<MessageResponseDto> obtenerHistorialPrivado(UUID remitenteId, UUID destinatarioId) throws Exception;
+
     String guardarArchivoDeAudio(String fileName, String base64Data, UUID autorId) throws IOException;
     List<TranscriptionResponseDto> obtenerTranscripciones();
 
@@ -68,10 +110,8 @@ public interface IChatFachada {
     DTODownloadInfo startDownload(String fileId) throws Exception;
     byte[] getChunk(String downloadId, int chunkNumber) throws Exception;
 
-<<<<<<< Updated upstream
-=======
-    // --- MÉTODOS P2P (PEER-TO-PEER) ---
-    
+    // --- MÉTODOS P2P (PEER-TO-PEER) usando com.arquitectura.DTO.p2p ---
+
     /**
      * Agrega un nuevo peer a la red P2P.
      * @param ip Dirección IP del peer
@@ -79,8 +119,8 @@ public interface IChatFachada {
      * @return DTO con la información del peer agregado
      * @throws Exception si hay error al agregar el peer
      */
-    PeerResponseDto agregarPeer(String ip, int puerto) throws Exception;
-    
+    com.arquitectura.DTO.p2p.PeerResponseDto agregarPeer(String ip, int puerto) throws Exception;
+
     /**
      * Agrega un nuevo peer con nombre de servidor.
      * @param ip Dirección IP del peer
@@ -89,20 +129,20 @@ public interface IChatFachada {
      * @return DTO con la información del peer agregado
      * @throws Exception si hay error al agregar el peer
      */
-    PeerResponseDto agregarPeer(String ip, int puerto, String nombreServidor) throws Exception;
-    
+    com.arquitectura.DTO.p2p.PeerResponseDto agregarPeer(String ip, int puerto, String nombreServidor) throws Exception;
+
     /**
      * Lista todos los peers disponibles en la red.
      * @return Lista de DTOs con información de todos los peers
      */
-    List<PeerResponseDto> listarPeersDisponibles();
-    
+    List<com.arquitectura.DTO.p2p.PeerResponseDto> listarPeersDisponibles();
+
     /**
      * Lista solo los peers que están activos (ONLINE).
      * @return Lista de DTOs con información de peers activos
      */
-    List<PeerResponseDto> listarPeersActivos();
-    
+    List<com.arquitectura.DTO.p2p.PeerResponseDto> listarPeersActivos();
+
     /**
      * Reporta un latido (heartbeat) de un peer.
      * @param peerId ID del peer que reporta el latido
@@ -115,18 +155,18 @@ public interface IChatFachada {
      * @param peerId ID del peer
      * @param ip IP del peer
      * @param puerto Puerto del peer
-     * @throws Exception si hay error al procesar el latido
+     * @throws Exception si el peer no existe
      */
     void reportarLatido(UUID peerId, String ip, int puerto) throws Exception;
     
     /**
-     * Obtiene el intervalo configurado para heartbeats en milisegundos.
-     * @return Intervalo de heartbeat en ms
+     * Obtiene el intervalo de heartbeat configurado.
+     * @return Intervalo en milisegundos
      */
     long obtenerIntervaloHeartbeat();
     
     /**
-     * Retransmite una petición a otro peer en la red.
+     * Retransmite una petición a otro peer.
      * @param peerDestinoId ID del peer destino
      * @param peticionOriginal Petición original a retransmitir
      * @return Respuesta del peer destino
@@ -134,25 +174,12 @@ public interface IChatFachada {
      */
     DTOResponse retransmitirPeticion(UUID peerDestinoId, DTORequest peticionOriginal) throws Exception;
 
-    // --- MÉTODOS ADICIONALES PARA MONITOREO P2P ---
-    
     /**
-     * Obtiene todos los peers registrados en el sistema.
-     * @return Lista de DTOs con información de todos los peers
+     * Descarga un archivo completo desde otro peer usando las rutas startFileDownload y requestFileChunk.
+     * @param peerDestinoId ID del peer desde donde descargar el archivo
+     * @param fileId ID del archivo a descargar
+     * @return Bytes del archivo completo descargado
+     * @throws Exception si hay error en la descarga
      */
-    List<PeerDTO> getAllPeers();
-    
-    /**
-     * Obtiene el número total de peers registrados.
-     * @return Cantidad total de peers
-     */
-    int getTotalPeers();
-    
-    /**
-     * Obtiene el número de peers activos (ONLINE).
-     * @return Cantidad de peers activos
-     */
-    int getActivePeers();
-
->>>>>>> Stashed changes
+    byte[] descargarArchivoDesdePeer(UUID peerDestinoId, String fileId) throws Exception;
 }

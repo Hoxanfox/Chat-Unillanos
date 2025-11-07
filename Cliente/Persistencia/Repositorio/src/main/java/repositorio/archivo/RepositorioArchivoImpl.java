@@ -12,6 +12,8 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Implementación del repositorio de archivos que persiste en H2.
+ * CORREGIDO: Utiliza try-with-resources para manejar conexiones del pool
+ * y elimina la columna contenido_base64.
  */
 public class RepositorioArchivoImpl implements IRepositorioArchivo {
 
@@ -24,117 +26,156 @@ public class RepositorioArchivoImpl implements IRepositorioArchivo {
     @Override
     public CompletableFuture<Boolean> guardar(Archivo archivo) {
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "INSERT INTO archivos (id_archivo, file_id_servidor, nombre_archivo, mime_type, " +
-                        "tamanio_bytes, contenido_base64, hash_sha256, fecha_descarga, fecha_ultima_actualizacion, " +
-                        "asociado_a, id_asociado, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            
-            Connection conn = null;
-            PreparedStatement pstmt = null;
+            // Primero verificar si el archivo ya existe
             try {
-                conn = gestorConexion.getConexion();
-                pstmt = conn.prepareStatement(sql);
+                // .join() es aceptable aquí porque estamos dentro de supplyAsync
+                boolean yaExiste = existe(archivo.getFileIdServidor()).join();
 
-                pstmt.setString(1, archivo.getIdArchivo().toString());
-                pstmt.setString(2, archivo.getFileIdServidor());
-                pstmt.setString(3, archivo.getNombreArchivo());
-                pstmt.setString(4, archivo.getMimeType());
-                pstmt.setLong(5, archivo.getTamanioBytes());
-                pstmt.setString(6, archivo.getContenidoBase64());
-                pstmt.setString(7, archivo.getHashSHA256());
-                pstmt.setTimestamp(8, Timestamp.valueOf(archivo.getFechaDescarga()));
-                pstmt.setTimestamp(9, Timestamp.valueOf(archivo.getFechaUltimaActualizacion()));
-                pstmt.setString(10, archivo.getAsociadoA());
-                pstmt.setString(11, archivo.getIdAsociado() != null ? archivo.getIdAsociado().toString() : null);
-                pstmt.setString(12, archivo.getEstado());
-
-                int filasAfectadas = pstmt.executeUpdate();
-                System.out.println("[RepositorioArchivo] Archivo guardado: " + archivo.getFileIdServidor());
-                return filasAfectadas > 0;
-                
-            } catch (SQLException e) {
-                System.err.println("[RepositorioArchivo] Error al guardar archivo: " + e.getMessage());
-                throw new RuntimeException("Fallo en la operación de base de datos al guardar archivo", e);
-            } finally {
-                try {
-                    if (pstmt != null) pstmt.close();
-                    // ⚠️ NO cerrar la conexión - es compartida (singleton)
-                } catch (SQLException e) {
-                    System.err.println("[RepositorioArchivo] Error al cerrar PreparedStatement: " + e.getMessage());
+                if (yaExiste) {
+                    // Si ya existe, hacer UPDATE completo
+                    System.out.println("[RepositorioArchivo] Archivo ya existe, actualizando: " + archivo.getFileIdServidor());
+                    return actualizarCompleto(archivo);
+                } else {
+                    // Si no existe, hacer INSERT
+                    System.out.println("[RepositorioArchivo] Archivo nuevo, insertando: " + archivo.getFileIdServidor());
+                    return insertar(archivo);
                 }
+            } catch (Exception e) {
+                System.err.println("[RepositorioArchivo] Error en guardar: " + e.getMessage());
+                throw new RuntimeException("Fallo en la operación de guardar archivo", e);
             }
         });
+    }
+
+    /**
+     * Inserta un nuevo archivo en la base de datos
+     */
+    private boolean insertar(Archivo archivo) {
+        // SQL sin contenido_base64 (11 parámetros)
+        String sql = "INSERT INTO archivos (id_archivo, file_id_servidor, nombre_archivo, mime_type, " +
+                "tamanio_bytes, hash_sha256, fecha_descarga, fecha_ultima_actualizacion, " +
+                "asociado_a, id_asociado, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        // 1. Usar try-with-resources para la conexión y el statement
+        // La conexión se obtiene del pool y se devuelve automáticamente
+        try (Connection conn = gestorConexion.getConexion();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, archivo.getIdArchivo().toString());
+            pstmt.setString(2, archivo.getFileIdServidor());
+            pstmt.setString(3, archivo.getNombreArchivo());
+            pstmt.setString(4, archivo.getMimeType());
+            pstmt.setLong(5, archivo.getTamanioBytes());
+            // pstmt.setString(6, archivo.getContenidoBase64()); // <-- ELIMINADO
+            pstmt.setString(6, archivo.getHashSHA256()); // <-- Parámetro 6 (antes 7)
+            pstmt.setTimestamp(7, Timestamp.valueOf(archivo.getFechaDescarga()));
+            pstmt.setTimestamp(8, Timestamp.valueOf(archivo.getFechaUltimaActualizacion()));
+            pstmt.setString(9, archivo.getAsociadoA());
+            pstmt.setString(10, archivo.getIdAsociado() != null ? archivo.getIdAsociado().toString() : null);
+            pstmt.setString(11, archivo.getEstado());
+
+            int filasAfectadas = pstmt.executeUpdate();
+            System.out.println("[RepositorioArchivo] ✅ Archivo insertado: " + archivo.getFileIdServidor());
+            return filasAfectadas > 0;
+
+        } catch (SQLException e) {
+            System.err.println("[RepositorioArchivo] ❌ Error al insertar archivo: " + e.getMessage());
+            throw new RuntimeException("Fallo al insertar archivo", e);
+        }
+        // 2. No se necesita 'finally' para cerrar conn o pstmt
+    }
+
+    /**
+     * Actualiza completamente un archivo existente en la base de datos
+     */
+    private boolean actualizarCompleto(Archivo archivo) {
+        // SQL sin contenido_base64 (9 parámetros de SET + 1 de WHERE)
+        String sql = "UPDATE archivos SET nombre_archivo = ?, mime_type = ?, tamanio_bytes = ?, " +
+                "hash_sha256 = ?, fecha_ultima_actualizacion = ?, " +
+                "asociado_a = ?, id_asociado = ?, estado = ? WHERE file_id_servidor = ?";
+
+        // 1. Usar try-with-resources
+        try (Connection conn = gestorConexion.getConexion();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, archivo.getNombreArchivo());
+            pstmt.setString(2, archivo.getMimeType());
+            pstmt.setLong(3, archivo.getTamanioBytes());
+            // pstmt.setString(4, archivo.getContenidoBase64()); // <-- ELIMINADO
+            pstmt.setString(4, archivo.getHashSHA256()); // <-- Parámetro 4 (antes 5)
+            pstmt.setTimestamp(5, Timestamp.valueOf(archivo.getFechaUltimaActualizacion()));
+            pstmt.setString(6, archivo.getAsociadoA());
+            pstmt.setString(7, archivo.getIdAsociado() != null ? archivo.getIdAsociado().toString() : null);
+            pstmt.setString(8, archivo.getEstado());
+            pstmt.setString(9, archivo.getFileIdServidor()); // Parámetro del WHERE
+
+            int filasAfectadas = pstmt.executeUpdate();
+            System.out.println("[RepositorioArchivo] ✅ Archivo actualizado: " + archivo.getFileIdServidor());
+            return filasAfectadas > 0;
+
+        } catch (SQLException e) {
+            System.err.println("[RepositorioArchivo] ❌ Error al actualizar archivo: " + e.getMessage());
+            throw new RuntimeException("Fallo al actualizar archivo", e);
+        }
+        // 2. No se necesita 'finally'
     }
 
     @Override
     public CompletableFuture<Archivo> buscarPorFileIdServidor(String fileIdServidor) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "SELECT * FROM archivos WHERE file_id_servidor = ?";
-            
-            Connection conn = null;
-            PreparedStatement pstmt = null;
-            ResultSet rs = null;
-            try {
-                conn = gestorConexion.getConexion();
-                pstmt = conn.prepareStatement(sql);
-                pstmt.setString(1, fileIdServidor);
-                rs = pstmt.executeQuery();
 
-                if (rs.next()) {
-                    return mapearArchivo(rs);
+            // 1. Usar try-with-resources para Connection, PreparedStatement y ResultSet
+            // Se elimina el bucle de reintento, ya que el pool maneja conexiones inválidas.
+            try (Connection conn = gestorConexion.getConexion();
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+                pstmt.setString(1, fileIdServidor);
+
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        return mapearArchivo(rs);
+                    }
                 }
-                return null;
-                
             } catch (SQLException e) {
                 System.err.println("[RepositorioArchivo] Error al buscar archivo: " + e.getMessage());
                 throw new RuntimeException("Fallo al buscar archivo por fileId", e);
-            } finally {
-                try {
-                    if (rs != null) rs.close();
-                    if (pstmt != null) pstmt.close();
-                    // ⚠️ NO cerrar la conexión
-                } catch (SQLException e) {
-                    System.err.println("[RepositorioArchivo] Error al cerrar recursos: " + e.getMessage());
-                }
             }
+            // 2. No se necesita 'finally'
+
+            return null; // No encontrado
         });
     }
+
 
     @Override
     public CompletableFuture<List<Archivo>> buscarPorAsociacion(String asociadoA, String idAsociado) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "SELECT * FROM archivos WHERE asociado_a = ? AND id_asociado = ?";
             List<Archivo> archivos = new ArrayList<>();
-            
-            Connection conn = null;
-            PreparedStatement pstmt = null;
-            ResultSet rs = null;
-            try {
-                conn = gestorConexion.getConexion();
-                pstmt = conn.prepareStatement(sql);
+
+            // 1. Usar try-with-resources
+            try (Connection conn = gestorConexion.getConexion();
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
                 pstmt.setString(1, asociadoA);
                 pstmt.setString(2, idAsociado);
-                rs = pstmt.executeQuery();
 
-                while (rs.next()) {
-                    archivos.add(mapearArchivo(rs));
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        archivos.add(mapearArchivo(rs));
+                    }
                 }
-                
-                System.out.println("[RepositorioArchivo] Encontrados " + archivos.size() + 
-                                 " archivos para " + asociadoA + ":" + idAsociado);
+
+                System.out.println("[RepositorioArchivo] Encontrados " + archivos.size() +
+                        " archivos para " + asociadoA + ":" + idAsociado);
                 return archivos;
-                
+
             } catch (SQLException e) {
                 System.err.println("[RepositorioArchivo] Error al buscar archivos por asociación: " + e.getMessage());
                 throw new RuntimeException("Fallo al buscar archivos por asociación", e);
-            } finally {
-                try {
-                    if (rs != null) rs.close();
-                    if (pstmt != null) pstmt.close();
-                    // ⚠️ NO cerrar la conexión
-                } catch (SQLException e) {
-                    System.err.println("[RepositorioArchivo] Error al cerrar recursos: " + e.getMessage());
-                }
             }
+            // 2. No se necesita 'finally'
         });
     }
 
@@ -142,64 +183,53 @@ public class RepositorioArchivoImpl implements IRepositorioArchivo {
     public CompletableFuture<Boolean> actualizarEstado(String fileIdServidor, String nuevoEstado) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "UPDATE archivos SET estado = ?, fecha_ultima_actualizacion = ? WHERE file_id_servidor = ?";
-            
-            Connection conn = null;
-            PreparedStatement pstmt = null;
-            try {
-                conn = gestorConexion.getConexion();
-                pstmt = conn.prepareStatement(sql);
+
+            // 1. Usar try-with-resources
+            try (Connection conn = gestorConexion.getConexion();
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
                 pstmt.setString(1, nuevoEstado);
                 pstmt.setTimestamp(2, Timestamp.valueOf(LocalDateTime.now()));
                 pstmt.setString(3, fileIdServidor);
 
                 int filasAfectadas = pstmt.executeUpdate();
-                System.out.println("[RepositorioArchivo] Estado actualizado a '" + nuevoEstado + 
-                                 "' para archivo: " + fileIdServidor);
+                System.out.println("[RepositorioArchivo] Estado actualizado a '" + nuevoEstado +
+                        "' para archivo: " + fileIdServidor);
                 return filasAfectadas > 0;
-                
+
             } catch (SQLException e) {
                 System.err.println("[RepositorioArchivo] Error al actualizar estado: " + e.getMessage());
                 throw new RuntimeException("Fallo al actualizar estado del archivo", e);
-            } finally {
-                try {
-                    if (pstmt != null) pstmt.close();
-                    // ⚠️ NO cerrar la conexión
-                } catch (SQLException e) {
-                    System.err.println("[RepositorioArchivo] Error al cerrar PreparedStatement: " + e.getMessage());
-                }
             }
+            // 2. No se necesita 'finally'
         });
     }
 
+    /**
+     * Este método ya no es necesario, ya que contenido_base64 fue eliminado.
+     * La lógica de actualización de hash y estado se maneja en 'guardar'/'actualizarCompleto'.
+     */
     @Override
     public CompletableFuture<Boolean> actualizarContenido(String fileIdServidor, String contenidoBase64) {
+        System.err.println("[RepositorioArchivo] ADVERTENCIA: actualizarContenido() está obsoleto y no debe usarse.");
+        // Simplemente actualiza la fecha para indicar actividad, pero no guarda contenido.
         return CompletableFuture.supplyAsync(() -> {
-            String sql = "UPDATE archivos SET contenido_base64 = ?, fecha_ultima_actualizacion = ?, estado = 'completo' " +
-                        "WHERE file_id_servidor = ?";
-            
-            Connection conn = null;
-            PreparedStatement pstmt = null;
-            try {
-                conn = gestorConexion.getConexion();
-                pstmt = conn.prepareStatement(sql);
-                pstmt.setString(1, contenidoBase64);
-                pstmt.setTimestamp(2, Timestamp.valueOf(LocalDateTime.now()));
-                pstmt.setString(3, fileIdServidor);
+            String sql = "UPDATE archivos SET fecha_ultima_actualizacion = ?, estado = 'completo' " +
+                    "WHERE file_id_servidor = ?";
+
+            try (Connection conn = gestorConexion.getConexion();
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+                pstmt.setTimestamp(1, Timestamp.valueOf(LocalDateTime.now()));
+                pstmt.setString(2, fileIdServidor);
 
                 int filasAfectadas = pstmt.executeUpdate();
-                System.out.println("[RepositorioArchivo] Contenido actualizado para archivo: " + fileIdServidor);
+                System.out.println("[RepositorioArchivo] Contenido (obsoleto) actualizado para archivo: " + fileIdServidor);
                 return filasAfectadas > 0;
-                
+
             } catch (SQLException e) {
-                System.err.println("[RepositorioArchivo] Error al actualizar contenido: " + e.getMessage());
+                System.err.println("[RepositorioArchivo] Error al actualizar contenido (obsoleto): " + e.getMessage());
                 throw new RuntimeException("Fallo al actualizar contenido del archivo", e);
-            } finally {
-                try {
-                    if (pstmt != null) pstmt.close();
-                    // ⚠️ NO cerrar la conexión
-                } catch (SQLException e) {
-                    System.err.println("[RepositorioArchivo] Error al cerrar PreparedStatement: " + e.getMessage());
-                }
             }
         });
     }
@@ -208,29 +238,22 @@ public class RepositorioArchivoImpl implements IRepositorioArchivo {
     public CompletableFuture<Boolean> eliminar(String fileIdServidor) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "DELETE FROM archivos WHERE file_id_servidor = ?";
-            
-            Connection conn = null;
-            PreparedStatement pstmt = null;
-            try {
-                conn = gestorConexion.getConexion();
-                pstmt = conn.prepareStatement(sql);
+
+            // 1. Usar try-with-resources
+            try (Connection conn = gestorConexion.getConexion();
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
                 pstmt.setString(1, fileIdServidor);
                 int filasAfectadas = pstmt.executeUpdate();
-                
+
                 System.out.println("[RepositorioArchivo] Archivo eliminado: " + fileIdServidor);
                 return filasAfectadas > 0;
-                
+
             } catch (SQLException e) {
                 System.err.println("[RepositorioArchivo] Error al eliminar archivo: " + e.getMessage());
                 throw new RuntimeException("Fallo al eliminar archivo", e);
-            } finally {
-                try {
-                    if (pstmt != null) pstmt.close();
-                    // ⚠️ NO cerrar la conexión
-                } catch (SQLException e) {
-                    System.err.println("[RepositorioArchivo] Error al cerrar PreparedStatement: " + e.getMessage());
-                }
             }
+            // 2. No se necesita 'finally'
         });
     }
 
@@ -238,33 +261,25 @@ public class RepositorioArchivoImpl implements IRepositorioArchivo {
     public CompletableFuture<Boolean> existe(String fileIdServidor) {
         return CompletableFuture.supplyAsync(() -> {
             String sql = "SELECT COUNT(1) AS cnt FROM archivos WHERE file_id_servidor = ?";
-            
-            Connection conn = null;
-            PreparedStatement pstmt = null;
-            ResultSet rs = null;
-            try {
-                conn = gestorConexion.getConexion();
-                pstmt = conn.prepareStatement(sql);
-                pstmt.setString(1, fileIdServidor);
-                rs = pstmt.executeQuery();
 
-                if (rs.next()) {
-                    return rs.getInt("cnt") > 0;
+            // 1. Usar try-with-resources
+            try (Connection conn = gestorConexion.getConexion();
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+                pstmt.setString(1, fileIdServidor);
+
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getInt("cnt") > 0;
+                    }
                 }
                 return false;
-                
+
             } catch (SQLException e) {
                 System.err.println("[RepositorioArchivo] Error al verificar existencia: " + e.getMessage());
                 throw new RuntimeException("Fallo al verificar existencia del archivo", e);
-            } finally {
-                try {
-                    if (rs != null) rs.close();
-                    if (pstmt != null) pstmt.close();
-                    // ⚠️ NO cerrar la conexión - es compartida
-                } catch (SQLException e) {
-                    System.err.println("[RepositorioArchivo] Error al cerrar recursos: " + e.getMessage());
-                }
             }
+            // 2. No se necesita 'finally'
         });
     }
 
@@ -299,4 +314,3 @@ public class RepositorioArchivoImpl implements IRepositorioArchivo {
         return archivo;
     }
 }
-
