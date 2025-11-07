@@ -21,8 +21,6 @@ public class ServerMainWindow extends JFrame {
     private ConnectedUsersReportPanel connectedUsersReportPanel;
     private TranscriptionsReportPanel transcriptionsReportPanel;
     private BroadcastMessagePanel broadcastMessagePanel;
-    private PeerStatusPanel peerStatusPanel;
-    private P2PNetworkPanel p2pNetworkPanel;
     // Aquí añadirías los otros paneles de informes a medida que los crees
 
     public ServerMainWindow(ServerViewController controller) {
@@ -56,8 +54,6 @@ public class ServerMainWindow extends JFrame {
         connectedUsersReportPanel = new ConnectedUsersReportPanel(controller);
         transcriptionsReportPanel = new TranscriptionsReportPanel(controller);
         broadcastMessagePanel = new BroadcastMessagePanel(controller);
-        peerStatusPanel = new PeerStatusPanel(controller);
-        p2pNetworkPanel = new P2PNetworkPanel(controller);
 
         // Añadimos los paneles al CardLayout con un nombre único
         mainContentPanel.add(registerUserPanel, "REGISTER_USER_PANEL");
@@ -67,8 +63,6 @@ public class ServerMainWindow extends JFrame {
         mainContentPanel.add(connectedUsersReportPanel, "CONNECTED_USERS_PANEL");
         mainContentPanel.add(transcriptionsReportPanel, "TRANSCRIPTIONS_PANEL");
         mainContentPanel.add(broadcastMessagePanel, "BROADCAST_PANEL");
-        mainContentPanel.add(peerStatusPanel, "PEER_STATUS_PANEL");
-        mainContentPanel.add(p2pNetworkPanel, "P2P_NETWORK_PANEL");
 
         add(mainContentPanel, BorderLayout.CENTER);
         cardLayout.show(mainContentPanel, "REGISTER_USER_PANEL");
@@ -103,8 +97,6 @@ public class ServerMainWindow extends JFrame {
         JButton btnShowTranscriptions = new JButton("Texto de Mensaje de audio");
         JButton btnBroadcast = new JButton("Enviar Mensaje Global");
         JButton btnLogs = new JButton("Logs");
-        JButton btnPeerStatus = new JButton("🌐 Estado de Peers");
-        JButton btnP2PNetwork = new JButton("📊 Red P2P");
         // ... otros botones ...
 
         // Guardamos los botones en un array para manipularlos fácilmente
@@ -115,9 +107,7 @@ public class ServerMainWindow extends JFrame {
                 btnShowConnectedUsers,
                 btnShowTranscriptions,
                 btnLogs,
-                btnBroadcast,
-                btnPeerStatus,
-                btnP2PNetwork
+                btnBroadcast
                 // ... añade los otros botones aquí
         };
 
@@ -173,18 +163,6 @@ public class ServerMainWindow extends JFrame {
         btnBroadcast.addActionListener(e -> {
             logsReportPanel.stopAutoRefresh(); // Detener el refresco de logs si estaba activo
             cardLayout.show(mainContentPanel, "BROADCAST_PANEL");
-        });
-        
-        btnPeerStatus.addActionListener(e -> {
-            logsReportPanel.stopAutoRefresh();
-            peerStatusPanel.refreshReport();
-            cardLayout.show(mainContentPanel, "PEER_STATUS_PANEL");
-        });
-        
-        btnP2PNetwork.addActionListener(e -> {
-            logsReportPanel.stopAutoRefresh();
-            p2pNetworkPanel.refreshReport();
-            cardLayout.show(mainContentPanel, "P2P_NETWORK_PANEL");
         });
 
 

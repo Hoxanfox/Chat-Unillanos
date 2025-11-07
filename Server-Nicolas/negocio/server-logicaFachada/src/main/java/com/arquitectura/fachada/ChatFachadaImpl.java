@@ -280,6 +280,7 @@ public class ChatFachadaImpl implements IChatFachada {
         return fileChunkManager.getChunk(downloadId, chunkNumber);
     }
 
+<<<<<<< HEAD
     // --- IMPLEMENTACIÓN DE MÉTODOS P2P ---
     
     @Override
@@ -323,3 +324,7 @@ public class ChatFachadaImpl implements IChatFachada {
     }
 
 }
+=======
+
+}
+>>>>>>> parent of 498f2db (feat: Agregar pestañas de monitoreo P2P a la GUI del servidor)
