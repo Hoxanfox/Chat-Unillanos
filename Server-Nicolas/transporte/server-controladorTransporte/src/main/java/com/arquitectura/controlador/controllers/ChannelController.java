@@ -180,13 +180,13 @@ public class ChannelController extends BaseController {
             }
 
             System.out.println("→ [ChannelController] Llamando a chatFachada.crearCanalDirecto...");
-
+            
             // Intentar crear el canal - Si es remoto, la excepción se propagará hacia arriba
             // para que un componente de más alto nivel (RequestDispatcher) la maneje
             ChannelResponseDto canalDirecto = chatFachada.crearCanalDirecto(user1Id, user2Id);
-
+            
             System.out.println("✓ [ChannelController] Canal creado: " + canalDirecto.getChannelId());
-
+            
             UUID otherUserId = authenticatedUserId.equals(user1Id) ? user2Id : user1Id;
             List<UserResponseDto> otherUsers = chatFachada.getUsersByIds(Set.of(otherUserId));
 
@@ -228,7 +228,7 @@ public class ChannelController extends BaseController {
             // Por ahora, re-lanzamos la excepción para que suba
             System.out.println("→ [ChannelController] Detectada necesidad de federación - propagando excepción hacia arriba");
             throw new RuntimeException("Federación P2P requerida", e);
-
+            
         } catch (Exception e) {
             System.err.println("✗ [ChannelController] Error al crear canal directo: " + e.getMessage());
             e.printStackTrace();
