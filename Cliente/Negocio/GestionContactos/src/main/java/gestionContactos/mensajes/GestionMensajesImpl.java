@@ -86,7 +86,8 @@ public class GestionMensajesImpl implements IGestionMensajes {
                 peerDestinatarioId // puede ser null
         );
 
-        DTORequest peticion = new DTORequest("solicitarHistorialPrivado", payload);
+        // ✅ CORRECCIÓN: El servidor espera la acción en minúsculas sin camelCase
+        DTORequest peticion = new DTORequest("solicitarhistorialprivado", payload);
         enviadorPeticiones.enviar(peticion);
         System.out.println("✅ [GestionMensajes]: Petición de historial enviada al servidor");
     }
@@ -114,7 +115,8 @@ public class GestionMensajesImpl implements IGestionMensajes {
                 destinatarioId,
                 contenido
         );
-        DTORequest peticion = new DTORequest("enviarMensajeDirecto", payload);
+        // ✅ CORRECCIÓN: El servidor espera la acción en minúsculas sin camelCase
+        DTORequest peticion = new DTORequest("enviarmensajedirecto", payload);
         enviadorPeticiones.enviar(peticion);
 
         System.out.println("✅ [GestionMensajes]: Mensaje de texto enviado al servidor");
@@ -127,25 +129,27 @@ public class GestionMensajesImpl implements IGestionMensajes {
         String peerRemitenteId = gestorSesionUsuario.getPeerId();
         String peerDestinoId = gestorContactoPeers.getPeerIdDeContacto(destinatarioId);
 
-        System.out.println("📤 [GestionMensajes]: Enviando mensaje de AUDIO (fileId)");
+        System.out.println("📤 [GestionMensajes]: Enviando mensaje de AUDIO (ruta de archivo)");
         System.out.println("   → Remitente: " + remitenteId + " (Peer: " + peerRemitenteId + ")");
         System.out.println("   → Destinatario: " + destinatarioId + " (Peer: " + peerDestinoId + ")");
-        System.out.println("   → AudioFileId: " + audioFileId);
+        System.out.println("   → AudioFilePath: " + audioFileId);
 
         if (peerDestinoId == null) {
             System.out.println("⚠️ [GestionMensajes]: No se encontró peerId del destinatario — se enviará el audio con peerDestinoId = null");
             notificarObservadores("ADVERTENCIA_PEER_NO_ENCONTRADO", "Se enviará mensaje de audio sin peerId del destinatario");
         }
 
-        DTOEnviarMensajeAudio payload = new DTOEnviarMensajeAudio(
-                peerDestinoId, // puede ser null
+        // ✅ CORRECCIÓN: Usar DTOEnviarMensaje.deAudio con la ruta del archivo en 'contenido'
+        DTOEnviarMensaje payload = DTOEnviarMensaje.deAudio(
                 peerRemitenteId,
+                peerDestinoId, // puede ser null
                 remitenteId,
                 destinatarioId,
-                audioFileId
+                audioFileId // Esta es la ruta/URL del archivo, NO Base64
         );
 
-        DTORequest peticion = new DTORequest("enviarMensajeDirectoAudio", payload);
+        // ✅ CORRECCIÓN: El servidor espera la acción en minúsculas sin camelCase
+        DTORequest peticion = new DTORequest("enviarmensajedirectoaudio", payload);
         enviadorPeticiones.enviar(peticion);
 
         System.out.println("✅ [GestionMensajes]: Mensaje de audio enviado al servidor");
@@ -182,8 +186,14 @@ public class GestionMensajesImpl implements IGestionMensajes {
     }
 
     /**
-     * Mapea la respuesta del servidor (con estructura author/content/messageType)
+     * Mapea la respuesta del servidor (con estructura del push)
      * al formato esperado por DTOMensaje (remitenteId/contenido/tipo).
+     *
+     * Estructura esperada del servidor para PUSH:
+     * - mensajeId, remitenteId, remitenteNombre, peerRemitenteId, peerDestinoId
+     * - tipo, contenido, fechaEnvio, destinatarioId
+     *
+     * Nota: Los mensajes de audio en PUSH vienen con contenido en Base64
      */
     private DTOMensaje mapearMensajeDesdeServidor(Object data) {
         DTOMensaje mensaje = new DTOMensaje();
@@ -193,55 +203,53 @@ public class GestionMensajesImpl implements IGestionMensajes {
             @SuppressWarnings("unchecked")
             java.util.Map<String, Object> map = (java.util.Map<String, Object>) data;
 
-            // Mapear messageId
-            if (map.containsKey("messageId")) {
-                mensaje.setMensajeId((String) map.get("messageId"));
+            // Mapear mensajeId directamente (el push usa este nombre)
+            if (map.containsKey("mensajeId")) {
+                mensaje.setMensajeId((String) map.get("mensajeId"));
             }
 
-            // Mapear timestamp a fechaEnvio
-            if (map.containsKey("timestamp")) {
-                mensaje.setFechaEnvio((String) map.get("timestamp"));
+            // Mapear fechaEnvio directamente (el push usa este nombre)
+            if (map.containsKey("fechaEnvio")) {
+                mensaje.setFechaEnvio((String) map.get("fechaEnvio"));
             }
 
-            // Mapear author -> remitenteId y remitenteNombre
-            if (map.containsKey("author")) {
-                @SuppressWarnings("unchecked")
-                java.util.Map<String, Object> author = (java.util.Map<String, Object>) map.get("author");
-                if (author != null) {
-                    if (author.containsKey("userId")) {
-                        mensaje.setRemitenteId((String) author.get("userId"));
-                    }
-                    if (author.containsKey("username")) {
-                        mensaje.setRemitenteNombre((String) author.get("username"));
-                    }
-                }
+            // Mapear remitenteId directamente (el push usa este nombre)
+            if (map.containsKey("remitenteId")) {
+                mensaje.setRemitenteId((String) map.get("remitenteId"));
             }
 
-            // Mapear content -> contenido
-            if (map.containsKey("content")) {
-                mensaje.setContenido((String) map.get("content"));
+            // Mapear remitenteNombre directamente (el push usa este nombre)
+            if (map.containsKey("remitenteNombre")) {
+                mensaje.setRemitenteNombre((String) map.get("remitenteNombre"));
             }
 
-            // Mapear messageType -> tipo (convertir de TEXT/IMAGE/AUDIO a TEXTO/IMAGEN/AUDIO)
-            if (map.containsKey("messageType")) {
-                String messageType = (String) map.get("messageType");
-                String tipo = convertirTipoMensaje(messageType);
-                mensaje.setTipo(tipo);
+            // Mapear peerRemitenteId directamente (el push usa este nombre)
+            if (map.containsKey("peerRemitenteId")) {
+                mensaje.setPeerRemitenteId((String) map.get("peerRemitenteId"));
             }
 
-            // Mapear channelId -> destinatarioId (el canal es la conversación privada)
-            if (map.containsKey("channelId")) {
-                mensaje.setDestinatarioId((String) map.get("channelId"));
+            // Mapear peerDestinoId directamente (el push usa este nombre)
+            if (map.containsKey("peerDestinoId")) {
+                mensaje.setPeerDestinoId((String) map.get("peerDestinoId"));
             }
 
-            // Mapear fileId si existe
-            if (map.containsKey("fileId")) {
-                mensaje.setFileId((String) map.get("fileId"));
+            // Mapear destinatarioId directamente (el push usa este nombre)
+            if (map.containsKey("destinatarioId")) {
+                mensaje.setDestinatarioId((String) map.get("destinatarioId"));
             }
 
-            // Mapear fileName si existe
-            if (map.containsKey("fileName")) {
-                mensaje.setFileName((String) map.get("fileName"));
+            // Mapear tipo directamente (el push usa "texto" o "audio" en minúsculas)
+            if (map.containsKey("tipo")) {
+                String tipo = (String) map.get("tipo");
+                // Convertir a formato esperado por el cliente (TEXTO/AUDIO en mayúsculas)
+                mensaje.setTipo(tipo.toUpperCase());
+            }
+
+            // Mapear contenido directamente (el push usa este nombre)
+            // Para mensajes de texto: contenido normal
+            // Para mensajes de audio: datos Base64 (data:audio/webm;base64,...)
+            if (map.containsKey("contenido")) {
+                mensaje.setContenido((String) map.get("contenido"));
             }
 
         } catch (Exception e) {
@@ -393,7 +401,13 @@ public class GestionMensajesImpl implements IGestionMensajes {
 
         System.out.println("✅ [GestionMensajes]: Nuevo mensaje de audio recibido");
         System.out.println("   → De: " + mensaje.getRemitenteId() + (esMio ? " (YO)" : ""));
-        System.out.println("   → FileId: " + mensaje.getFileId());
+        System.out.println("   → Tipo: " + mensaje.getTipo());
+        // El contenido de audio en PUSH viene en Base64 (data:audio/webm;base64,...)
+        if (mensaje.getContenido() != null && mensaje.getContenido().startsWith("data:audio")) {
+            System.out.println("   → Audio Base64: Sí (listo para reproducir)");
+        } else {
+            System.out.println("   → Contenido: " + mensaje.getContenido());
+        }
 
         notificarObservadores("NUEVO_MENSAJE_AUDIO_PRIVADO", mensaje);
     }

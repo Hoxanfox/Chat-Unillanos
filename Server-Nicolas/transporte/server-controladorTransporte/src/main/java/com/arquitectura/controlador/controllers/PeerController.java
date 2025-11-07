@@ -318,14 +318,121 @@ public class PeerController extends BaseController {
         try {
             JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
             
-            // Validar campos requeridos
-            if (!payload.has("peerDestinoId") || !payload.has("peticionOriginal")) {
-                sendJsonResponse(handler, "retransmitirPeticion", false, 
-                    "Faltan campos requeridos: peerDestinoId y peticionOriginal", 
-                    createErrorData("peerDestinoId/peticionOriginal", "Campos requeridos"));
-                return;
+            // Validar campos requeridos para el nuevo formato
+            if (payload.has("originalRequest")) {
+                // Nuevo formato: La petición original viene directamente
+                handleRetransmitirPeticionNuevoFormato(payload, handler);
+            } else if (payload.has("peerDestinoId") && payload.has("peticionOriginal")) {
+                // Formato antiguo: Se especifica el peer destino
+                handleRetransmitirPeticionFormatoAntiguo(payload, handler);
+            } else {
+                sendJsonResponse(handler, "retransmitirpeticion", false, 
+                    "Formato de petición inválido", 
+                    createErrorData("payload", "Se requiere originalRequest o peerDestinoId+peticionOriginal"));
             }
             
+        } catch (Exception e) {
+            System.err.println("✗ [PeerController] Error al retransmitir petición: " + e.getMessage());
+            e.printStackTrace();
+            sendJsonResponse(handler, "retransmitirpeticion", false, 
+                "Error interno al retransmitir petición", null);
+        }
+    }
+    
+    /**
+     * Maneja retransmisión en el nuevo formato (federación P2P directa).
+     * Este método procesa peticiones que vienen de otros peers.
+     */
+    private void handleRetransmitirPeticionNuevoFormato(JsonObject payload, IClientHandler handler) {
+        System.out.println("→ [PeerController] Procesando retransmisión formato nuevo (Federación P2P)");
+        
+        try {
+            // Extraer el requestId si existe
+            String requestId = payload.has("requestId") ? payload.get("requestId").getAsString() : null;
+            
+            // Extraer la petición original
+            JsonObject originalRequestJson = payload.get("originalRequest").getAsJsonObject();
+            DTORequest originalRequest = gson.fromJson(originalRequestJson, DTORequest.class);
+            
+            String action = originalRequest.getAction();
+            System.out.println("→ [PeerController] Procesando acción retransmitida: " + action);
+            
+            // Procesar la acción específica
+            switch (action.toLowerCase()) {
+                case "crearcandirectoacanaldirecto":
+                    handleCrearCanalDirectoFederado(originalRequest, handler, requestId);
+                    break;
+                    
+                default:
+                    System.err.println("✗ [PeerController] Acción no soportada para federación: " + action);
+                    sendJsonResponse(handler, "retransmitirpeticion", false, 
+                        "Acción no soportada: " + action, 
+                        createErrorData("action", "No implementada para federación"));
+            }
+            
+        } catch (Exception e) {
+            System.err.println("✗ [PeerController] Error en retransmisión nuevo formato: " + e.getMessage());
+            e.printStackTrace();
+            sendJsonResponse(handler, "retransmitirpeticion", false, 
+                "Error procesando petición federada: " + e.getMessage(), null);
+        }
+    }
+    
+    /**
+     * Maneja la creación de un canal directo en modo federado.
+     * Este servidor tiene autoridad sobre uno de los usuarios.
+     */
+    private void handleCrearCanalDirectoFederado(DTORequest originalRequest, IClientHandler handler, String requestId) {
+        System.out.println("→ [PeerController] Procesando crearCanalDirecto federado");
+        
+        try {
+            JsonObject requestPayload = gson.toJsonTree(originalRequest.getPayload()).getAsJsonObject();
+            
+            // Extraer los IDs de usuarios
+            String user1IdStr = requestPayload.get("user1Id").getAsString();
+            String user2IdStr = requestPayload.get("user2Id").getAsString();
+            
+            UUID user1Id = UUID.fromString(user1IdStr);
+            UUID user2Id = UUID.fromString(user2IdStr);
+            
+            System.out.println("→ [PeerController] Creando canal directo federado entre " + user1Id + " y " + user2Id);
+            
+            // Usar la fachada para crear el canal
+            // La lógica en ChannelServiceImpl detectará que es local y lo creará
+            var channelDto = chatFachada.crearCanalDirecto(user1Id, user2Id);
+            
+            // Preparar respuesta con los datos del canal
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("channelId", channelDto.getChannelId().toString());
+            responseData.put("channelName", channelDto.getChannelName());
+            responseData.put("channelType", channelDto.getChannelType());
+            responseData.put("ownerId", channelDto.getOwner().getUserId().toString());
+            responseData.put("peerId", channelDto.getPeerId() != null ? channelDto.getPeerId().toString() : null);
+            
+            if (requestId != null) {
+                responseData.put("requestId", requestId);
+            }
+            
+            System.out.println("✓ [PeerController] Canal directo federado creado exitosamente: " + channelDto.getChannelId());
+            sendJsonResponse(handler, "crearCanalDirecto", true, 
+                "Canal directo creado exitosamente", responseData);
+            
+        } catch (Exception e) {
+            System.err.println("✗ [PeerController] Error al crear canal directo federado: " + e.getMessage());
+            e.printStackTrace();
+            sendJsonResponse(handler, "crearCanalDirecto", false, 
+                "Error al crear canal: " + e.getMessage(), 
+                createErrorData("federation", e.getMessage()));
+        }
+    }
+    
+    /**
+     * Maneja retransmisión en el formato antiguo (forward a otro peer).
+     */
+    private void handleRetransmitirPeticionFormatoAntiguo(JsonObject payload, IClientHandler handler) {
+        System.out.println("→ [PeerController] Procesando retransmisión formato antiguo (Forward)");
+        
+        try {
             String peerDestinoIdStr = payload.get("peerDestinoId").getAsString();
             UUID peerDestinoId = UUID.fromString(peerDestinoIdStr);
             

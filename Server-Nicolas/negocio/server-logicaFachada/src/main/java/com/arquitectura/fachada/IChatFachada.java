@@ -23,6 +23,7 @@ import com.arquitectura.DTO.peers.RetransmitRequestDto;
 import com.arquitectura.DTO.peers.RetransmitResponseDto;
 import com.arquitectura.DTO.peers.UpdatePeerListRequestDto;
 import com.arquitectura.DTO.peers.UpdatePeerListResponseDto;
+
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
 
 
@@ -103,6 +104,7 @@ public interface IChatFachada {
     DTODownloadInfo startDownload(String fileId) throws Exception;
     byte[] getChunk(String downloadId, int chunkNumber) throws Exception;
 
+
     // --- MÉTODOS P2P (PEER-TO-PEER) usando com.arquitectura.DTO.p2p ---
 
     /**
@@ -167,4 +169,5 @@ public interface IChatFachada {
      */
     DTOResponse retransmitirPeticion(UUID peerDestinoId, DTORequest peticionOriginal) throws Exception;
 }
+
 

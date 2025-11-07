@@ -2,13 +2,15 @@ package com.arquitectura.logicaPeers.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
 
 /**
  * Clase de configuración para propiedades P2P.
- * Lee las propiedades del archivo application.properties y las hace disponibles
+ * Lee las propiedades del archivo config/p2p.properties y las hace disponibles
  * para los servicios P2P.
  */
 @Configuration
+@PropertySource("file:./config/p2p.properties")
 public class P2PConfig {
     
     // ==================== CONFIGURACIÓN GENERAL P2P ====================
