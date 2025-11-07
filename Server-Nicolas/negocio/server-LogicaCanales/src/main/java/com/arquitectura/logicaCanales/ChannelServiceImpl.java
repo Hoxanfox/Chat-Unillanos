@@ -1,5 +1,7 @@
 package com.arquitectura.logicaCanales;
 
+import com.arquitectura.DTO.Comunicacion.DTORequest;
+import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.canales.ChannelResponseDto;
 import com.arquitectura.DTO.canales.CreateChannelRequestDto;
 import com.arquitectura.DTO.canales.InviteMemberRequestDto;
@@ -13,6 +15,7 @@ import com.arquitectura.domain.User;
 import com.arquitectura.domain.enums.EstadoMembresia;
 import com.arquitectura.domain.enums.TipoCanal;
 import com.arquitectura.events.UserInvitedEvent;
+import com.arquitectura.logicaPeers.UserPeerMappingService;
 import com.arquitectura.persistence.repository.ChannelRepository;
 import com.arquitectura.persistence.repository.MembresiaCanalRepository;
 import com.arquitectura.persistence.repository.PeerRepository;
@@ -23,6 +26,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -38,18 +42,21 @@ public class ChannelServiceImpl implements IChannelService {
     private final PeerRepository peerRepository;
     private final NetworkUtils networkUtils;
     private final ApplicationEventPublisher eventPublisher;
+    private final UserPeerMappingService userPeerMappingService;
 
 
     @Autowired
     public ChannelServiceImpl(ChannelRepository channelRepository, UserRepository userRepository, 
                               MembresiaCanalRepository membresiaCanalRepository, PeerRepository peerRepository,
-                              NetworkUtils networkUtils, ApplicationEventPublisher eventPublisher) {
+                              NetworkUtils networkUtils, ApplicationEventPublisher eventPublisher,
+                              UserPeerMappingService userPeerMappingService) {
         this.channelRepository = channelRepository;
         this.userRepository = userRepository;
         this.membresiaCanalRepository = membresiaCanalRepository;
         this.peerRepository = peerRepository;
         this.networkUtils = networkUtils;
         this.eventPublisher = eventPublisher;
+        this.userPeerMappingService = userPeerMappingService;
     }
 
     @Override
@@ -98,36 +105,96 @@ public class ChannelServiceImpl implements IChannelService {
             throw new Exception("No se puede crear un canal directo con uno mismo.");
         }
 
-        // 1. Buscamos en ambas direcciones (A->B y B->A) por si ya existe.
+        // ========== PASO 1: VERIFICAR SI EL CANAL YA EXISTE ==========
+
+        // 1.1 Buscamos en ambas direcciones (A->B y B->A) por si ya existe
         Optional<Channel> existingChannel = channelRepository.findDirectChannelBetweenUsers(TipoCanal.DIRECTO, user1Id, user2Id);
         if (existingChannel.isPresent()) {
             Channel channel = existingChannel.get();
             System.out.println("✓ Canal directo ya existe entre " + user1Id + " y " + user2Id + ". ID: " + channel.getChannelId());
-            ChannelResponseDto dto = mapToChannelResponseDto(channel);
-            System.out.println("✓ Devolviendo DTO: channelId=" + dto.getChannelId() + ", channelName=" + dto.getChannelName());
-
-            System.out.println("Canal directo ya existe entre " + user1Id + " y " + user2Id + ". Devolviendo existente.");
-            return existingChannel.get();
-
+            return channel;
         }
-        // Hacemos la búsqueda inversa por si se creó al revés
+
+        // 1.2 Hacemos la búsqueda inversa por si se creó al revés
         existingChannel = channelRepository.findDirectChannelBetweenUsers(TipoCanal.DIRECTO, user2Id, user1Id);
         if (existingChannel.isPresent()) {
-
             Channel channel = existingChannel.get();
             System.out.println("✓ Canal directo ya existe entre " + user2Id + " y " + user1Id + ". ID: " + channel.getChannelId());
-            ChannelResponseDto dto = mapToChannelResponseDto(channel);
-            System.out.println("✓ Devolviendo DTO: channelId=" + dto.getChannelId() + ", channelName=" + dto.getChannelName());
-            System.out.println("Canal directo ya existe entre " + user2Id + " y " + user1Id + ". Devolviendo existente.");
-            return existingChannel.get();
-
+            return channel;
         }
 
-        // Si no existe, procedemos a crear uno nuevo
-        System.out.println("→ Creando nuevo canal directo entre " + user1Id + " y " + user2Id);
-        User user1 = userRepository.findById(user1Id).orElseThrow(() -> new Exception("El usuario con ID " + user1Id + " no existe."));
-        User user2 = userRepository.findById(user2Id).orElseThrow(() -> new Exception("El usuario con ID " + user2Id + " no existe."));
-        
+        // ========== PASO 2: VERIFICAR UBICACIÓN DE LOS USUARIOS (FEDERACIÓN) ==========
+
+        System.out.println("→ [Federation] Verificando ubicación de usuarios...");
+        System.out.println("   User1 (" + user1Id + "): " + (userPeerMappingService.isLocalUser(user1Id) ? "LOCAL" : "REMOTO"));
+        System.out.println("   User2 (" + user2Id + "): " + (userPeerMappingService.isLocalUser(user2Id) ? "LOCAL" : "REMOTO"));
+
+        // 2.1 Verificar si user1 existe localmente
+        Optional<User> user1Local = userRepository.findById(user1Id);
+
+        // 2.2 Verificar si user2 existe localmente
+        Optional<User> user2Local = userRepository.findById(user2Id);
+
+        // ========== PASO 3: LÓGICA DE FEDERACIÓN ==========
+
+        // CASO A: Ambos usuarios son locales -> Crear canal normalmente
+        if (user1Local.isPresent() && user2Local.isPresent()) {
+            System.out.println("✓ [Federation] Ambos usuarios son locales. Creando canal localmente.");
+            return crearCanalDirectoLocal(user1Local.get(), user2Local.get());
+        }
+
+        // CASO B: User2 es remoto -> Lanzar excepción para que la Fachada maneje la federación
+        if (user1Local.isPresent() && user2Local.isEmpty()) {
+            System.out.println("→ [Federation] User2 es remoto. Se requiere federación P2P.");
+
+            // Obtener el peer al que pertenece user2
+            Optional<UUID> user2PeerId = userPeerMappingService.getPeerForUser(user2Id);
+
+            if (user2PeerId.isEmpty()) {
+                throw new Exception("No se pudo determinar el peer del usuario remoto " + user2Id);
+            }
+
+            // Lanzar excepción para que la capa superior (Fachada) maneje la comunicación P2P
+            throw new com.arquitectura.logicaCanales.exceptions.FederationRequiredException(
+                "Se requiere federación P2P para crear canal con usuario remoto",
+                user2PeerId.get(),
+                user1Id,
+                user2Id,
+                "crearCanalDirecto"
+            );
+        }
+
+        // CASO C: User1 es remoto -> Lanzar excepción para que la Fachada maneje la federación
+        if (user1Local.isEmpty() && user2Local.isPresent()) {
+            System.out.println("→ [Federation] User1 es remoto. Se requiere federación P2P.");
+
+            // Obtener el peer al que pertenece user1
+            Optional<UUID> user1PeerId = userPeerMappingService.getPeerForUser(user1Id);
+
+            if (user1PeerId.isEmpty()) {
+                throw new Exception("No se pudo determinar el peer del usuario remoto " + user1Id);
+            }
+
+            // Lanzar excepción para que la capa superior (Fachada) maneje la comunicación P2P
+            throw new com.arquitectura.logicaCanales.exceptions.FederationRequiredException(
+                "Se requiere federación P2P para crear canal con usuario remoto",
+                user1PeerId.get(),
+                user1Id,
+                user2Id,
+                "crearCanalDirecto"
+            );
+        }
+
+        // CASO D: Ambos usuarios son remotos -> Error (no deberían estar aquí)
+        throw new Exception("Ambos usuarios son remotos. Esta petición debería haberse hecho desde otro servidor.");
+    }
+
+    /**
+     * Crea un canal directo localmente entre dos usuarios locales.
+     */
+    private Channel crearCanalDirectoLocal(User user1, User user2) {
+        System.out.println("→ Creando nuevo canal directo local entre " + user1.getUserId() + " y " + user2.getUserId());
+
         // Obtener el Peer (servidor) actual
         String serverPeerAddress = networkUtils.getServerIPAddress();
         Peer currentPeer = peerRepository.findByIp(serverPeerAddress)
@@ -140,17 +207,13 @@ public class ChannelServiceImpl implements IChannelService {
         // Guardamos el canal
         Channel savedChannel = channelRepository.save(directChannel);
         System.out.println("✓ Canal guardado con ID: " + savedChannel.getChannelId());
+
         // Añadimos a ambos usuarios como miembros activos
         anadirMiembroConEstado(savedChannel, user1, EstadoMembresia.ACTIVO);
         anadirMiembroConEstado(savedChannel, user2, EstadoMembresia.ACTIVO);
 
         System.out.println("✓ Miembros agregados al canal");
-        // Volvemos a guardar para persistir las nuevas membresías
-        ChannelResponseDto dto = mapToChannelResponseDto(savedChannel);
-        System.out.println("✓ Devolviendo DTO: channelId=" + dto.getChannelId() + ", channelName=" + dto.getChannelName());
-
         return savedChannel;
-
     }
     
     @Override

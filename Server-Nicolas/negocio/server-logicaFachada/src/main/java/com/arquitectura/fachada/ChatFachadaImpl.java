@@ -32,6 +32,7 @@ import com.arquitectura.utils.chunkManager.FileChunkManager;
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
 import com.arquitectura.utils.file.IFileStorageService;
 import com.arquitectura.utils.logs.ILogService;
+import com.google.gson.Gson;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
@@ -53,9 +54,20 @@ public class ChatFachadaImpl implements IChatFachada {
     private final ILogService logService;
     private final com.arquitectura.logicaUsuarios.IPeerService peerServiceUsuarios;
     private final com.arquitectura.logicaPeers.IPeerService peerServicePeers;
+    private final Gson gson;
 
     @Autowired
-    public ChatFachadaImpl(IUserService userService, IChannelService channelService, IMessageService messageService, IAudioTranscriptionService transcriptionService, IFileStorageService fileStorageService, ApplicationEventPublisher eventPublisher, FileChunkManager fileChunkManager, ILogService logService, @Qualifier("peerServiceUsuarios") com.arquitectura.logicaUsuarios.IPeerService peerServiceUsuarios, @Qualifier("peerServiceP2P") com.arquitectura.logicaPeers.IPeerService peerServicePeers) {
+    public ChatFachadaImpl(IUserService userService,
+                          IChannelService channelService,
+                          IMessageService messageService,
+                          IAudioTranscriptionService transcriptionService,
+                          IFileStorageService fileStorageService,
+                          ApplicationEventPublisher eventPublisher,
+                          FileChunkManager fileChunkManager,
+                          ILogService logService,
+                          @Qualifier("peerServiceUsuarios") com.arquitectura.logicaUsuarios.IPeerService peerServiceUsuarios,
+                          @Qualifier("peerServiceP2P") com.arquitectura.logicaPeers.IPeerService peerServicePeers,
+                          Gson gson) {
         this.userService = userService;
         this.channelService = channelService;
         this.messageService = messageService;
@@ -66,6 +78,7 @@ public class ChatFachadaImpl implements IChatFachada {
         this.logService = logService;
         this.peerServiceUsuarios = peerServiceUsuarios;
         this.peerServicePeers = peerServicePeers;
+        this.gson = gson;
     }
 
     // Metodos de usuario
@@ -112,23 +125,6 @@ public class ChatFachadaImpl implements IChatFachada {
     @Override
     public List<UserResponseDto> listarContactos(UUID excludeUserId) {
         return userService.listarContactos(excludeUserId);
-    }
-
-    @Override
-    public void enviarPedidoLogout(UUID userId, String motivo) throws Exception {
-        // Verificar que el usuario existe
-        UserResponseDto usuario = userService.getUsersByIds(Set.of(userId)).stream()
-                .findFirst()
-                .orElseThrow(() -> new Exception("Usuario con ID " + userId + " no encontrado"));
-
-        // Publicar evento para enviar la notificación push de logout
-        UUID peerId = usuario.getPeerId();
-        eventPublisher.publishEvent(new com.arquitectura.events.ForceLogoutEvent(
-                this,
-                userId,
-                peerId,
-                motivo != null ? motivo : "Sesión cerrada por el servidor"
-        ));
     }
 
     // --- MÉTODOS DE PEER ---
@@ -339,9 +335,6 @@ public class ChatFachadaImpl implements IChatFachada {
         return peerServicePeers.retransmitirPeticion(peerDestinoId, peticionOriginal);
     }
 
-    @Override
-    public byte[] descargarArchivoDesdePeer(UUID peerDestinoId, String fileId) throws Exception {
-        return peerServicePeers.descargarArchivoDesdePeer(peerDestinoId, fileId);
-    }
-
 }
+
+

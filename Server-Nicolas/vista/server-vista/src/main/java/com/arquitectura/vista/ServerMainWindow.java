@@ -21,6 +21,7 @@ public class ServerMainWindow extends JFrame {
     private ConnectedUsersReportPanel connectedUsersReportPanel;
     private TranscriptionsReportPanel transcriptionsReportPanel;
     private BroadcastMessagePanel broadcastMessagePanel;
+    private PeersReportPanel peersReportPanel;
     // Aquí añadirías los otros paneles de informes a medida que los crees
 
     public ServerMainWindow(ServerViewController controller) {
@@ -54,6 +55,7 @@ public class ServerMainWindow extends JFrame {
         connectedUsersReportPanel = new ConnectedUsersReportPanel(controller);
         transcriptionsReportPanel = new TranscriptionsReportPanel(controller);
         broadcastMessagePanel = new BroadcastMessagePanel(controller);
+        peersReportPanel = new PeersReportPanel(controller);
 
         // Añadimos los paneles al CardLayout con un nombre único
         mainContentPanel.add(registerUserPanel, "REGISTER_USER_PANEL");
@@ -63,6 +65,7 @@ public class ServerMainWindow extends JFrame {
         mainContentPanel.add(connectedUsersReportPanel, "CONNECTED_USERS_PANEL");
         mainContentPanel.add(transcriptionsReportPanel, "TRANSCRIPTIONS_PANEL");
         mainContentPanel.add(broadcastMessagePanel, "BROADCAST_PANEL");
+        mainContentPanel.add(peersReportPanel, "PEERS_REPORT_PANEL");
 
         add(mainContentPanel, BorderLayout.CENTER);
         cardLayout.show(mainContentPanel, "REGISTER_USER_PANEL");
@@ -97,6 +100,7 @@ public class ServerMainWindow extends JFrame {
         JButton btnShowTranscriptions = new JButton("Texto de Mensaje de audio");
         JButton btnBroadcast = new JButton("Enviar Mensaje Global");
         JButton btnLogs = new JButton("Logs");
+        JButton btnShowPeers = new JButton("Ver Peers");
         // ... otros botones ...
 
         // Guardamos los botones en un array para manipularlos fácilmente
@@ -107,7 +111,8 @@ public class ServerMainWindow extends JFrame {
                 btnShowConnectedUsers,
                 btnShowTranscriptions,
                 btnLogs,
-                btnBroadcast
+                btnBroadcast,
+                btnShowPeers
                 // ... añade los otros botones aquí
         };
 
@@ -163,6 +168,10 @@ public class ServerMainWindow extends JFrame {
         btnBroadcast.addActionListener(e -> {
             logsReportPanel.stopAutoRefresh(); // Detener el refresco de logs si estaba activo
             cardLayout.show(mainContentPanel, "BROADCAST_PANEL");
+        });
+        btnShowPeers.addActionListener(e -> {
+            peersReportPanel.refreshReport(); // Carga o refresca los datos del nuevo informe
+            cardLayout.show(mainContentPanel, "PEERS_REPORT_PANEL");
         });
 
 
