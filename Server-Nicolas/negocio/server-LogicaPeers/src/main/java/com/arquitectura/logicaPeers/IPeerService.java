@@ -127,6 +127,16 @@ public interface IPeerService {
      */
     DTOResponse retransmitirPeticion(UUID peerDestinoId, DTORequest peticionOriginal) throws Exception;
     
+    /**
+     * Descarga un archivo completo desde otro peer usando las rutas startFileDownload y requestFileChunk.
+     *
+     * @param peerDestinoId ID del peer desde donde descargar el archivo
+     * @param fileId ID del archivo a descargar
+     * @return Bytes del archivo completo descargado
+     * @throws Exception si hay error en la descarga
+     */
+    byte[] descargarArchivoDesdePeer(UUID peerDestinoId, String fileId) throws Exception;
+
     // ==================== PEER ACTUAL ====================
     
     /**

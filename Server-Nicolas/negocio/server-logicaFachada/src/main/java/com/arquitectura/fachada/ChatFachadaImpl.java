@@ -114,6 +114,23 @@ public class ChatFachadaImpl implements IChatFachada {
         return userService.listarContactos(excludeUserId);
     }
 
+    @Override
+    public void enviarPedidoLogout(UUID userId, String motivo) throws Exception {
+        // Verificar que el usuario existe
+        UserResponseDto usuario = userService.getUsersByIds(Set.of(userId)).stream()
+                .findFirst()
+                .orElseThrow(() -> new Exception("Usuario con ID " + userId + " no encontrado"));
+
+        // Publicar evento para enviar la notificación push de logout
+        UUID peerId = usuario.getPeerId();
+        eventPublisher.publishEvent(new com.arquitectura.events.ForceLogoutEvent(
+                this,
+                userId,
+                peerId,
+                motivo != null ? motivo : "Sesión cerrada por el servidor"
+        ));
+    }
+
     // --- MÉTODOS DE PEER ---
     @Override
     public List<com.arquitectura.DTO.peers.PeerResponseDto> listarPeersDisponibles(UUID excludePeerId) throws Exception {
@@ -320,6 +337,11 @@ public class ChatFachadaImpl implements IChatFachada {
     @Override
     public DTOResponse retransmitirPeticion(UUID peerDestinoId, DTORequest peticionOriginal) throws Exception {
         return peerServicePeers.retransmitirPeticion(peerDestinoId, peticionOriginal);
+    }
+
+    @Override
+    public byte[] descargarArchivoDesdePeer(UUID peerDestinoId, String fileId) throws Exception {
+        return peerServicePeers.descargarArchivoDesdePeer(peerDestinoId, fileId);
     }
 
 }

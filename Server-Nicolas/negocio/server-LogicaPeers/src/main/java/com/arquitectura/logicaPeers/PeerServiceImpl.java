@@ -27,16 +27,18 @@ public class PeerServiceImpl implements IPeerService {
     private final PeerRepository peerRepository;
     private final NetworkUtils networkUtils;
     private final P2PConfig p2pConfig;
-    
+    private final com.arquitectura.utils.p2p.PeerConnectionPool peerConnectionPool;
+
     // Cache del peer actual
     private Peer peerActual;
 
     @Autowired
-    public PeerServiceImpl(PeerRepository peerRepository, NetworkUtils networkUtils, P2PConfig p2pConfig) {
+    public PeerServiceImpl(PeerRepository peerRepository, NetworkUtils networkUtils, P2PConfig p2pConfig, com.arquitectura.utils.p2p.PeerConnectionPool peerConnectionPool) {
         this.peerRepository = peerRepository;
         this.networkUtils = networkUtils;
         this.p2pConfig = p2pConfig;
-        
+        this.peerConnectionPool = peerConnectionPool;
+
         // Inicializar al construir
         System.out.println("✓ [PeerService] Servicio de peers inicializado");
         
@@ -241,18 +243,89 @@ public class PeerServiceImpl implements IPeerService {
             throw new Exception("El peer destino no está activo: " + peerDestinoId);
         }
         
-        // TODO: Implementar cliente HTTP/TCP para enviar la petición al peer
-        // Por ahora, retornamos una respuesta de error indicando que no está implementado
-        System.out.println("⚠ [PeerService] Retransmisión no implementada aún");
-        
-        DTOResponse response = new DTOResponse(
-            peticionOriginal.getAction(),
-            "error",
-            "Retransmisión P2P no implementada aún",
-            null
+        // Usar PeerConnectionPool para enviar la petición
+        DTOResponse response = peerConnectionPool.enviarPeticion(
+            peerDestino.getIp(),
+            peerDestino.getPuerto(),
+            peticionOriginal
         );
         
         return response;
+    }
+
+    @Override
+    public byte[] descargarArchivoDesdePeer(UUID peerDestinoId, String fileId) throws Exception {
+        System.out.println("→ [PeerService] Descargando archivo " + fileId + " desde peer: " + peerDestinoId);
+
+        // Obtener información del peer destino
+        Peer peerDestino = peerRepository.findById(peerDestinoId)
+                .orElseThrow(() -> new Exception("Peer destino no encontrado: " + peerDestinoId));
+
+        if (!peerDestino.estaActivo()) {
+            throw new Exception("El peer destino no está activo: " + peerDestinoId);
+        }
+
+        // Paso 1: Iniciar la descarga para obtener información del archivo
+        System.out.println("→ [PeerService] Iniciando descarga con startFileDownload");
+        DTORequest startDownloadRequest = new DTORequest(
+            "startFileDownload",
+            java.util.Map.of("fileId", fileId)
+        );
+
+        DTOResponse startResponse = peerConnectionPool.enviarPeticion(
+            peerDestino.getIp(),
+            peerDestino.getPuerto(),
+            startDownloadRequest
+        );
+
+        if (!"success".equals(startResponse.getStatus())) {
+            throw new Exception("Error al iniciar descarga: " + startResponse.getMessage());
+        }
+
+        // Parsear la información de descarga
+        com.google.gson.Gson gson = new com.google.gson.Gson();
+        com.google.gson.JsonObject payload = gson.toJsonTree(startResponse.getData()).getAsJsonObject();
+        String downloadId = payload.get("downloadId").getAsString();
+        int totalChunks = payload.get("totalChunks").getAsInt();
+        long fileSize = payload.get("fileSize").getAsLong();
+
+        System.out.println("→ [PeerService] Archivo info: downloadId=" + downloadId + ", totalChunks=" + totalChunks + ", size=" + fileSize);
+
+        // Paso 2: Descargar todos los chunks
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+
+        for (int chunkNumber = 0; chunkNumber < totalChunks; chunkNumber++) {
+            System.out.println("→ [PeerService] Solicitando chunk " + (chunkNumber + 1) + "/" + totalChunks);
+
+            DTORequest chunkRequest = new DTORequest(
+                "requestFileChunk",
+                java.util.Map.of(
+                    "downloadId", downloadId,
+                    "chunkNumber", chunkNumber
+                )
+            );
+
+            DTOResponse chunkResponse = peerConnectionPool.enviarPeticion(
+                peerDestino.getIp(),
+                peerDestino.getPuerto(),
+                chunkRequest
+            );
+
+            if (!"success".equals(chunkResponse.getStatus())) {
+                throw new Exception("Error al descargar chunk " + chunkNumber + ": " + chunkResponse.getMessage());
+            }
+
+            // Extraer y decodificar el chunk
+            com.google.gson.JsonObject chunkData = gson.toJsonTree(chunkResponse.getData()).getAsJsonObject();
+            String chunkBase64 = chunkData.get("chunkDataBase64").getAsString();
+            byte[] chunkBytes = java.util.Base64.getDecoder().decode(chunkBase64);
+
+            // Escribir los bytes del chunk al stream
+            baos.write(chunkBytes);
+        }
+
+        System.out.println("✓ [PeerService] Archivo descargado exitosamente (" + baos.size() + " bytes)");
+        return baos.toByteArray();
     }
 
     // ==================== PEER ACTUAL ====================

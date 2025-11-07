@@ -30,7 +30,10 @@ public class MessageController extends BaseController {
         "solicitarhistorialcanal",
         "obtenermensajescanal",
         "obtenertranscripciones",
-        "vertranscripciones"
+        "vertranscripciones",
+        "enviarmensajedirecto",
+        "enviarmensajedirectoaudio",
+        "solicitarhistorialprivado"
     );
     
     @Autowired
@@ -60,6 +63,15 @@ public class MessageController extends BaseController {
             case "obtenertranscripciones":
             case "vertranscripciones":
                 handleGetTranscriptions(request, handler);
+                break;
+            case "enviarmensajedirecto":
+                handleSendDirectMessage(request, handler);
+                break;
+            case "enviarmensajedirectoaudio":
+                handleSendDirectAudioMessage(request, handler);
+                break;
+            case "solicitarhistorialprivado":
+                handleGetPrivateHistory(request, handler);
                 break;
             default:
                 return false;
@@ -370,6 +382,359 @@ public class MessageController extends BaseController {
             System.err.println("Error al obtener transcripciones: " + e.getMessage());
             e.printStackTrace();
             sendJsonResponse(handler, "obtenerTranscripciones", false, "Error interno del servidor al obtener transcripciones", null);
+        }
+    }
+
+    /**
+     * Maneja el envío de mensajes directos entre usuarios.
+     * Crea o recupera un canal directo y envía el mensaje.
+     */
+    private void handleSendDirectMessage(DTORequest request, IClientHandler handler) {
+        if (!validatePayload(request.getPayload(), handler, "enviarMensajeDirecto")) {
+            return;
+        }
+
+        try {
+            JsonObject mensajeJson = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+
+            // Extraer campos del request
+            String peerDestinoIdStr = mensajeJson.has("peerDestinoId") ? mensajeJson.get("peerDestinoId").getAsString() : null;
+            String peerRemitenteIdStr = mensajeJson.has("peerRemitenteId") ? mensajeJson.get("peerRemitenteId").getAsString() : null;
+            String remitenteIdStr = mensajeJson.has("remitenteId") ? mensajeJson.get("remitenteId").getAsString() : null;
+            String destinatarioIdStr = mensajeJson.has("destinatarioId") ? mensajeJson.get("destinatarioId").getAsString() : null;
+            String tipo = mensajeJson.has("tipo") ? mensajeJson.get("tipo").getAsString() : "texto";
+            String contenido = mensajeJson.has("contenido") ? mensajeJson.get("contenido").getAsString() : null;
+            String fechaEnvioStr = mensajeJson.has("fechaEnvio") ? mensajeJson.get("fechaEnvio").getAsString() : null;
+
+            // Validaciones de campos requeridos
+            if (remitenteIdStr == null || remitenteIdStr.trim().isEmpty()) {
+                sendJsonResponse(handler, "enviarMensajeDirecto", false, "Datos de mensaje inválidos",
+                    createErrorData("remitenteId", "El ID del remitente es requerido"));
+                return;
+            }
+
+            if (destinatarioIdStr == null || destinatarioIdStr.trim().isEmpty()) {
+                sendJsonResponse(handler, "enviarMensajeDirecto", false, "Datos de mensaje inválidos",
+                    createErrorData("destinatarioId", "El ID del destinatario es requerido"));
+                return;
+            }
+
+            if (contenido == null || contenido.trim().isEmpty()) {
+                sendJsonResponse(handler, "enviarMensajeDirecto", false, "Datos de mensaje inválidos",
+                    createErrorData("contenido", "El contenido no puede estar vacío"));
+                return;
+            }
+
+            if (contenido.length() > 5000) {
+                sendJsonResponse(handler, "enviarMensajeDirecto", false, "Datos de mensaje inválidos",
+                    createErrorData("contenido", "El mensaje es demasiado largo (máximo 5000 caracteres)"));
+                return;
+            }
+
+            // Convertir IDs a UUID
+            UUID remitenteId = UUID.fromString(remitenteIdStr);
+            UUID destinatarioId = UUID.fromString(destinatarioIdStr);
+
+            // Verificar autenticación: el remitente debe ser el usuario autenticado
+            if (!handler.getAuthenticatedUser().getUserId().equals(remitenteId)) {
+                sendJsonResponse(handler, "enviarMensajeDirecto", false, "Error al enviar mensaje: Usuario no autorizado",
+                    createErrorData("remitenteId", "No tienes permiso para enviar como este usuario"));
+                return;
+            }
+
+            // Obtener o crear el canal directo entre remitente y destinatario
+            com.arquitectura.DTO.canales.ChannelResponseDto canalDirecto;
+            try {
+                canalDirecto = chatFachada.crearCanalDirecto(remitenteId, destinatarioId);
+            } catch (Exception e) {
+                System.err.println("Error al crear/obtener canal directo: " + e.getMessage());
+
+                // Verificar si el error es porque el destinatario no existe
+                if (e.getMessage() != null && (e.getMessage().contains("Usuario") || e.getMessage().contains("no existe"))) {
+                    sendJsonResponse(handler, "enviarMensajeDirecto", false, "Destinatario no encontrado o desconectado", null);
+                    return;
+                }
+
+                throw e;
+            }
+
+            // Preparar el DTO de envío de mensaje
+            String messageType = tipo.equalsIgnoreCase("audio") ? "AUDIO" : "TEXT";
+            SendMessageRequestDto sendMessageDto = new SendMessageRequestDto(
+                canalDirecto.getChannelId(),
+                messageType,
+                contenido
+            );
+
+            // Enviar el mensaje según el tipo
+            MessageResponseDto messageResponse;
+            if (messageType.equals("AUDIO")) {
+                messageResponse = chatFachada.enviarMensajeAudio(sendMessageDto, remitenteId);
+            } else {
+                messageResponse = chatFachada.enviarMensajeTexto(sendMessageDto, remitenteId);
+            }
+
+            // Construir respuesta exitosa en el formato solicitado
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("mensajeId", messageResponse.getMessageId().toString());
+            responseData.put("fechaEnvio", messageResponse.getTimestamp().toString());
+
+            sendJsonResponse(handler, "enviarMensajeDirecto", true, "Mensaje enviado", responseData);
+
+        } catch (IllegalArgumentException e) {
+            String errorMessage = e.getMessage();
+            String campo = "general";
+
+            if (errorMessage != null) {
+                if (errorMessage.contains("remitente")) {
+                    campo = "remitenteId";
+                } else if (errorMessage.contains("destinatario")) {
+                    campo = "destinatarioId";
+                } else if (errorMessage.contains("contenido")) {
+                    campo = "contenido";
+                }
+            }
+
+            sendJsonResponse(handler, "enviarMensajeDirecto", false, "Datos de mensaje inválidos",
+                createErrorData(campo, errorMessage != null ? errorMessage : "Error de validación"));
+
+        } catch (Exception e) {
+            System.err.println("Error al enviar mensaje directo: " + e.getMessage());
+            e.printStackTrace();
+
+            String errorMsg = e.getMessage();
+            if (errorMsg != null && (errorMsg.contains("no existe") || errorMsg.contains("not found"))) {
+                sendJsonResponse(handler, "enviarMensajeDirecto", false, "Destinatario no encontrado o desconectado", null);
+            } else {
+                sendJsonResponse(handler, "enviarMensajeDirecto", false, "Error al enviar mensaje: " +
+                    (errorMsg != null ? errorMsg : "Error desconocido"), null);
+            }
+        }
+    }
+
+    /**
+     * Maneja el envío de mensajes de audio directos entre usuarios.
+     * Crea o recupera un canal directo y envía el mensaje de audio.
+     */
+    private void handleSendDirectAudioMessage(DTORequest request, IClientHandler handler) {
+        if (!validatePayload(request.getPayload(), handler, "enviarMensajeDirectoAudio")) {
+            return;
+        }
+
+        try {
+            JsonObject mensajeJson = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+
+            // Extraer campos del request
+            String peerDestinoIdStr = mensajeJson.has("peerDestinoId") ? mensajeJson.get("peerDestinoId").getAsString() : null;
+            String peerRemitenteIdStr = mensajeJson.has("peerRemitenteId") ? mensajeJson.get("peerRemitenteId").getAsString() : null;
+            String remitenteIdStr = mensajeJson.has("remitenteId") ? mensajeJson.get("remitenteId").getAsString() : null;
+            String destinatarioIdStr = mensajeJson.has("destinatarioId") ? mensajeJson.get("destinatarioId").getAsString() : null;
+            String contenido = mensajeJson.has("contenido") ? mensajeJson.get("contenido").getAsString() : null;
+            String fechaEnvioStr = mensajeJson.has("fechaEnvio") ? mensajeJson.get("fechaEnvio").getAsString() : null;
+            String tipo = mensajeJson.has("tipo") ? mensajeJson.get("tipo").getAsString() : "audio";
+
+            // Validaciones de campos requeridos
+            if (remitenteIdStr == null || remitenteIdStr.trim().isEmpty()) {
+                sendJsonResponse(handler, "enviarMensajeDirectoAudio", false, "Datos de mensaje inválidos",
+                    createErrorData("remitenteId", "El ID del remitente es requerido"));
+                return;
+            }
+
+            if (destinatarioIdStr == null || destinatarioIdStr.trim().isEmpty()) {
+                sendJsonResponse(handler, "enviarMensajeDirectoAudio", false, "Datos de mensaje inválidos",
+                    createErrorData("destinatarioId", "El ID del destinatario es requerido"));
+                return;
+            }
+
+            if (contenido == null || contenido.trim().isEmpty()) {
+                sendJsonResponse(handler, "enviarMensajeDirectoAudio", false, "Datos de mensaje inválidos",
+                    createErrorData("contenido", "El enlace del archivo de audio es requerido"));
+                return;
+            }
+
+            // Convertir IDs a UUID
+            UUID remitenteId;
+            UUID destinatarioId;
+
+            try {
+                remitenteId = UUID.fromString(remitenteIdStr);
+                destinatarioId = UUID.fromString(destinatarioIdStr);
+            } catch (IllegalArgumentException e) {
+                sendJsonResponse(handler, "enviarMensajeDirectoAudio", false, "Datos de mensaje inválidos",
+                    createErrorData("general", "Formato de UUID inválido"));
+                return;
+            }
+
+            // Verificar autenticación: el remitente debe ser el usuario autenticado
+            if (!handler.getAuthenticatedUser().getUserId().equals(remitenteId)) {
+                sendJsonResponse(handler, "enviarMensajeDirectoAudio", false, "Error al enviar mensaje de audio: Usuario no autorizado",
+                    createErrorData("remitenteId", "No tienes permiso para enviar como este usuario"));
+                return;
+            }
+
+            // Obtener o crear el canal directo entre remitente y destinatario
+            com.arquitectura.DTO.canales.ChannelResponseDto canalDirecto;
+            try {
+                canalDirecto = chatFachada.crearCanalDirecto(remitenteId, destinatarioId);
+            } catch (Exception e) {
+                System.err.println("Error al crear/obtener canal directo: " + e.getMessage());
+
+                // Verificar si el error es porque el destinatario no existe
+                if (e.getMessage() != null && (e.getMessage().contains("Usuario") || e.getMessage().contains("no existe"))) {
+                    sendJsonResponse(handler, "enviarMensajeDirectoAudio", false, "Destinatario no encontrado o desconectado", null);
+                    return;
+                }
+
+                throw e;
+            }
+
+            // El contenido es un enlace/ruta del archivo de audio
+            // Se usa directamente como ruta del archivo
+            String audioFilePath = contenido;
+
+            // Crear DTO de request con la ruta del archivo
+            SendMessageRequestDto sendAudioDto = new SendMessageRequestDto(
+                canalDirecto.getChannelId(),
+                "AUDIO",
+                audioFilePath
+            );
+
+            // Llamar a la fachada para enviar el mensaje de audio
+            MessageResponseDto audioResponse = chatFachada.enviarMensajeAudio(sendAudioDto, remitenteId);
+
+            // Construir respuesta exitosa en el formato solicitado
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("mensajeId", audioResponse.getMessageId().toString());
+            responseData.put("fechaEnvio", audioResponse.getTimestamp().toString());
+
+            sendJsonResponse(handler, "enviarMensajeDirectoAudio", true, "Mensaje de audio enviado", responseData);
+
+        } catch (IllegalArgumentException e) {
+            String errorMessage = e.getMessage();
+            String campo = "general";
+
+            if (errorMessage != null) {
+                if (errorMessage.contains("remitente")) {
+                    campo = "remitenteId";
+                } else if (errorMessage.contains("destinatario")) {
+                    campo = "destinatarioId";
+                } else if (errorMessage.contains("audio") || errorMessage.contains("contenido")) {
+                    campo = "contenido";
+                }
+            }
+
+            sendJsonResponse(handler, "enviarMensajeDirectoAudio", false, "Datos de mensaje inválidos",
+                createErrorData(campo, errorMessage != null ? errorMessage : "Error de validación"));
+
+        } catch (Exception e) {
+            System.err.println("Error al enviar mensaje de audio directo: " + e.getMessage());
+            e.printStackTrace();
+
+            String errorMsg = e.getMessage();
+            if (errorMsg != null && (errorMsg.contains("no existe") || errorMsg.contains("not found"))) {
+                sendJsonResponse(handler, "enviarMensajeDirectoAudio", false, "Destinatario no encontrado o desconectado", null);
+            } else {
+                sendJsonResponse(handler, "enviarMensajeDirectoAudio", false, "Error al enviar mensaje de audio: " +
+                    (errorMsg != null ? errorMsg : "Error desconocido"), null);
+            }
+        }
+    }
+
+    /**
+     * Maneja la solicitud de historial privado entre dos usuarios.
+     * Obtiene todos los mensajes del canal directo compartido.
+     */
+    private void handleGetPrivateHistory(DTORequest request, IClientHandler handler) {
+        if (!validatePayload(request.getPayload(), handler, "solicitarHistorialPrivado")) {
+            return;
+        }
+
+        try {
+            JsonObject historialJson = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+
+            // Extraer campos del request
+            String remitenteIdStr = historialJson.has("remitenteId") ? historialJson.get("remitenteId").getAsString() : null;
+            String peerRemitenteIdStr = historialJson.has("peerRemitenteId") ? historialJson.get("peerRemitenteId").getAsString() : null;
+            String destinatarioIdStr = historialJson.has("destinatarioId") ? historialJson.get("destinatarioId").getAsString() : null;
+            String peerDestinatarioIdStr = historialJson.has("peerDestinatarioId") ? historialJson.get("peerDestinatarioId").getAsString() : null;
+
+            // Validaciones de campos requeridos
+            if (remitenteIdStr == null || remitenteIdStr.trim().isEmpty()) {
+                sendJsonResponse(handler, "solicitarHistorialPrivado", false, "Error al obtener el historial: remitenteId requerido", null);
+                return;
+            }
+
+            if (destinatarioIdStr == null || destinatarioIdStr.trim().isEmpty()) {
+                sendJsonResponse(handler, "solicitarHistorialPrivado", false, "Error al obtener el historial: destinatarioId requerido", null);
+                return;
+            }
+
+            // Convertir IDs a UUID
+            UUID remitenteId;
+            UUID destinatarioId;
+
+            try {
+                remitenteId = UUID.fromString(remitenteIdStr);
+                destinatarioId = UUID.fromString(destinatarioIdStr);
+            } catch (IllegalArgumentException e) {
+                sendJsonResponse(handler, "solicitarHistorialPrivado", false, "Error al obtener el historial: Formato de UUID inválido", null);
+                return;
+            }
+
+            // Verificar autenticación: el remitente debe ser el usuario autenticado
+            if (!handler.getAuthenticatedUser().getUserId().equals(remitenteId)) {
+                sendJsonResponse(handler, "solicitarHistorialPrivado", false, "Error al obtener el historial: Usuario no autorizado", null);
+                return;
+            }
+
+            // Obtener el historial privado de la fachada
+            List<MessageResponseDto> mensajes = chatFachada.obtenerHistorialPrivado(remitenteId, destinatarioId);
+
+            // Construir la lista de mensajes en el formato solicitado
+            List<Map<String, Object>> mensajesData = new ArrayList<>();
+
+            for (MessageResponseDto mensaje : mensajes) {
+                Map<String, Object> mensajeMap = new HashMap<>();
+
+                mensajeMap.put("mensajeId", mensaje.getMessageId().toString());
+
+                // Determinar remitente y destinatario del mensaje
+                UUID autorMensajeId = mensaje.getAuthor().getUserId();
+                if (autorMensajeId.equals(remitenteId)) {
+                    mensajeMap.put("remitenteId", remitenteId.toString());
+                    mensajeMap.put("destinatarioId", destinatarioId.toString());
+                } else {
+                    mensajeMap.put("remitenteId", destinatarioId.toString());
+                    mensajeMap.put("destinatarioId", remitenteId.toString());
+                }
+
+                // Agregar peer IDs si están disponibles (pueden ser null)
+                mensajeMap.put("peerRemitenteId", mensaje.getAuthor().getPeerId() != null ? mensaje.getAuthor().getPeerId().toString() : null);
+                mensajeMap.put("peerDestinoId", null); // TODO: Obtener peer del destinatario si es necesario
+
+                // Tipo de mensaje
+                String tipo = "TEXT".equals(mensaje.getMessageType()) ? "texto" : "audio";
+                mensajeMap.put("tipo", tipo);
+
+                // Contenido del mensaje
+                mensajeMap.put("contenido", mensaje.getContent());
+
+                // Fecha de envío
+                mensajeMap.put("fechaEnvio", mensaje.getTimestamp().toString());
+
+                mensajesData.add(mensajeMap);
+            }
+
+            // Enviar respuesta exitosa con el array de mensajes directamente en data
+            sendJsonResponse(handler, "solicitarHistorialPrivado", true, "Historial privado obtenido exitosamente", mensajesData);
+
+        } catch (IllegalArgumentException e) {
+            sendJsonResponse(handler, "solicitarHistorialPrivado", false, "Error al obtener el historial: " + e.getMessage(), null);
+        } catch (Exception e) {
+            System.err.println("Error al obtener historial privado: " + e.getMessage());
+            e.printStackTrace();
+            sendJsonResponse(handler, "solicitarHistorialPrivado", false, "Error al obtener el historial: " +
+                (e.getMessage() != null ? e.getMessage() : "Error desconocido"), null);
         }
     }
 }

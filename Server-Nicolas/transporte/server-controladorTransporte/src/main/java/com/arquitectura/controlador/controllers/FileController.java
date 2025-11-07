@@ -29,7 +29,8 @@ public class FileController extends BaseController {
         "uploadfilechunk",
         "endfileupload",
         "startfiledownload",
-        "requestfilechunk"
+        "requestfilechunk",
+        "descargararchivo"
     );
     
     @Autowired
@@ -59,6 +60,9 @@ public class FileController extends BaseController {
                 break;
             case "requestfilechunk":
                 handleRequestChunk(request, handler);
+                break;
+            case "descargararchivo":
+                handleDownloadFile(request, handler);
                 break;
             default:
                 return false;
@@ -157,6 +161,34 @@ public class FileController extends BaseController {
             System.err.println("Error al obtener chunk: " + e.getMessage());
             e.printStackTrace();
             sendJsonResponse(handler, "requestFileChunk", false, "Error interno del servidor al obtener chunk", null);
+        }
+    }
+    
+    private void handleDownloadFile(DTORequest request, IClientHandler handler) {
+        try {
+            JsonObject payloadJson = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+            UUID peerDestinoId = UUID.fromString(payloadJson.get("peerDestinoId").getAsString());
+            String fileId = payloadJson.get("fileId").getAsString();
+
+            System.out.println("→ [FileController] Iniciando descarga de archivo desde peer: " + peerDestinoId);
+
+            // Descargar el archivo completo desde el peer usando la fachada
+            byte[] archivoCompleto = chatFachada.descargarArchivoDesdePeer(peerDestinoId, fileId);
+
+            // Convertir a Base64 para enviar al cliente
+            String archivoBase64 = Base64.getEncoder().encodeToString(archivoCompleto);
+
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("fileId", fileId);
+            responseData.put("fileDataBase64", archivoBase64);
+            responseData.put("size", archivoCompleto.length);
+
+            sendJsonResponse(handler, "descargararchivo", true, "Archivo descargado exitosamente desde peer", responseData);
+
+        } catch (Exception e) {
+            System.err.println("Error al descargar archivo desde peer: " + e.getMessage());
+            e.printStackTrace();
+            sendJsonResponse(handler, "descargararchivo", false, "Error al descargar archivo: " + e.getMessage(), null);
         }
     }
 }
