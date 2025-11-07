@@ -154,9 +154,9 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
             // Sincronizar con la base de datos local
             if (!historial.isEmpty()) {
                 String canalId = historial.get(0).getCanalId();
-                repositorioMensajes.sincronizarHistorial(canalId, historial)
+                repositorioMensajes.sincronizarHistorial(canalId, usuarioActual, historial)
                     .thenAccept(v -> {
-                        // Notificar a la UI con el historial
+                        // Notificar a la UI con el historial UNA SOLA VEZ
                         notificarObservadores("HISTORIAL_CANAL_RECIBIDO", historial);
                         System.out.println("✓ Historial de canal sincronizado: " + historial.size() + " mensajes");
                     })
@@ -329,22 +329,23 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
         mensaje.setMensajeId(getString(data, "messageId"));
         mensaje.setCanalId(getString(data, "channelId"));
 
-        // --- INICIO DE LA SOLUCIÓN ---
         // Verifica si existe el objeto anidado "author"
         if (data.containsKey("author") && data.get("author") instanceof Map) {
-            // Si existe, extrae los datos desde adentro
             Map<String, Object> authorMap = (Map<String, Object>) data.get("author");
             mensaje.setRemitenteId(getString(authorMap, "userId"));
             mensaje.setNombreRemitente(getString(authorMap, "username"));
         } else {
-            // Si no, usa el método antiguo (como respaldo)
             mensaje.setRemitenteId(getString(data, "usuarioId") != null ? getString(data, "usuarioId") : getString(data, "remitenteId"));
             mensaje.setNombreRemitente(getString(data, "nombreUsuario") != null ? getString(data, "nombreUsuario") : getString(data, "nombreRemitente"));
         }
-        // --- FIN DE LA SOLUCIÓN ---
 
-        // Lee el resto de los campos (usando los nombres del log)
-        mensaje.setTipo(getString(data, "messageType"));
+        // ✅ FIX: Normalizar tipo de mensaje a MAYÚSCULAS (servidor envía "TEXT"/"AUDIO")
+        String messageType = getString(data, "messageType");
+        if (messageType != null) {
+            messageType = messageType.toUpperCase(); // Normalizar a MAYÚSCULAS
+        }
+        mensaje.setTipo(messageType);
+
         mensaje.setContenido(getString(data, "content"));
         mensaje.setFileId(getString(data, "fileId"));
 
@@ -352,14 +353,11 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
         String fechaStr = getString(data, "timestamp") != null ? getString(data, "timestamp") : getString(data, "fechaEnvio");
         if (fechaStr != null) {
             try {
-                // Intenta parsear la fecha completa (puede fallar si el formato es levemente distinto)
                 mensaje.setFechaEnvio(LocalDateTime.parse(fechaStr));
             } catch (Exception e) {
                 try {
-                    // Intento de respaldo si la fecha no tiene nanosegundos
                     mensaje.setFechaEnvio(LocalDateTime.parse(fechaStr, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME));
                 } catch (Exception e2) {
-                    // Si todo falla
                     mensaje.setFechaEnvio(LocalDateTime.now());
                 }
             }

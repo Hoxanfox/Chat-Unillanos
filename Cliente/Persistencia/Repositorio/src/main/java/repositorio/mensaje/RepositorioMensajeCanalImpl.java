@@ -124,7 +124,8 @@ public class RepositorioMensajeCanalImpl implements IRepositorioMensajeCanal {
                         byte[] contenidoBytes = rs.getBytes("contenido");
                         if (contenidoBytes != null) {
                             String contenidoStr = new String(contenidoBytes);
-                            if ("texto".equals(dto.getTipo())) {
+                            // ✅ FIX: Comparación case-insensitive para soportar "TEXT"/"texto"
+                            if ("TEXT".equalsIgnoreCase(dto.getTipo())) {
                                 dto.setContenido(contenidoStr);
                             } else {
                                 dto.setFileId(contenidoStr);
@@ -152,12 +153,12 @@ public class RepositorioMensajeCanalImpl implements IRepositorioMensajeCanal {
     }
 
     @Override
-    public CompletableFuture<Void> sincronizarHistorial(String canalId, List<DTOMensajeCanal> mensajes) {
+    public CompletableFuture<Void> sincronizarHistorial(String canalId, String usuarioId, List<DTOMensajeCanal> mensajes) {
         return CompletableFuture.runAsync(() -> {
             eliminarMensajesDeCanal(canalId).join();
 
             for (DTOMensajeCanal dto : mensajes) {
-                MensajeRecibidoCanal mensaje = convertirDTOAMensajeRecibido(dto);
+                MensajeRecibidoCanal mensaje = convertirDTOAMensajeRecibido(dto, usuarioId);
                 guardarMensajeRecibido(mensaje).join();
             }
 
@@ -198,15 +199,20 @@ public class RepositorioMensajeCanalImpl implements IRepositorioMensajeCanal {
         });
     }
 
-    private MensajeRecibidoCanal convertirDTOAMensajeRecibido(DTOMensajeCanal dto) {
+    private MensajeRecibidoCanal convertirDTOAMensajeRecibido(DTOMensajeCanal dto, String usuarioId) {
         MensajeRecibidoCanal mensaje = new MensajeRecibidoCanal();
         
         mensaje.setIdMensaje(UUID.fromString(dto.getMensajeId()));
         mensaje.setIdRemitenteCanal(UUID.fromString(dto.getCanalId()));
+        mensaje.setIdDestinatario(UUID.fromString(usuarioId)); // ✅ FIX: Establecer el destinatario
         mensaje.setTipo(dto.getTipo());
         mensaje.setFechaEnvio(dto.getFechaEnvio());
 
-        String contenidoStr = "texto".equals(dto.getTipo()) ? dto.getContenido() : dto.getFileId();
+        // ✅ FIX: Comparación case-insensitive para soportar "TEXT", "texto", "AUDIO", "audio"
+        String contenidoStr = "TEXT".equalsIgnoreCase(dto.getTipo())
+            ? dto.getContenido()
+            : dto.getFileId();
+
         if (contenidoStr != null) {
             mensaje.setContenido(contenidoStr.getBytes());
         }
@@ -214,4 +220,3 @@ public class RepositorioMensajeCanalImpl implements IRepositorioMensajeCanal {
         return mensaje;
     }
 }
-

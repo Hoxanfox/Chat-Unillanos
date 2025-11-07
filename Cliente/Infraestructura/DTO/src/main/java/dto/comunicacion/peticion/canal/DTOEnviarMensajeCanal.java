@@ -27,11 +27,11 @@ public class DTOEnviarMensajeCanal {
     }
 
     public static DTOEnviarMensajeCanal deAudio(String remitenteId, String canalId, String audioFileId) {
-        return new DTOEnviarMensajeCanal(remitenteId, canalId, "audio", null, audioFileId);
+        return new DTOEnviarMensajeCanal(remitenteId, canalId, "audio", audioFileId, null);
     }
 
     public static DTOEnviarMensajeCanal deArchivo(String remitenteId, String canalId, String fileId) {
-        return new DTOEnviarMensajeCanal(remitenteId, canalId, "archivo", null, fileId);
+        return new DTOEnviarMensajeCanal(remitenteId, canalId, "archivo", fileId, null);
     }
 
     // Getters y Setters
@@ -84,4 +84,3 @@ public class DTOEnviarMensajeCanal {
                 '}';
     }
 }
-

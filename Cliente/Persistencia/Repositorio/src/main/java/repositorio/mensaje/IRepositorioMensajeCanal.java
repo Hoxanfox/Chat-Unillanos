@@ -44,10 +44,11 @@ public interface IRepositorioMensajeCanal {
      * Sincroniza el historial de mensajes de un canal con los datos del servidor.
      * 
      * @param canalId El ID del canal.
+     * @param usuarioId El ID del usuario actual (destinatario).
      * @param mensajes Lista de mensajes del servidor.
      * @return CompletableFuture que se completa cuando finaliza la sincronización.
      */
-    CompletableFuture<Void> sincronizarHistorial(String canalId, List<DTOMensajeCanal> mensajes);
+    CompletableFuture<Void> sincronizarHistorial(String canalId, String usuarioId, List<DTOMensajeCanal> mensajes);
 
     /**
      * Elimina todos los mensajes de un canal específico.
@@ -66,4 +67,3 @@ public interface IRepositorioMensajeCanal {
      */
     CompletableFuture<Integer> contarMensajesNoLeidos(String canalId, String usuarioId);
 }
-
