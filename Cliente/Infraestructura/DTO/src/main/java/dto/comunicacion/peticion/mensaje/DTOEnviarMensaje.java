@@ -37,12 +37,18 @@ public final class DTOEnviarMensaje {
     }
 
     /**
-     * Crea un DTO para un mensaje de audio.
+     * Crea un DTO para un mensaje de audio directo.
+     * El servidor espera la ruta/URL del archivo en el campo 'contenido'.
+     * @param peerRemitenteId ID del peer remitente
+     * @param peerDestinoId ID del peer destino
+     * @param remitenteId ID del usuario remitente
+     * @param destinatarioId ID del usuario destinatario
+     * @param audioFilePath Ruta o URL del archivo de audio (NO Base64)
      */
     public static DTOEnviarMensaje deAudio(String peerRemitenteId, String peerDestinoId,
                                           String remitenteId, String destinatarioId,
-                                          String audioFileId, String fileName) {
-        return new DTOEnviarMensaje(peerRemitenteId, peerDestinoId, remitenteId, destinatarioId, "AUDIO", null, audioFileId, fileName);
+                                          String audioFilePath) {
+        return new DTOEnviarMensaje(peerRemitenteId, peerDestinoId, remitenteId, destinatarioId, "audio", audioFilePath, null, null);
     }
 
     /**

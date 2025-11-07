@@ -96,10 +96,11 @@ public class CreadorCanal implements ICreadorCanal {
         // Notificar inicio de creación
         notificarObservadores("CANAL_CREACION_INICIADA", nombre);
 
-        DTORequest request = new DTORequest("crearCanal", new DTOCrearCanal(creadorId, nombre, descripcion));
+        // Usar el nuevo formato según la especificación: solo nombre y tipo
+        DTORequest request = new DTORequest("crearcanal", new DTOCrearCanal(nombre, "GRUPO"));
 
         // 1. Registrar el callback que procesará la respuesta del servidor.
-        gestorRespuesta.registrarManejador(request.getAction(), (respuesta) -> {
+        gestorRespuesta.registrarManejador("crearCanal", (respuesta) -> {
             if (!"success".equals(respuesta.getStatus())) {
                 String mensajeError = "Error del servidor: " + respuesta.getMessage();
                 future.completeExceptionally(new RuntimeException(mensajeError));
@@ -110,10 +111,22 @@ public class CreadorCanal implements ICreadorCanal {
             try {
                 // Lógica de procesamiento y guardado local
                 Map<String, Object> data = (Map<String, Object>) respuesta.getData();
+
+                // El servidor puede devolver "id" o "channelId", intentar ambos
+                String idCanal = (String) data.getOrDefault("id", data.get("channelId"));
+                String nombreCanal = (String) data.getOrDefault("nombre", data.get("channelName"));
+
+                // El servidor devuelve "creadorId" o puede estar en "owner"
+                String idCreador = (String) data.get("creadorId");
+                if (idCreador == null && data.get("owner") != null) {
+                    Map<String, Object> owner = (Map<String, Object>) data.get("owner");
+                    idCreador = (String) owner.get("userId");
+                }
+
                 Canal canalDeDominio = new Canal(
-                        UUID.fromString((String) data.get("id")),
-                        (String) data.get("nombre"),
-                        UUID.fromString((String) data.get("creadorId"))
+                        UUID.fromString(idCanal),
+                        nombreCanal,
+                        UUID.fromString(idCreador)
                 );
 
                 repositorioCanal.guardar(canalDeDominio)

@@ -1,7 +1,8 @@
 package dto.comunicacion.peticion.mensaje;
 
 /**
- * DTO específico para enviar mensajes de audio con referencia a archivo (fileId).
+ * DTO específico para enviar mensajes de audio con referencia a archivo (audioId).
+ * Alineado con la API del servidor que espera el campo "audioId".
  */
 public class DTOEnviarMensajeAudio {
     private final String peerDestinoId;
@@ -9,7 +10,7 @@ public class DTOEnviarMensajeAudio {
     private final String remitenteId;
     private final String destinatarioId;
     private final String tipo;
-    private final String fileId;  // ID del archivo de audio en el servidor
+    private final String audioId;  // ID del archivo de audio en el servidor (campo esperado por el servidor)
 
     public DTOEnviarMensajeAudio(String peerDestinoId, String peerRemitenteId,
                                  String remitenteId, String destinatarioId,
@@ -19,7 +20,7 @@ public class DTOEnviarMensajeAudio {
         this.remitenteId = remitenteId;
         this.destinatarioId = destinatarioId;
         this.tipo = "audio";
-        this.fileId = audioFileId;
+        this.audioId = audioFileId;
     }
 
     // Getters
@@ -28,5 +29,5 @@ public class DTOEnviarMensajeAudio {
     public String getRemitenteId() { return remitenteId; }
     public String getDestinatarioId() { return destinatarioId; }
     public String getTipo() { return tipo; }
-    public String getFileId() { return fileId; }
+    public String getAudioId() { return audioId; }
 }

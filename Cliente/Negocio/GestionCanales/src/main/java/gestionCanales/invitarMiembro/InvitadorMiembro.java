@@ -5,7 +5,7 @@ import comunicacion.GestorRespuesta;
 import comunicacion.IEnviadorPeticiones;
 import comunicacion.IGestorRespuesta;
 import dto.comunicacion.DTORequest;
-import dto.peticion.DTOGestionarMiembro;
+import dto.peticion.DTOInvitarMiembro;
 import gestionUsuario.sesion.GestorSesionUsuario;
 import repositorio.canal.IRepositorioCanal;
 
@@ -13,14 +13,14 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Implementación de la lógica para invitar a un miembro a un canal.
- * Construye la petición usando la acción "gestionarMiembro" y la envía al servidor.
+ * Construye la petición usando la acción "invitarmiembro" y la envía al servidor.
  */
 public class InvitadorMiembro implements IInvitadorMiembro {
 
     private final GestorSesionUsuario gestorSesion;
     private final IEnviadorPeticiones enviadorPeticiones;
     private final IGestorRespuesta gestorRespuesta;
-    private final IRepositorioCanal repositorioCanal; // Se inyecta por consistencia arquitectónica.
+    private final IRepositorioCanal repositorioCanal;
 
     /**
      * Constructor para la clase.
@@ -47,11 +47,13 @@ public class InvitadorMiembro implements IInvitadorMiembro {
             return future;
         }
 
-        DTOGestionarMiembro payload = new DTOGestionarMiembro(adminId, canalId, contactoId, "AGREGAR");
-        DTORequest request = new DTORequest("gestionarMiembro", payload);
+        // Usar el DTO correcto según la especificación de la API
+        DTOInvitarMiembro payload = new DTOInvitarMiembro(canalId, contactoId);
+        DTORequest request = new DTORequest("invitarmiembro", payload);
 
-        gestorRespuesta.registrarManejador(request.getAction(), (respuesta) -> {
+        gestorRespuesta.registrarManejador("invitarMiembro", (respuesta) -> {
             if ("success".equals(respuesta.getStatus())) {
+                System.out.println("✅ [InvitadorMiembro]: Invitación enviada exitosamente");
                 // IMPORTANTE: No se actualiza el repositorio local aquí.
                 // La acción de invitar solo envía la solicitud. La membresía del canal
                 // no cambia hasta que el usuario invitado ACEPTA.
@@ -63,7 +65,9 @@ public class InvitadorMiembro implements IInvitadorMiembro {
                 // Esto asegura que el estado local solo refleje membresías confirmadas.
                 future.complete(null);
             } else {
-                future.completeExceptionally(new RuntimeException("Error al invitar al miembro: " + respuesta.getMessage()));
+                String mensajeError = "Error al invitar al miembro: " + respuesta.getMessage();
+                System.err.println("❌ [InvitadorMiembro]: " + mensajeError);
+                future.completeExceptionally(new RuntimeException(mensajeError));
             }
         });
 
@@ -72,4 +76,3 @@ public class InvitadorMiembro implements IInvitadorMiembro {
         return future;
     }
 }
-
