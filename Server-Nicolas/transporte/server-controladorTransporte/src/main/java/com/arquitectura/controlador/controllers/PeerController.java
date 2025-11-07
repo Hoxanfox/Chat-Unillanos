@@ -24,7 +24,7 @@ import java.util.*;
 public class PeerController extends BaseController {
     
     private static final Set<String> SUPPORTED_ACTIONS = Set.of(
-        "añadirpeer",
+        // "añadirpeer",  // DESHABILITADO: Los peers se registran automáticamente via bootstrap
         "listarPeersDisponibles",
         "reportarlatido",
         "retransmitirpeticion",
@@ -55,9 +55,9 @@ public class PeerController extends BaseController {
         System.out.println("→ [PeerController] Manejando acción: " + action);
         
         switch (actionLower) {
-            case "añadirpeer":
-                handleAñadirPeer(request, handler);
-                break;
+            // case "añadirpeer":  // DESHABILITADO: Auto-registro via bootstrap
+            //     handleAñadirPeer(request, handler);
+            //     break;
             case "listarPeersDisponibles":
                 handleListarPeersDisponibles(request, handler);
                 break;

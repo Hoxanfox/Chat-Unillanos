@@ -104,6 +104,56 @@ public class PeerConnectionManager {
         
         // Iniciar tareas de mantenimiento
         scheduleMaintenanceTasks();
+        
+        // Auto-registrar con bootstrap peers (con delay para que el servidor esté listo)
+        if (bootstrapNodes != null && !bootstrapNodes.trim().isEmpty()) {
+            maintenancePool.schedule(this::autoRegisterWithBootstrapPeers, 5, TimeUnit.SECONDS);
+        }
+    }
+    
+    /**
+     * Auto-registra este servidor con los peers bootstrap configurados
+     */
+    private void autoRegisterWithBootstrapPeers() {
+        log.info("Iniciando auto-registro con bootstrap peers: {}", bootstrapNodes);
+        
+        String[] peers = bootstrapNodes.split(",");
+        for (String peerAddress : peers) {
+            try {
+                String[] parts = peerAddress.trim().split(":");
+                if (parts.length != 2) {
+                    log.warn("Formato inválido de peer bootstrap: {}", peerAddress);
+                    continue;
+                }
+                
+                String ip = parts[0].trim();
+                int puerto = Integer.parseInt(parts[1].trim());
+                
+                // Verificar si el peer ya está registrado
+                Optional<Peer> existingPeer = peerRepository.findByIpAndPuerto(ip, puerto);
+                if (existingPeer.isPresent()) {
+                    log.info("Peer bootstrap {} ya está registrado con ID: {}", 
+                            peerAddress, existingPeer.get().getPeerId());
+                    continue;
+                }
+                
+                // Registrar el peer bootstrap
+                Peer newPeer = new Peer(ip, puerto, "ONLINE");
+                newPeer.setUltimoLatido(LocalDateTime.now());
+                Peer savedPeer = peerRepository.save(newPeer);
+                
+                log.info("✓ Peer bootstrap registrado exitosamente: {} (ID: {})", 
+                        peerAddress, savedPeer.getPeerId());
+                
+                // Intentar conectar al peer
+                connectToPeer(savedPeer.getPeerId(), ip, puerto);
+                
+            } catch (NumberFormatException e) {
+                log.error("Puerto inválido en peer bootstrap: {}", peerAddress);
+            } catch (Exception e) {
+                log.error("Error al registrar peer bootstrap {}: {}", peerAddress, e.getMessage());
+            }
+        }
     }
     
     private void initializeLocalPeerId() {
