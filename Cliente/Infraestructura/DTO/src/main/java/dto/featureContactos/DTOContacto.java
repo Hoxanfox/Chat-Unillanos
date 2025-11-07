@@ -16,7 +16,7 @@ public class DTOContacto {
     private final String email;
     private final String estado;
 
-    @SerializedName(value = "photoId", alternate = {"photoAddress"})
+    @SerializedName(value = "photoId", alternate = {"photoAddress", "imagenId", "photoFileId"})
     private final String photoId; // ID de la foto en el servidor
 
     private final String fechaRegistro; // Fecha de registro del contacto
@@ -86,7 +86,8 @@ public class DTOContacto {
     }
 
     public String getEstado() {
-        return estado;
+        // Si 'estado' es null, usar el campo 'conectado' que viene del servidor
+        return estado != null ? estado : conectado;
     }
 
     public String getPhotoId() {

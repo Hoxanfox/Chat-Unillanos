@@ -1,6 +1,7 @@
 package servicio.chat;
 
 import observador.IObservador;
+import java.io.File;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -22,6 +23,12 @@ public interface IServicioChat {
 
     // Método para reproducir audio en memoria (SIN guardar en disco)
     CompletableFuture<Void> reproducirAudioEnMemoria(String fileId);
+
+    // ✅ NUEVO: Método para descargar audio a carpeta local (caché)
+    CompletableFuture<File> descargarAudioALocal(String fileId);
+
+    // ✅ NUEVO: Guarda un audio que viene en Base64 (desde PUSH del servidor) como archivo físico
+    CompletableFuture<File> guardarAudioDesdeBase64(String base64Audio, String mensajeId);
 
     void registrarObservador(IObservador observador);
     void removerObservador(IObservador observador);

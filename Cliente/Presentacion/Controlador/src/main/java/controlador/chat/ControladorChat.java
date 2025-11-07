@@ -5,6 +5,7 @@ import servicio.chat.IServicioChat;
 import servicio.chat.ServicioChatImpl;
 
 import java.util.concurrent.CompletableFuture;
+import java.io.File;
 
 /**
  * Implementación del controlador que gestiona las interacciones
@@ -83,15 +84,40 @@ public class ControladorChat implements IControladorChat {
 
     @Override
     public CompletableFuture<Void> reproducirAudioEnMemoria(String fileId) {
-        System.out.println("➡️ [ControladorChat]: Delegando reproducción de audio EN MEMORIA al Servicio");
-        System.out.println("   → FileId: " + fileId);
+        System.out.println("➡️ [ControladorChat]: Delegando reproducción de audio al Servicio - FileId: " + fileId);
         return servicioChat.reproducirAudioEnMemoria(fileId)
-                .thenRun(() -> {
-                    System.out.println("✅ [ControladorChat]: Audio reproducido exitosamente desde memoria");
+                .thenRun(() -> System.out.println("✅ [ControladorChat]: Reproducción completada"))
+                .exceptionally(ex -> {
+                    System.err.println("❌ [ControladorChat]: Error en reproducción: " + ex.getMessage());
+                    return null;
+                });
+    }
+
+    @Override
+    public CompletableFuture<File> descargarAudioALocal(String fileId) {
+        System.out.println("➡️ [ControladorChat]: Delegando descarga de audio al Servicio - FileId: " + fileId);
+        return servicioChat.descargarAudioALocal(fileId)
+                .thenApply(archivo -> {
+                    System.out.println("✅ [ControladorChat]: Audio descargado a: " + (archivo != null ? archivo.getAbsolutePath() : "null"));
+                    return archivo;
                 })
                 .exceptionally(ex -> {
-                    System.err.println("❌ [ControladorChat]: Error al reproducir audio desde memoria: " + ex.getMessage());
-                    ex.printStackTrace();
+                    System.err.println("❌ [ControladorChat]: Error al descargar audio: " + ex.getMessage());
+                    return null;
+                });
+    }
+
+    @Override
+    public CompletableFuture<File> guardarAudioDesdeBase64(String base64Audio, String mensajeId) {
+        System.out.println("➡️ [ControladorChat]: Delegando guardado de audio desde Base64 al Servicio");
+        System.out.println("   → MensajeId: " + mensajeId);
+        return servicioChat.guardarAudioDesdeBase64(base64Audio, mensajeId)
+                .thenApply(archivo -> {
+                    System.out.println("✅ [ControladorChat]: Audio guardado en: " + (archivo != null ? archivo.getAbsolutePath() : "null"));
+                    return archivo;
+                })
+                .exceptionally(ex -> {
+                    System.err.println("❌ [ControladorChat]: Error al guardar audio: " + ex.getMessage());
                     return null;
                 });
     }

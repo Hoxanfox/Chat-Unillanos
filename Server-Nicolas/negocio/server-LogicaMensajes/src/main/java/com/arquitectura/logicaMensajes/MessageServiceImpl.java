@@ -95,30 +95,39 @@ public class MessageServiceImpl implements IMessageService {
         Channel canal = channelRepository.findById(requestDto.getChannelId())
                 .orElseThrow(() -> new Exception("El canal con ID " + requestDto.getChannelId() + " no existe."));
 
-        // 1. Recibimos el payload: "nombreArchivo;datosEnBase64"
         String payload = requestDto.getContent();
-        String[] parts = payload.split(";", 2);
-        if (parts.length != 2) {
-            throw new Exception("Formato de payload de audio incorrecto.");
+        String storedAudioPath;
+
+        // Detectar si el payload es una ruta de archivo ya subido o datos en base64
+        if (payload.contains(";")) {
+            // Formato antiguo: "nombreArchivo;datosEnBase64"
+            String[] parts = payload.split(";", 2);
+            if (parts.length != 2) {
+                throw new Exception("Formato de payload de audio incorrecto.");
+            }
+
+            String fileName = parts[0];
+            String base64Data = parts[1];
+
+            // Decodificar los datos de Base64 a un array de bytes
+            byte[] audioBytes = Base64.getDecoder().decode(base64Data);
+
+            // Crear un nombre de archivo único para guardarlo en el servidor
+            String fileExtension = fileName.substring(fileName.lastIndexOf("."));
+            String newFileName = autorId + "_" + System.currentTimeMillis() + fileExtension;
+
+            // Guardar el archivo
+            storedAudioPath = fileStorageService.storeFile(audioBytes, newFileName, "audio_files");
+        } else {
+            // Formato nuevo: ruta de archivo ya subido (ej: "audio_files/uuid_timestamp.wav")
+            storedAudioPath = payload;
         }
 
-        String fileName = parts[0];
-        String base64Data = parts[1];
-
-        // 2. Decodificamos los datos de Base64 a un array de bytes
-        byte[] audioBytes = Base64.getDecoder().decode(base64Data);
-
-        // 3. Creamos un nombre de archivo único para guardarlo en el servidor
-        String fileExtension = fileName.substring(fileName.lastIndexOf("."));
-        String newFileName = autorId + "_" + System.currentTimeMillis() + fileExtension;
-
-        // 4. Usamos el nuevo método del FileStorageService para guardar los bytes
-        String storedAudioPath = fileStorageService.storeFile(audioBytes, newFileName, "audio_files");
-
-        // 5. El resto de la lógica para guardar en la BD y transcribir no cambia
+        // Guardar el mensaje de audio en la base de datos
         AudioMessage nuevoMensaje = new AudioMessage(autor, canal, storedAudioPath);
         AudioMessage mensajeGuardado = (AudioMessage) messageRepository.save(nuevoMensaje);
 
+        // Transcribir el audio en segundo plano
         Executors.newSingleThreadExecutor().submit(() -> {
             transcriptionService.transcribeAndSave(mensajeGuardado, storedAudioPath);
         });

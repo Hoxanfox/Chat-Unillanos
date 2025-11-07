@@ -91,8 +91,43 @@ public class GestionContactosImpl implements IGestionContactos {
      */
     private void procesarListaContactos(DTOResponse respuesta, String tipo) {
         try {
-            Type tipoLista = new TypeToken<ArrayList<DTOContacto>>() {}.getType();
-            this.contactosCache = gson.fromJson(gson.toJson(respuesta.getData()), tipoLista);
+            Object data = respuesta.getData();
+            List<DTOContacto> contactosRecibidos;
+
+            // El servidor puede enviar los datos en dos formatos:
+            // 1. PUSH (solicitarListaContactos): {"total": 5, "contacts": [...]}
+            // 2. REQUEST (listarContactos): [...]
+
+            if (data instanceof Map) {
+                // Formato PUSH: Es un objeto con la estructura {"total": X, "contacts": [...]}
+                Map<String, Object> dataMap = (Map<String, Object>) data;
+                Object contactsArray = dataMap.get("contacts");
+
+                if (contactsArray != null) {
+                    Type tipoLista = new TypeToken<ArrayList<DTOContacto>>() {}.getType();
+                    contactosRecibidos = gson.fromJson(gson.toJson(contactsArray), tipoLista);
+                    System.out.println("📦 [GestionContactos][" + tipo + "]: Parseado formato objeto (total: " + dataMap.get("total") + ")");
+                } else {
+                    System.err.println("❌ [GestionContactos][" + tipo + "]: El objeto no contiene campo 'contacts'");
+                    notificarObservadores("ERROR_CONTACTOS", "Formato de datos inválido");
+                    return;
+                }
+            } else {
+                // Formato REQUEST: Es un array directo
+                Type tipoLista = new TypeToken<ArrayList<DTOContacto>>() {}.getType();
+                contactosRecibidos = gson.fromJson(gson.toJson(data), tipoLista);
+                System.out.println("📦 [GestionContactos][" + tipo + "]: Parseado formato array");
+            }
+
+            this.contactosCache = contactosRecibidos;
+
+            // ✅ IMPORTANTE: Registrar los peerIds de los contactos en el gestor
+            gestionContactos.GestorContactoPeers gestorPeers = gestionContactos.GestorContactoPeers.getInstancia();
+            for (DTOContacto contacto : contactosRecibidos) {
+                if (contacto.getPeerId() != null && !contacto.getPeerId().isEmpty()) {
+                    gestorPeers.registrarPeerDeContacto(contacto.getId(), contacto.getPeerId());
+                }
+            }
 
             // Obtener userId de la sesión (si hay sesión activa) para filtrar el usuario local
             String localUserId = null;

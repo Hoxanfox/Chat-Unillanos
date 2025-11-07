@@ -10,7 +10,6 @@ import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
 import dto.comunicacion.peticion.mensaje.DTOEnviarMensaje;
 import dto.comunicacion.peticion.mensaje.DTOEnviarMensajeAudio;
-import dto.comunicacion.peticion.mensaje.DTOEnviarMensajeAudioPayload;
 import dto.comunicacion.peticion.mensaje.DTOSolicitarHistorial;
 import dto.vistaContactoChat.DTOMensaje;
 import gestionContactos.GestorContactoPeers;
@@ -35,10 +34,6 @@ public class GestionMensajesImpl implements IGestionMensajes {
     private final GestorSesionUsuario gestorSesionUsuario;
     private final GestorContactoPeers gestorContactoPeers;
     private final Gson gson;
-
-    // ✅ Cachés temporales para completar mensajes cuando el servidor responde
-    private DTOMensaje ultimoMensajeTextoEnviado;
-    private DTOMensaje ultimoMensajeAudioEnviado;
 
     public GestionMensajesImpl() {
         System.out.println("🔧 [GestionMensajes]: Inicializando gestor de mensajes...");
@@ -124,15 +119,6 @@ public class GestionMensajesImpl implements IGestionMensajes {
         DTORequest peticion = new DTORequest("enviarmensajedirecto", payload);
         enviadorPeticiones.enviar(peticion);
 
-        // ✅ NUEVO: Almacenar en caché el mensaje enviado
-        ultimoMensajeTextoEnviado = new DTOMensaje();
-        ultimoMensajeTextoEnviado.setContenido(contenido);
-        ultimoMensajeTextoEnviado.setTipo("TEXTO");
-        ultimoMensajeTextoEnviado.setRemitenteId(remitenteId);
-        ultimoMensajeTextoEnviado.setDestinatarioId(destinatarioId);
-        ultimoMensajeTextoEnviado.setPeerRemitenteId(peerRemitenteId);
-        ultimoMensajeTextoEnviado.setPeerDestinoId(peerDestinoId);
-
         System.out.println("✅ [GestionMensajes]: Mensaje de texto enviado al servidor");
         return CompletableFuture.completedFuture(null);
     }
@@ -146,34 +132,25 @@ public class GestionMensajesImpl implements IGestionMensajes {
         System.out.println("📤 [GestionMensajes]: Enviando mensaje de AUDIO (ruta de archivo)");
         System.out.println("   → Remitente: " + remitenteId + " (Peer: " + peerRemitenteId + ")");
         System.out.println("   → Destinatario: " + destinatarioId + " (Peer: " + peerDestinoId + ")");
-        System.out.println("   → AudioFileId: " + audioFileId);
+        System.out.println("   → AudioFilePath: " + audioFileId);
 
         if (peerDestinoId == null) {
             System.out.println("⚠️ [GestionMensajes]: No se encontró peerId del destinatario — se enviará el audio con peerDestinoId = null");
             notificarObservadores("ADVERTENCIA_PEER_NO_ENCONTRADO", "Se enviará mensaje de audio sin peerId del destinatario");
         }
 
-        // ✅ CORRECCIÓN: Usar DTOEnviarMensajeAudioPayload con el campo 'audioId' según API del servidor
-        DTOEnviarMensajeAudioPayload payload = new DTOEnviarMensajeAudioPayload(
+        // ✅ CORRECCIÓN: Usar DTOEnviarMensaje.deAudio con la ruta del archivo en 'contenido'
+        DTOEnviarMensaje payload = DTOEnviarMensaje.deAudio(
                 peerRemitenteId,
                 peerDestinoId, // puede ser null
                 remitenteId,
                 destinatarioId,
-                audioFileId // Este es el audioId que espera el servidor
+                audioFileId // Esta es la ruta/URL del archivo, NO Base64
         );
 
         // ✅ CORRECCIÓN: El servidor espera la acción en minúsculas sin camelCase
         DTORequest peticion = new DTORequest("enviarmensajedirectoaudio", payload);
         enviadorPeticiones.enviar(peticion);
-
-        // ✅ NUEVO: Almacenar en caché el mensaje de audio enviado
-        ultimoMensajeAudioEnviado = new DTOMensaje();
-        ultimoMensajeAudioEnviado.setContenido(audioFileId);
-        ultimoMensajeAudioEnviado.setTipo("AUDIO");
-        ultimoMensajeAudioEnviado.setRemitenteId(remitenteId);
-        ultimoMensajeAudioEnviado.setDestinatarioId(destinatarioId);
-        ultimoMensajeAudioEnviado.setPeerRemitenteId(peerRemitenteId);
-        ultimoMensajeAudioEnviado.setPeerDestinoId(peerDestinoId);
 
         System.out.println("✅ [GestionMensajes]: Mensaje de audio enviado al servidor");
         return CompletableFuture.completedFuture(null);
@@ -182,59 +159,28 @@ public class GestionMensajesImpl implements IGestionMensajes {
 
     /**
      * Helper: normaliza tipo según fileId/contenido
-     * - Si el tipo YA viene definido del servidor (ej: "AUDIO"), respetarlo
      * - Si fileId presente y contenido vacío -> AUDIO
      * - Si contenido presente y fileId vacío -> TEXTO
      * - Si ambos presentes -> FILE (o conservar tipo si ya viene)
      * - Si ninguno presente -> TEXTO por defecto
-     * - Si contenido es Base64 de audio (empieza con "UklGR" o "data:audio") -> AUDIO
      */
     private void determinarTipoMensaje(DTOMensaje mensaje) {
         if (mensaje == null) return;
 
-        // ✅ CORRECCIÓN: Si el tipo YA viene del servidor (ej: "AUDIO"), respetarlo
-        String tipoExistente = mensaje.getTipo();
-        if (tipoExistente != null && !tipoExistente.isEmpty() &&
-            (tipoExistente.equalsIgnoreCase("AUDIO") ||
-             tipoExistente.equalsIgnoreCase("IMAGEN") ||
-             tipoExistente.equalsIgnoreCase("FILE"))) {
-            // El tipo ya está definido correctamente, no modificar
-            System.out.println("🔍 [GestionMensajes]: Tipo ya definido por servidor: " + tipoExistente);
-            return;
-        }
-
         boolean hasFile = mensaje.getFileId() != null && !mensaje.getFileId().isEmpty();
         boolean hasText = mensaje.getContenido() != null && !mensaje.getContenido().isEmpty();
 
-        // ✅ NUEVO: Detectar si el contenido es Base64 de audio WAV (empieza con "UklGR" = "RIFF" en Base64)
-        boolean isAudioBase64 = false;
-        if (hasText && mensaje.getContenido() != null) {
-            String contenido = mensaje.getContenido();
-            isAudioBase64 = contenido.startsWith("UklGR") || // RIFF header en Base64 (WAV)
-                           contenido.startsWith("data:audio/") || // Data URI de audio
-                           contenido.startsWith("//") || // Algunos formatos de audio en Base64
-                           contenido.startsWith("AAAA"); // Otro posible formato de audio
-        }
-
         if (hasFile && !hasText) {
             mensaje.setTipo("AUDIO");
-            System.out.println("🔍 [GestionMensajes]: Tipo determinado: AUDIO (fileId presente)");
-        } else if (isAudioBase64) {
-            // ✅ NUEVO: Si el contenido es Base64 de audio, marcar como AUDIO
-            mensaje.setTipo("AUDIO");
-            System.out.println("🔍 [GestionMensajes]: Tipo determinado: AUDIO (Base64 detectado)");
         } else if (hasText && !hasFile) {
             mensaje.setTipo("TEXTO");
-            System.out.println("🔍 [GestionMensajes]: Tipo determinado: TEXTO");
         } else if (hasFile && hasText) {
             if (mensaje.getTipo() == null || mensaje.getTipo().isEmpty()) {
                 mensaje.setTipo("FILE");
-                System.out.println("🔍 [GestionMensajes]: Tipo determinado: FILE");
             }
         } else {
             if (mensaje.getTipo() == null || mensaje.getTipo().isEmpty()) {
                 mensaje.setTipo("TEXTO");
-                System.out.println("🔍 [GestionMensajes]: Tipo determinado: TEXTO (por defecto)");
             }
         }
     }
@@ -293,9 +239,8 @@ public class GestionMensajesImpl implements IGestionMensajes {
             }
 
             // Mapear tipo directamente (el push usa "texto" o "audio" en minúsculas)
-            String tipo = null;
             if (map.containsKey("tipo")) {
-                tipo = (String) map.get("tipo");
+                String tipo = (String) map.get("tipo");
                 // Convertir a formato esperado por el cliente (TEXTO/AUDIO en mayúsculas)
                 mensaje.setTipo(tipo.toUpperCase());
             }
@@ -303,43 +248,8 @@ public class GestionMensajesImpl implements IGestionMensajes {
             // Mapear contenido directamente (el push usa este nombre)
             // Para mensajes de texto: contenido normal
             // Para mensajes de audio: datos Base64 (data:audio/webm;base64,...)
-            String contenido = null;
             if (map.containsKey("contenido")) {
-                contenido = (String) map.get("contenido");
-                mensaje.setContenido(contenido);
-            }
-
-            // ✅ NUEVO: Mapear audioId del servidor al fileId del cliente
-            // El servidor envía el campo "audioId" para mensajes de audio
-            if (map.containsKey("audioId")) {
-                String audioId = (String) map.get("audioId");
-                mensaje.setFileId(audioId);
-                System.out.println("✅ [GestionMensajes]: AudioId mapeado a fileId: " + audioId);
-            }
-
-            // ✅ CORRECCIÓN CRÍTICA: Si el tipo es "audio" pero no hay audioId,
-            // usar el contenido como fileId (el servidor envía el path en contenido)
-            if (tipo != null && tipo.equalsIgnoreCase("audio") &&
-                mensaje.getFileId() == null && contenido != null && !contenido.isEmpty()) {
-
-                // Solo si el contenido NO es Base64 (los Base64 son muy largos)
-                boolean esBase64 = contenido.startsWith("UklGR") ||
-                                  contenido.startsWith("data:audio/") ||
-                                  contenido.length() > 1000;
-
-                if (!esBase64) {
-                    mensaje.setFileId(contenido);
-                    System.out.println("✅ [GestionMensajes]: Contenido mapeado a fileId para audio: " + contenido);
-                }
-            }
-
-            // ✅ NUEVO: También mapear otros tipos de archivos si vienen en el futuro
-            if (map.containsKey("fileId")) {
-                mensaje.setFileId((String) map.get("fileId"));
-            }
-
-            if (map.containsKey("fileName")) {
-                mensaje.setFileName((String) map.get("fileName"));
+                mensaje.setContenido((String) map.get("contenido"));
             }
 
         } catch (Exception e) {
@@ -376,42 +286,16 @@ public class GestionMensajesImpl implements IGestionMensajes {
 
         if (r.fueExitoso()) {
             DTOMensaje mensaje = gson.fromJson(gson.toJson(r.getData()), DTOMensaje.class);
-
-            // ✅ NUEVO: Completar con datos de caché si el servidor no devolvió el contenido
-            if (ultimoMensajeTextoEnviado != null) {
-                System.out.println("🔄 [GestionMensajes]: Completando mensaje con datos de caché");
-
-                String idServidor = mensaje.getMensajeId();
-                String fechaServidor = mensaje.getFechaEnvio();
-
-                mensaje.setContenido(ultimoMensajeTextoEnviado.getContenido());
-                mensaje.setTipo(ultimoMensajeTextoEnviado.getTipo());
-                mensaje.setRemitenteId(ultimoMensajeTextoEnviado.getRemitenteId());
-                mensaje.setDestinatarioId(ultimoMensajeTextoEnviado.getDestinatarioId());
-                mensaje.setPeerRemitenteId(ultimoMensajeTextoEnviado.getPeerRemitenteId());
-                mensaje.setPeerDestinoId(ultimoMensajeTextoEnviado.getPeerDestinoId());
-
-                mensaje.setMensajeId(idServidor);
-                mensaje.setFechaEnvio(fechaServidor);
-
-                ultimoMensajeTextoEnviado = null;
-
-                System.out.println("✅ [GestionMensajes]: Mensaje completado - Contenido: " + mensaje.getContenido());
-            }
-
             determinarTipoMensaje(mensaje);
 
             System.out.println("✅ [GestionMensajes]: Mensaje confirmado por servidor");
             System.out.println("   → ID: " + mensaje.getMensajeId());
             System.out.println("   → Fecha: " + mensaje.getFechaEnvio());
             System.out.println("   → Tipo: " + mensaje.getTipo());
-            System.out.println("   → Contenido: " + mensaje.getContenido());
 
             mensaje.setEsMio(true);
             notificarObservadores("MENSAJE_ENVIADO_EXITOSO", mensaje);
         } else {
-            ultimoMensajeTextoEnviado = null; // Limpiar caché en caso de error
-
             String errorMsg = r.getMessage();
             System.err.println("❌ [GestionMensajes]: Error en respuesta de envío: " + errorMsg);
 
@@ -430,33 +314,6 @@ public class GestionMensajesImpl implements IGestionMensajes {
 
         if (r.fueExitoso()) {
             DTOMensaje mensaje = gson.fromJson(gson.toJson(r.getData()), DTOMensaje.class);
-
-            // ✅ NUEVO: Completar con datos de caché si el servidor no devolvió el contenido
-            if (ultimoMensajeAudioEnviado != null) {
-                System.out.println("🔄 [GestionMensajes]: Completando mensaje de audio con datos de caché");
-
-                String idServidor = mensaje.getMensajeId();
-                String fechaServidor = mensaje.getFechaEnvio();
-                String audioFileId = ultimoMensajeAudioEnviado.getContenido();
-
-                mensaje.setContenido(audioFileId);
-                mensaje.setTipo(ultimoMensajeAudioEnviado.getTipo());
-                mensaje.setRemitenteId(ultimoMensajeAudioEnviado.getRemitenteId());
-                mensaje.setDestinatarioId(ultimoMensajeAudioEnviado.getDestinatarioId());
-                mensaje.setPeerRemitenteId(ultimoMensajeAudioEnviado.getPeerRemitenteId());
-                mensaje.setPeerDestinoId(ultimoMensajeAudioEnviado.getPeerDestinoId());
-
-                // ✅ CORRECCIÓN CRÍTICA: También asignar al fileId para que la reproducción funcione
-                mensaje.setFileId(audioFileId);
-
-                mensaje.setMensajeId(idServidor);
-                mensaje.setFechaEnvio(fechaServidor);
-
-                ultimoMensajeAudioEnviado = null;
-
-                System.out.println("✅ [GestionMensajes]: Mensaje de audio completado - FileId: " + audioFileId);
-            }
-
             determinarTipoMensaje(mensaje);
 
             System.out.println("✅ [GestionMensajes]: Mensaje de audio confirmado por servidor");
@@ -467,8 +324,6 @@ public class GestionMensajesImpl implements IGestionMensajes {
             mensaje.setEsMio(true);
             notificarObservadores("MENSAJE_AUDIO_ENVIADO_EXITOSO", mensaje);
         } else {
-            ultimoMensajeAudioEnviado = null; // Limpiar caché en caso de error
-
             String errorMsg = r.getMessage();
             System.err.println("❌ [GestionMensajes]: Error en respuesta de envío de mensaje de audio: " + errorMsg);
 
@@ -561,20 +416,11 @@ public class GestionMensajesImpl implements IGestionMensajes {
         System.out.println("📥 [GestionMensajes]: Recibida respuesta de historial - Status: " + r.getStatus());
 
         if (r.fueExitoso()) {
-            // ✅ CORRECCIÓN: Usar mapearMensajeDesdeServidor() para cada mensaje
-            // En vez de parsear directamente con Gson
-            List<DTOMensaje> mensajes = new ArrayList<>();
+            Type listType = new TypeToken<List<DTOMensaje>>(){}.getType();
+            List<DTOMensaje> mensajes = gson.fromJson(gson.toJson(r.getData()), listType);
 
-            Object data = r.getData();
-            if (data instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<Object> listData = (List<Object>) data;
-
-                for (Object item : listData) {
-                    // Mapear cada mensaje usando el método que sí hace el mapeo contenido->fileId
-                    DTOMensaje mensaje = mapearMensajeDesdeServidor(item);
-                    mensajes.add(mensaje);
-                }
+            if (mensajes == null) {
+                mensajes = new ArrayList<>();
             }
 
             String myUserId = gestorSesionUsuario.getUserId();

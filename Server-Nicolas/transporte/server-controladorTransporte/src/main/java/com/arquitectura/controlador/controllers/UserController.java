@@ -5,10 +5,12 @@ import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.controlador.IClientHandler;
+import com.arquitectura.controlador.IContactListBroadcaster;
 import com.arquitectura.fachada.IChatFachada;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -30,9 +32,12 @@ public class UserController extends BaseController {
         "listarcontactos"
     );
     
+    private final IContactListBroadcaster contactListBroadcaster;
+
     @Autowired
-    public UserController(IChatFachada chatFachada, Gson gson) {
+    public UserController(IChatFachada chatFachada, Gson gson, @Lazy IContactListBroadcaster contactListBroadcaster) {
         super(chatFachada, gson);
+        this.contactListBroadcaster = contactListBroadcaster;
     }
     
     @Override
@@ -94,6 +99,10 @@ public class UserController extends BaseController {
             responseData.put("fileId", userDto.getPhotoAddress());
 
             sendJsonResponse(handler, "authenticateUser", true, "Autenticación exitosa", responseData);
+
+            // 🔔 NOTIFICAR A TODOS LOS CLIENTES que deben actualizar su lista de contactos
+            System.out.println("🔔 [UserController] Usuario autenticado: " + userDto.getUsername() + ". Enviando notificación push a todos los clientes...");
+            broadcastContactListToAllClients();
 
         } catch (Exception e) {
             System.err.println("Error en autenticación: " + e.getMessage());
@@ -206,6 +215,10 @@ public class UserController extends BaseController {
 
             sendJsonResponse(handler, "logoutUser", true, "Sesión cerrada exitosamente", null);
 
+            // 🔔 NOTIFICAR A TODOS LOS CLIENTES que deben actualizar su lista de contactos
+            System.out.println("🔔 [UserController] Usuario desconectado: " + userId + ". Enviando notificación push a todos los clientes...");
+            broadcastContactListToAllClients();
+
         } catch (IllegalArgumentException e) {
             sendJsonResponse(handler, "logoutUser", false, "Error al cerrar sesión: userId inválido", null);
         } catch (Exception e) {
@@ -285,6 +298,56 @@ public class UserController extends BaseController {
             System.err.println("Error al listar contactos: " + e.getMessage());
             e.printStackTrace();
             sendJsonResponse(handler, "listarContactos", false, "Error interno del servidor", null);
+        }
+    }
+
+    /**
+     * Obtiene la lista completa de contactos y la envía como notificación push a todos los clientes conectados
+     */
+    private void broadcastContactListToAllClients() {
+        try {
+            // Obtener lista completa de usuarios (contactos) - sin excluir ninguno
+            List<UserResponseDto> contactos = chatFachada.obtenerTodosLosUsuarios();
+
+            // Construir lista de contactos en el formato esperado por el cliente
+            List<Map<String, Object>> contactosData = new ArrayList<>();
+            for (UserResponseDto contacto : contactos) {
+                Map<String, Object> contactoMap = new HashMap<>();
+                contactoMap.put("id", contacto.getUserId() != null ? contacto.getUserId().toString() : null);
+                contactoMap.put("peerid", contacto.getPeerId() != null ? contacto.getPeerId().toString() : null);
+                contactoMap.put("nombre", contacto.getUsername());
+                contactoMap.put("email", contacto.getEmail());
+
+                // Determinar estado online/offline
+                String estadoRaw = contacto.getEstado();
+                String estado;
+                if (estadoRaw == null) {
+                    estado = "offline";
+                } else {
+                    String lower = estadoRaw.trim().toLowerCase();
+                    if (lower.equals("true") || lower.equals("online") || lower.equals("activo") || lower.equals("1")) {
+                        estado = "online";
+                    } else {
+                        estado = "offline";
+                    }
+                }
+                contactoMap.put("estado", estado);
+                contactoMap.put("photoFileId", contacto.getPhotoAddress());
+                contactosData.add(contactoMap);
+            }
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("contacts", contactosData);
+            data.put("total", contactosData.size());
+
+            // Enviar notificación push a todos los clientes conectados
+            contactListBroadcaster.broadcastContactListUpdate(data);
+
+            System.out.println("✅ [UserController] Notificación de lista de contactos enviada a todos los clientes. Total contactos: " + contactosData.size());
+
+        } catch (Exception e) {
+            System.err.println("❌ [UserController] Error al enviar broadcast de lista de contactos: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }

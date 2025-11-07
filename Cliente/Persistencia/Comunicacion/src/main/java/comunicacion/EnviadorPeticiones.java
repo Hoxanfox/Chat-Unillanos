@@ -1,6 +1,7 @@
 package comunicacion;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import conexion.GestorConexion;
 import dto.comunicacion.DTORequest;
 import dto.gestionConexion.conexion.DTOSesion;
@@ -17,7 +18,11 @@ public class EnviadorPeticiones implements IEnviadorPeticiones {
 
     public EnviadorPeticiones() {
         this.gestorConexion = GestorConexion.getInstancia();
-        this.gson = new Gson();
+        // ✅ CORRECCIÓN: Configurar Gson para serializar campos nulos
+        // Esto es necesario para que peerRemitenteId y peerDestinoId se incluyan aunque sean null
+        this.gson = new GsonBuilder()
+                .serializeNulls()
+                .create();
     }
 
     @Override
@@ -44,4 +49,3 @@ public class EnviadorPeticiones implements IEnviadorPeticiones {
         }
     }
 }
-

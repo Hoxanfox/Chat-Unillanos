@@ -17,6 +17,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.security.MessageDigest;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -314,6 +315,31 @@ public class GestionArchivosImpl implements IGestionArchivos {
         }
     }
 
+    /**
+     * Extrae el nombre del archivo del fileId.
+     * Formato esperado: "tipo/nombre.ext" o simplemente "nombre.ext"
+     * Ejemplo: "user_photos/1.jpg" -> "1.jpg"
+     * Ejemplo: "documentos/archivo_1234567890.pdf" -> "archivo_1234567890.pdf"
+     */
+    private String extraerNombreDeFileId(String fileId) {
+        if (fileId == null || fileId.isEmpty()) {
+            System.err.println("[GestionArchivos] ERROR: fileId es null o vacío");
+            return null;
+        }
+
+        // Si contiene "/" (formato: carpeta/archivo)
+        if (fileId.contains("/")) {
+            String[] partes = fileId.split("/");
+            String nombreArchivo = partes[partes.length - 1]; // Última parte
+            System.out.println("[GestionArchivos] Nombre extraído de fileId '" + fileId + "': " + nombreArchivo);
+            return nombreArchivo;
+        }
+
+        // Si no contiene "/", el fileId es directamente el nombre del archivo
+        System.out.println("[GestionArchivos] FileId sin carpeta: " + fileId);
+        return fileId;
+    }
+
     private static class UploadIdResponse { String uploadId; }
     private static class FileNameResponse { String fileName; }
     private static class FileUploadResponse {
@@ -385,7 +411,17 @@ public class GestionArchivosImpl implements IGestionArchivos {
                                             } else {
                                                 // El archivo NO existe, crear entrada nueva
                                                 System.out.println("[GestionArchivos] Creando nueva entrada en BD");
-                                                Archivo archivo = new Archivo(fileId, downloadInfo.getFileName(),
+
+                                                // ✅ CORRECCIÓN: Extraer el nombre del archivo del fileId
+                                                String nombreArchivo = extraerNombreDeFileId(fileId);
+                                                if (nombreArchivo == null || nombreArchivo.isEmpty()) {
+                                                    // Si falla la extracción, usar el nombre de downloadInfo como fallback
+                                                    nombreArchivo = downloadInfo.getFileName();
+                                                }
+
+                                                System.out.println("[GestionArchivos] FileId: " + fileId + " -> NombreArchivo: " + nombreArchivo);
+
+                                                Archivo archivo = new Archivo(fileId, nombreArchivo,
                                                                              downloadInfo.getMimeType(), downloadInfo.getFileSize());
                                                 archivo.setEstado("descargando");
 
@@ -423,7 +459,15 @@ public class GestionArchivosImpl implements IGestionArchivos {
                          " chunks para: " + downloadInfo.getFileName());
 
         CompletableFuture<File> futuroArchivo = new CompletableFuture<>();
-        File archivoDestino = new File(directorioDestino, downloadInfo.getFileName());
+
+        // ✅ CORRECCIÓN: Usar el nombre extraído del fileId en lugar de downloadInfo.getFileName()
+        String nombreArchivo = extraerNombreDeFileId(fileId);
+        if (nombreArchivo == null || nombreArchivo.isEmpty()) {
+            nombreArchivo = downloadInfo.getFileName(); // Fallback
+        }
+        System.out.println("[GestionArchivos] Guardando archivo como: " + nombreArchivo + " (desde fileId: " + fileId + ")");
+
+        File archivoDestino = new File(directorioDestino, nombreArchivo);
 
         List<byte[]> chunks = new ArrayList<>();
         CompletableFuture<Void> futuroChunkActual = CompletableFuture.completedFuture(null);
@@ -460,18 +504,52 @@ public class GestionArchivosImpl implements IGestionArchivos {
                 String contenidoBase64 = Base64.getEncoder().encodeToString(contenidoCompleto);
                 String hashCalculado = calcularHashSHA256(contenidoCompleto);
 
-                // Actualizar archivo en BD con contenido completo
-                repositorioArchivo.actualizarContenido(fileId, contenidoBase64)
-                        .thenRun(() -> {
-                            // Actualizar hash
-                            repositorioArchivo.buscarPorFileIdServidor(fileId)
-                                    .thenAccept(archivo -> {
-                                        archivo.setHashSHA256(hashCalculado);
-                                        repositorioArchivo.guardar(archivo);
-                                    });
+                System.out.println("[GestionArchivos] ✅ Archivo descargado exitosamente");
+                System.out.println("   → Ruta: " + archivoDestino.getAbsolutePath());
+                System.out.println("   → Tamaño: " + contenidoCompleto.length + " bytes");
+                System.out.println("   → Hash: " + hashCalculado);
+                System.out.println("   → Guardando en BD para persistencia offline...");
+
+                // Actualizar archivo en BD con contenido completo y estado "completo"
+                repositorioArchivo.buscarPorFileIdServidor(fileId)
+                        .thenCompose(archivoExistente -> {
+                            if (archivoExistente != null) {
+                                // Actualizar archivo existente
+                                System.out.println("[GestionArchivos] Actualizando archivo existente en BD");
+                                archivoExistente.setContenidoBase64(contenidoBase64);
+                                archivoExistente.setHashSHA256(hashCalculado);
+                                archivoExistente.setEstado("completo");
+                                archivoExistente.setFechaUltimaActualizacion(LocalDateTime.now());
+                                return repositorioArchivo.guardar(archivoExistente);
+                            } else {
+                                // Crear nuevo archivo en BD
+                                System.out.println("[GestionArchivos] Creando nuevo registro en BD");
+                                Archivo nuevoArchivo = new Archivo(
+                                    fileId,
+                                    downloadInfo.getFileName(),
+                                    downloadInfo.getMimeType(),
+                                    downloadInfo.getFileSize()
+                                );
+                                nuevoArchivo.setContenidoBase64(contenidoBase64);
+                                nuevoArchivo.setHashSHA256(hashCalculado);
+                                nuevoArchivo.setEstado("completo");
+                                return repositorioArchivo.guardar(nuevoArchivo);
+                            }
+                        })
+                        .thenAccept(guardado -> {
+                            if (guardado) {
+                                System.out.println("[GestionArchivos] ✅ Archivo guardado en BD para uso offline");
+                            } else {
+                                System.err.println("[GestionArchivos] ⚠️ No se pudo guardar en BD, pero el archivo físico existe");
+                            }
+                        })
+                        .exceptionally(ex -> {
+                            System.err.println("[GestionArchivos] ⚠️ Error al guardar en BD: " + ex.getMessage());
+                            // No fallar la descarga si la BD falla, el archivo físico ya está
+                            return null;
                         });
 
-                System.out.println("[GestionArchivos] Archivo ensamblado y guardado en BD: " + archivoDestino.getAbsolutePath());
+                System.out.println("[GestionArchivos] Archivo ensamblado: " + archivoDestino.getAbsolutePath());
                 futuroArchivo.complete(archivoDestino);
 
             } catch (IOException e) {

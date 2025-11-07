@@ -70,15 +70,23 @@ public class ServicioContactosImpl implements IServicioContactos, IObservador {
      */
     private void descargarFotosFaltantes(List<DTOContacto> contactos) {
         System.out.println("📸 [ServicioContactos]: Verificando y descargando fotos de contactos...");
+        System.out.println("📸 [ServicioContactos]: Total de contactos a procesar: " + contactos.size());
 
         int fotosPendientes = 0;
+        int sinFoto = 0;
 
         for (DTOContacto contacto : contactos) {
             String photoId = contacto.getPhotoId();
 
+            System.out.println("📸 [ServicioContactos]: Procesando contacto " + contacto.getNombre() + " - photoId: " + (photoId != null ? photoId : "NULL"));
+
             if (photoId == null || photoId.isEmpty()) {
+                sinFoto++;
+                System.out.println("  ⚠️ Contacto " + contacto.getNombre() + " no tiene photoId definido");
                 continue; // Este contacto no tiene foto
             }
+
+            fotosPendientes++;
 
             // ✅ PROTECCIÓN: Primero verificar si ya existe localmente
             servicioArchivos.existeLocalmente(photoId)
@@ -114,14 +122,12 @@ public class ServicioContactosImpl implements IServicioContactos, IObservador {
                     }
                     return null;
                 });
-
-            fotosPendientes++;
         }
 
         if (fotosPendientes > 0) {
             System.out.println("📸 [ServicioContactos]: " + fotosPendientes + " fotos en proceso de verificación/descarga");
         } else {
-            System.out.println("📸 [ServicioContactos]: No hay fotos para procesar");
+            System.out.println("📸 [ServicioContactos]: No hay fotos para procesar (sin foto: " + sinFoto + ")");
         }
     }
 

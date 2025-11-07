@@ -59,53 +59,16 @@ public class GestorNotificaciones implements ISujeto {
      * Obtiene la lista de notificaciones del usuario actual desde el servidor.
      */
     public CompletableFuture<List<DTONotificacion>> obtenerNotificaciones() {
-        System.out.println("📡 [GestorNotificaciones]: Solicitando notificaciones al servidor...");
+        System.out.println("⚠️ [GestorNotificaciones]: La acción 'obtenerNotificaciones' no está implementada en el servidor");
+        System.out.println("📋 [GestorNotificaciones]: Devolviendo lista vacía de notificaciones");
 
+        // El servidor no soporta esta acción, devolver lista vacía inmediatamente
         CompletableFuture<List<DTONotificacion>> future = new CompletableFuture<>();
-        String usuarioId = gestorSesion.getUserId();
+        future.complete(new ArrayList<>());
 
-        JsonObject payload = new JsonObject();
-        payload.addProperty("usuarioId", usuarioId);
-        DTORequest request = new DTORequest("obtenerNotificaciones", payload);
+        // Notificar con lista vacía para que la UI se actualice correctamente
+        notificarObservadores("NOTIFICACIONES_RECIBIDAS", new ArrayList<>());
 
-        // Manejador común para procesar la respuesta
-        java.util.function.Consumer<DTOResponse> procesarRespuesta = (respuesta) -> {
-            System.out.println("📥 [GestorNotificaciones]: Respuesta recibida - Action: " + respuesta.getAction() + ", Status: " + respuesta.getStatus());
-
-            if ("success".equals(respuesta.getStatus())) {
-                try {
-                    List<DTONotificacion> notificaciones = parsearNotificaciones(respuesta);
-
-                    // Guardar en repositorio (caché)
-                    repositorioNotificacion.guardarTodas(notificaciones);
-
-                    System.out.println("✅ [GestorNotificaciones]: " + notificaciones.size() + " notificaciones recibidas");
-                    notificarObservadores("NOTIFICACIONES_RECIBIDAS", notificaciones);
-                    future.complete(notificaciones);
-                } catch (Exception e) {
-                    System.err.println("❌ [GestorNotificaciones]: Error al parsear: " + e.getMessage());
-                    e.printStackTrace();
-                    future.completeExceptionally(e);
-                }
-            } else {
-                String error = "Error al obtener notificaciones: " + respuesta.getMessage();
-                System.err.println("❌ [GestorNotificaciones]: " + error);
-
-                // Si el servidor no reconoce la acción, devolver lista vacía en lugar de fallar
-                if ("unknown".equals(respuesta.getAction())) {
-                    System.out.println("⚠️ [GestorNotificaciones]: Acción no implementada en el servidor, devolviendo lista vacía");
-                    future.complete(new ArrayList<>());
-                } else {
-                    future.completeExceptionally(new RuntimeException(error));
-                }
-            }
-        };
-
-        // Registrar manejadores para todas las acciones posibles
-        gestorRespuesta.registrarManejador("obtenerNotificaciones", procesarRespuesta);
-        gestorRespuesta.registrarManejador("unknown", procesarRespuesta); // Servidor responde con esto cuando no reconoce la acción
-
-        enviadorPeticiones.enviar(request);
         return future;
     }
 

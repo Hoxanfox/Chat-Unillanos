@@ -8,16 +8,16 @@ import gestionContactos.mensajes.GestionMensajesImpl;
 import gestionContactos.mensajes.IGestionMensajes;
 import gestionUsuario.sesion.GestorSesionUsuario;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Implementación de la Fachada de contactos. Orquesta el componente de gestión de contactos.
  */
 public class FachadaContactosImpl implements IFachadaContactos, IObservador {
 
-    private final List<IObservador> observadores = new ArrayList<>(); // Sus observadores (el Servicio)
+    private final List<IObservador> observadores = new CopyOnWriteArrayList<>(); // Thread-safe para evitar ConcurrentModificationException
     private final IGestionContactos gestionContactos;
     private final IGestionMensajes gestionMensajes;
     private final GestorSesionUsuario gestorSesion;
