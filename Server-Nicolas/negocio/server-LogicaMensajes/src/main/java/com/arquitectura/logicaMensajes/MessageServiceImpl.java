@@ -38,7 +38,8 @@ public class MessageServiceImpl implements IMessageService {
     private final FileStorageService fileStorageService;
     private final AudioTranscriptionService transcriptionService;
     private final TranscripcionAudioRepository transcripcionAudioRepository;
-    private final IChannelService channelService; // nueva dependencia
+    private final IChannelService channelService;
+    private final com.arquitectura.logicaPeers.IPeerNotificationService peerNotificationService;
 
     @Autowired
     public MessageServiceImpl(MessageRepository messageRepository,
@@ -49,7 +50,8 @@ public class MessageServiceImpl implements IMessageService {
                               FileStorageService fileStorageService,
                               AudioTranscriptionService transcriptionService,
                               TranscripcionAudioRepository transcripcionAudioRepository,
-                              IChannelService channelService) { // inyectado
+                              IChannelService channelService,
+                              com.arquitectura.logicaPeers.IPeerNotificationService peerNotificationService) {
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
         this.channelRepository = channelRepository;
@@ -59,6 +61,7 @@ public class MessageServiceImpl implements IMessageService {
         this.transcriptionService = transcriptionService;
         this.transcripcionAudioRepository = transcripcionAudioRepository;
         this.channelService = channelService;
+        this.peerNotificationService = peerNotificationService;
     }
 
     @Override
@@ -132,8 +135,65 @@ public class MessageServiceImpl implements IMessageService {
                 .stream()
                 .map(membresia -> membresia.getUsuario().getUserId())
                 .collect(Collectors.toList());
+
+        // Publicar evento local para usuarios conectados en este servidor
         eventPublisher.publishEvent(new NewMessageEvent(this, responseDto, memberIds));
+
+        // --- NOTIFICACIÓN P2P: Notificar a peers que tengan usuarios miembros del canal ---
+        notificarMensajeAPeers(responseDto, memberIds);
+
         return responseDto;
+    }
+
+    /**
+     * Notifica a otros servidores sobre un nuevo mensaje si tienen usuarios miembros del canal.
+     */
+    private void notificarMensajeAPeers(MessageResponseDto mensaje, List<UUID> memberIds) {
+        try {
+            // Agrupar miembros por servidor (peer)
+            java.util.Map<UUID, List<UUID>> miembrosPorPeer = new java.util.HashMap<>();
+
+            for (UUID memberId : memberIds) {
+                UUID peerDelMiembro = peerNotificationService.obtenerPeerDeUsuario(memberId);
+                if (peerDelMiembro != null) {
+                    miembrosPorPeer.computeIfAbsent(peerDelMiembro, k -> new java.util.ArrayList<>())
+                                   .add(memberId);
+                }
+            }
+
+            // Obtener el peer local (este servidor)
+            com.arquitectura.logicaPeers.IPeerService peerService =
+                (com.arquitectura.logicaPeers.IPeerService) org.springframework.context.ApplicationContextProvider
+                    .getApplicationContext().getBean("peerServiceP2P");
+            UUID localPeerId = peerService.obtenerPeerActualId();
+
+            // Notificar a cada peer remoto (excepto el local)
+            for (java.util.Map.Entry<UUID, List<UUID>> entry : miembrosPorPeer.entrySet()) {
+                UUID peerId = entry.getKey();
+
+                // No notificar al servidor local
+                if (peerId.equals(localPeerId)) {
+                    continue;
+                }
+
+                System.out.println("→ [MessageService] Notificando mensaje a peer " + peerId +
+                                 " con " + entry.getValue().size() + " miembros");
+
+                // Notificar al peer de forma asíncrona para no bloquear
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    boolean exito = peerNotificationService.notificarNuevoMensaje(peerId, mensaje);
+                    if (exito) {
+                        System.out.println("✓ [MessageService] Mensaje notificado exitosamente a peer " + peerId);
+                    } else {
+                        System.err.println("✗ [MessageService] Fallo al notificar mensaje a peer " + peerId);
+                    }
+                });
+            }
+
+        } catch (Exception e) {
+            System.err.println("✗ [MessageService] Error al notificar mensaje a peers: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     @Override
