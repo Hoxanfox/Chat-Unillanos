@@ -330,4 +330,67 @@ public class MessageServiceImpl implements IMessageService {
         );
     }
 
+    /**
+     * Guarda un mensaje recibido de otro servidor P2P en la base de datos local.
+     * Este método NO publica eventos locales porque el mensaje ya fue procesado en el servidor de origen.
+     */
+    @Override
+    @Transactional
+    public void guardarMensajeRemoto(UUID messageId, UUID channelId, UUID authorId,
+                                     String content, String messageType,
+                                     java.time.LocalDateTime timestamp) throws Exception {
+
+        System.out.println("→ [MessageService] Guardando mensaje remoto en BD local");
+        System.out.println("  MessageID: " + messageId);
+        System.out.println("  Canal: " + channelId);
+        System.out.println("  Autor: " + authorId);
+        System.out.println("  Tipo: " + messageType);
+
+        // 1. Verificar que el canal existe localmente
+        Channel canal = channelRepository.findById(channelId)
+                .orElseThrow(() -> new Exception("Canal no encontrado: " + channelId));
+
+        // 2. Buscar el usuario autor
+        User autor = userRepository.findById(authorId).orElse(null);
+
+        // Si el usuario no existe localmente, crear un registro temporal (usuario remoto)
+        if (autor == null) {
+            System.out.println("  → Usuario remoto no existe localmente, creando registro temporal");
+            autor = crearUsuarioRemoto(authorId);
+        }
+
+        // 3. Crear el mensaje según el tipo
+        Message mensaje;
+        if ("AUDIO".equals(messageType)) {
+            mensaje = new AudioMessage(autor, canal, content);
+        } else {
+            mensaje = new TextMessage(autor, canal, content);
+        }
+
+        // 4. Establecer el ID y timestamp originales para mantener consistencia
+        mensaje.setIdMensaje(messageId);  // ✅ CORREGIDO: era setMessageId
+        mensaje.setTimestamp(timestamp);
+
+        // 5. Guardar en la base de datos
+        messageRepository.save(mensaje);
+
+        System.out.println("✓ [MessageService] Mensaje remoto guardado exitosamente en BD");
+    }
+
+    /**
+     * Crea un registro temporal de usuario para autores remotos.
+     * Este usuario representa a alguien que está en otro servidor.
+     */
+    private User crearUsuarioRemoto(UUID authorId) {
+        User usuarioRemoto = new User();
+        usuarioRemoto.setUserId(authorId);
+        usuarioRemoto.setUsername("usuario_remoto_" + authorId.toString().substring(0, 8));
+        usuarioRemoto.setEmail("remoto_" + authorId.toString().substring(0, 8) + "@remote.server");
+        usuarioRemoto.setHashedPassword("REMOTE_USER_NO_PASSWORD");
+        usuarioRemoto.setConectado(false);
+
+        // Guardar el usuario temporal en BD
+        return userRepository.save(usuarioRemoto);
+    }
+
 }

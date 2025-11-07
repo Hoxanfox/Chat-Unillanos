@@ -168,6 +168,26 @@ public interface IChatFachada {
      * @throws Exception si hay error en la retransmisión
      */
     DTOResponse retransmitirPeticion(UUID peerDestinoId, DTORequest peticionOriginal) throws Exception;
+    
+    /**
+     * Guarda un mensaje recibido de otro servidor P2P en la base de datos local.
+     * @param messageId ID del mensaje
+     * @param channelId ID del canal
+     * @param authorId ID del autor
+     * @param content Contenido del mensaje
+     * @param messageType Tipo de mensaje (TEXT, AUDIO)
+     * @param timestamp Timestamp del mensaje
+     * @throws Exception si hay error al guardar
+     */
+    void guardarMensajeRemoto(UUID messageId, UUID channelId, UUID authorId, 
+                             String content, String messageType, 
+                             java.time.LocalDateTime timestamp) throws Exception;
+    
+    /**
+     * Obtiene los IDs de los usuarios locales que son miembros de un canal.
+     * Útil para notificar solo a usuarios de este servidor.
+     * @param channelId ID del canal
+     * @return Lista de IDs de usuarios locales miembros del canal
+     */
+    List<UUID> obtenerMiembrosLocalesDelCanal(UUID channelId);
 }
-
-

@@ -25,12 +25,19 @@ public class P2PNotificationController extends BaseController {
         "notificarinvitacioncanal",
         "notificaraceptacioninvitacion",
         "obtenerinfousuario",
-        "obtenerinfocanal"
+        "obtenerinfocanal",
+        "iniciartransferenciaaudio",
+        "recibirchunkaudio",
+        "finalizartransferenciaaudio"
     );
 
+    private final com.arquitectura.logicaPeers.AudioFileP2PService audioFileP2PService;
+
     @Autowired
-    public P2PNotificationController(IChatFachada chatFachada, Gson gson) {
+    public P2PNotificationController(IChatFachada chatFachada, Gson gson,
+                                     com.arquitectura.logicaPeers.AudioFileP2PService audioFileP2PService) {
         super(chatFachada, gson);
+        this.audioFileP2PService = audioFileP2PService;
     }
 
     @Override
@@ -56,6 +63,15 @@ public class P2PNotificationController extends BaseController {
                 break;
             case "obtenerinfocanal":
                 handleObtenerInfoCanal(request, handler);
+                break;
+            case "iniciartransferenciaaudio":
+                handleIniciarTransferenciaAudio(request, handler);
+                break;
+            case "recibirchunkaudio":
+                handleRecibirChunkAudio(request, handler);
+                break;
+            case "finalizartransferenciaaudio":
+                handleFinalizarTransferenciaAudio(request, handler);
                 break;
             default:
                 return false;
@@ -90,6 +106,22 @@ public class P2PNotificationController extends BaseController {
             System.out.println("  Autor: " + authorUsername);
             System.out.println("  Tipo: " + messageType);
 
+            // ✅ CORREGIDO: Guardar el mensaje en la BD local
+            try {
+                chatFachada.guardarMensajeRemoto(
+                    UUID.fromString(messageId),
+                    UUID.fromString(channelId),
+                    UUID.fromString(authorId),
+                    content,
+                    messageType,
+                    java.time.LocalDateTime.parse(timestamp)
+                );
+                System.out.println("✓ Mensaje guardado en BD local");
+            } catch (Exception e) {
+                System.err.println("⚠ No se pudo guardar mensaje en BD: " + e.getMessage());
+                // Continuar para notificar a usuarios conectados
+            }
+
             // Crear el DTO del mensaje
             UserResponseDto authorDto = new UserResponseDto();
             authorDto.setUserId(UUID.fromString(authorId));
@@ -108,21 +140,22 @@ public class P2PNotificationController extends BaseController {
                 org.springframework.context.ApplicationContextProvider.getBean(
                     org.springframework.context.ApplicationEventPublisher.class);
 
-            // Obtener miembros locales del canal
-            List<com.arquitectura.DTO.usuarios.UserResponseDto> miembrosCanal =
-                chatFachada.obtenerTodosLosUsuarios(); // Simplificado, deberías filtrar por canal
+            // ✅ CORREGIDO: Obtener SOLO los miembros LOCALES del canal específico
+            List<UUID> memberIds = chatFachada.obtenerMiembrosLocalesDelCanal(UUID.fromString(channelId));
 
-            List<UUID> memberIds = miembrosCanal.stream()
-                .map(u -> u.getUserId())
-                .collect(java.util.stream.Collectors.toList());
+            if (memberIds.isEmpty()) {
+                System.out.println("⚠ No hay miembros locales en este canal");
+            } else {
+                System.out.println("→ Notificando a " + memberIds.size() + " miembros locales");
+                
+                eventPublisher.publishEvent(new com.arquitectura.events.NewMessageEvent(
+                    this, messageDto, memberIds));
+            }
 
-            eventPublisher.publishEvent(new com.arquitectura.events.NewMessageEvent(
-                this, messageDto, memberIds));
-
-            System.out.println("✓ [P2PNotificationController] Mensaje retransmitido a usuarios locales");
+            System.out.println("✓ [P2PNotificationController] Mensaje procesado correctamente");
 
             sendJsonResponse(handler, "notificarMensaje", true,
-                "Mensaje recibido y retransmitido", null);
+                "Mensaje recibido y procesado", null);
 
         } catch (Exception e) {
             System.err.println("✗ [P2PNotificationController] Error al procesar mensaje: " + e.getMessage());
@@ -206,12 +239,28 @@ public class P2PNotificationController extends BaseController {
             Optional<UserResponseDto> usuarioOpt = chatFachada.buscarUsuarioPorUsername(usuarioId);
 
             if (usuarioOpt.isPresent()) {
-                Map<String, Object> userData = new HashMap<>();
                 UserResponseDto user = usuarioOpt.get();
+
+                Map<String, Object> userData = new HashMap<>();
                 userData.put("userId", user.getUserId().toString());
                 userData.put("username", user.getUsername());
                 userData.put("email", user.getEmail());
                 userData.put("photoAddress", user.getPhotoAddress());
+
+                // ✅ NUEVO: Incluir la foto en Base64 si existe
+                if (user.getImagenBase64() != null && !user.getImagenBase64().isEmpty()) {
+                    userData.put("imagenBase64", user.getImagenBase64());
+                    System.out.println("  → Incluyendo foto de perfil en Base64");
+                } else {
+                    userData.put("imagenBase64", null);
+                }
+
+                if (user.getFechaRegistro() != null) {
+                    userData.put("fechaRegistro", user.getFechaRegistro().toString());
+                }
+                if (user.getEstado() != null) {
+                    userData.put("estado", user.getEstado());
+                }
 
                 System.out.println("✓ [P2PNotificationController] Usuario encontrado: " + user.getUsername());
 
@@ -270,5 +319,108 @@ public class P2PNotificationController extends BaseController {
                 "Error al obtener información: " + e.getMessage(), null);
         }
     }
-}
 
+    /**
+     * Maneja el inicio de una transferencia de audio desde otro peer.
+     */
+    private void handleIniciarTransferenciaAudio(DTORequest request, IClientHandler handler) {
+        try {
+            JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+
+            String transferId = payload.get("transferId").getAsString();
+            String fileName = payload.get("fileName").getAsString();
+            long fileSize = payload.get("fileSize").getAsLong();
+            int totalChunks = payload.get("totalChunks").getAsInt();
+            String originalPath = payload.get("originalPath").getAsString();
+
+            System.out.println("→ [P2PNotificationController] Iniciando recepción de audio:");
+            System.out.println("  Transfer ID: " + transferId);
+            System.out.println("  Archivo: " + fileName);
+            System.out.println("  Tamaño: " + fileSize + " bytes");
+            System.out.println("  Total chunks: " + totalChunks);
+
+            boolean exito = audioFileP2PService.iniciarRecepcionAudio(
+                transferId, fileName, fileSize, totalChunks, originalPath);
+
+            if (exito) {
+                System.out.println("✓ [P2PNotificationController] Recepción de audio iniciada");
+                sendJsonResponse(handler, "iniciarTransferenciaAudio", true,
+                    "Recepción iniciada", null);
+            } else {
+                System.err.println("✗ [P2PNotificationController] Error al iniciar recepción");
+                sendJsonResponse(handler, "iniciarTransferenciaAudio", false,
+                    "Error al iniciar recepción", null);
+            }
+
+        } catch (Exception e) {
+            System.err.println("✗ [P2PNotificationController] Error al iniciar transferencia de audio: " + e.getMessage());
+            e.printStackTrace();
+            sendJsonResponse(handler, "iniciarTransferenciaAudio", false,
+                "Error al iniciar transferencia: " + e.getMessage(), null);
+        }
+    }
+
+    /**
+     * Maneja la recepción de un chunk de audio.
+     */
+    private void handleRecibirChunkAudio(DTORequest request, IClientHandler handler) {
+        try {
+            JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+
+            String transferId = payload.get("transferId").getAsString();
+            int chunkNumber = payload.get("chunkNumber").getAsInt();
+            String chunkData = payload.get("chunkData").getAsString();
+
+            boolean exito = audioFileP2PService.recibirChunkAudio(transferId, chunkNumber, chunkData);
+
+            if (exito) {
+                sendJsonResponse(handler, "recibirChunkAudio", true,
+                    "Chunk recibido", null);
+            } else {
+                System.err.println("✗ [P2PNotificationController] Error al recibir chunk");
+                sendJsonResponse(handler, "recibirChunkAudio", false,
+                    "Error al recibir chunk", null);
+            }
+
+        } catch (Exception e) {
+            System.err.println("✗ [P2PNotificationController] Error al recibir chunk de audio: " + e.getMessage());
+            sendJsonResponse(handler, "recibirChunkAudio", false,
+                "Error al recibir chunk: " + e.getMessage(), null);
+        }
+    }
+
+    /**
+     * Maneja la finalización de la transferencia de audio.
+     */
+    private void handleFinalizarTransferenciaAudio(DTORequest request, IClientHandler handler) {
+        try {
+            JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+
+            String transferId = payload.get("transferId").getAsString();
+
+            System.out.println("→ [P2PNotificationController] Finalizando recepción de audio: " + transferId);
+
+            String rutaGuardada = audioFileP2PService.finalizarRecepcionAudio(transferId);
+
+            if (rutaGuardada != null) {
+                System.out.println("✓ [P2PNotificationController] Archivo guardado en: " + rutaGuardada);
+
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("filePath", rutaGuardada);
+
+                sendJsonResponse(handler, "finalizarTransferenciaAudio", true,
+                    "Transferencia completada", responseData);
+            } else {
+                System.err.println("✗ [P2PNotificationController] Error al finalizar transferencia");
+                sendJsonResponse(handler, "finalizarTransferenciaAudio", false,
+                    "Error al ensamblar archivo", null);
+            }
+
+        } catch (Exception e) {
+            System.err.println("✗ [P2PNotificationController] Error al finalizar transferencia de audio: " + e.getMessage());
+            e.printStackTrace();
+            sendJsonResponse(handler, "finalizarTransferenciaAudio", false,
+                "Error al finalizar transferencia: " + e.getMessage(), null);
+        }
+    }
+}

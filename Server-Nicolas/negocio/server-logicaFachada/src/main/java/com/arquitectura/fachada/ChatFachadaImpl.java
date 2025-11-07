@@ -167,7 +167,7 @@ public class ChatFachadaImpl implements IChatFachada {
     public ChannelResponseDto crearCanalDirecto(UUID user1Id, UUID user2Id) throws Exception {
         return channelService.crearCanalDirecto(user1Id, user2Id);
     }
-
+    
     @Override
     public void agregarMiembroACanal(InviteMemberRequestDto inviteMemberRequestDto, UUID userId) throws Exception {
         channelService.invitarMiembro(inviteMemberRequestDto, userId);
@@ -335,6 +335,16 @@ public class ChatFachadaImpl implements IChatFachada {
         return peerServicePeers.retransmitirPeticion(peerDestinoId, peticionOriginal);
     }
 
+    @Override
+    public void guardarMensajeRemoto(UUID messageId, UUID channelId, UUID authorId,
+                                     String content, String messageType,
+                                     java.time.LocalDateTime timestamp) throws Exception {
+        messageService.guardarMensajeRemoto(messageId, channelId, authorId,
+                                           content, messageType, timestamp);
+    }
+
+    @Override
+    public List<UUID> obtenerMiembrosLocalesDelCanal(UUID channelId) {
+        return channelService.obtenerMiembrosLocalesDelCanal(channelId);
+    }
 }
-
-

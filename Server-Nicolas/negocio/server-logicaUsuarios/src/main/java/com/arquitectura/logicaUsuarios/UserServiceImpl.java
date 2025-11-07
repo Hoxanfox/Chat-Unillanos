@@ -167,13 +167,20 @@ public class UserServiceImpl implements IUserService {
     @Transactional(readOnly = true)
     public Optional<UserResponseDto> buscarPorUsername(String username) {
         return userRepository.findByUsername(username)
-                .map(user -> new UserResponseDto(
+                .map(user -> {
+                    // Obtener la imagen en Base64 si existe
+                    String imagenBase64 = getImagenBase64(user);
+                    
+                    return new UserResponseDto(
                         user.getUserId(),
                         user.getUsername(),
                         user.getEmail(),
                         user.getPhotoAddress(),
+                        imagenBase64, // ✅ Ahora incluye la imagen en Base64
                         user.getFechaRegistro(),
-                        user.getConectado() ? "ONLINE" : "OFFLINE"));
+                        user.getConectado() ? "ONLINE" : "OFFLINE"
+                    );
+                });
     }
 
     // Devuelve la entidad para uso interno

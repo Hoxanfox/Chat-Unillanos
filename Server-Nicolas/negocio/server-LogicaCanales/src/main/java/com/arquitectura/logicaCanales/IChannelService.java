@@ -46,4 +46,14 @@ public interface IChannelService {
      */
     List<UserResponseDto> obtenerMiembrosDeCanal(UUID canalId, UUID solicitanteId) throws Exception;
 
+    /**
+     * Obtiene los IDs de los usuarios LOCALES (de este servidor) que son miembros de un canal.
+     * Excluye usuarios de otros servidores P2P.
+     * Útil para notificar solo a usuarios conectados en este servidor.
+     * 
+     * @param channelId ID del canal
+     * @return Lista de IDs de usuarios locales que son miembros activos del canal
+     */
+    List<UUID> obtenerMiembrosLocalesDelCanal(UUID channelId);
+
 }

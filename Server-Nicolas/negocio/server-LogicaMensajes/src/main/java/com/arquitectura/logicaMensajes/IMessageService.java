@@ -48,4 +48,20 @@ public interface IMessageService {
     void enviarMensajeBroadcast(String contenido, UUID adminId) throws Exception;
 
     List<TranscriptionResponseDto> getAllTranscriptions();
+    
+    /**
+     * Guarda un mensaje recibido de otro servidor P2P en la base de datos local.
+     * NO publica eventos locales (el mensaje ya fue procesado en el servidor de origen).
+     * 
+     * @param messageId ID único del mensaje (mismo que en servidor origen)
+     * @param channelId ID del canal
+     * @param authorId ID del usuario autor del mensaje
+     * @param content Contenido del mensaje (texto o ruta de archivo de audio)
+     * @param messageType Tipo de mensaje ("TEXT" o "AUDIO")
+     * @param timestamp Timestamp original del mensaje
+     * @throws Exception si hay error al guardar
+     */
+    void guardarMensajeRemoto(UUID messageId, UUID channelId, UUID authorId,
+                             String content, String messageType,
+                             java.time.LocalDateTime timestamp) throws Exception;
 }

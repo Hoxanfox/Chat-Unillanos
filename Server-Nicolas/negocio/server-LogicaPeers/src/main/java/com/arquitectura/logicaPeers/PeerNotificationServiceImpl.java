@@ -39,16 +39,19 @@ public class PeerNotificationServiceImpl implements IPeerNotificationService {
     private final PeerRepository peerRepository;
     private final UserRepository userRepository;
     private final ChannelRepository channelRepository;
+    private final AudioFileP2PService audioFileP2PService;
     private final Gson gson;
 
     @Autowired
     public PeerNotificationServiceImpl(PeerRepository peerRepository,
                                       UserRepository userRepository,
                                       ChannelRepository channelRepository,
+                                      AudioFileP2PService audioFileP2PService,
                                       Gson gson) {
         this.peerRepository = peerRepository;
         this.userRepository = userRepository;
         this.channelRepository = channelRepository;
+        this.audioFileP2PService = audioFileP2PService;
         this.gson = gson;
         log.info("✓ [PeerNotificationService] Servicio de notificaciones P2P inicializado");
     }
@@ -58,12 +61,31 @@ public class PeerNotificationServiceImpl implements IPeerNotificationService {
         log.info("→ [PeerNotificationService] Notificando nuevo mensaje al peer {}", peerDestinoId);
 
         try {
+            String content = mensaje.getContent();
+
+            // Si es un mensaje de audio, transferir el archivo primero
+            if ("AUDIO".equals(mensaje.getMessageType())) {
+                log.info("→ Mensaje de audio detectado, iniciando transferencia del archivo...");
+
+                String rutaArchivoLocal = mensaje.getContent(); // ej: "audio_files/uuid_timestamp.wav"
+                String rutaArchivoRemoto = audioFileP2PService.transferirArchivoAudio(peerDestinoId, rutaArchivoLocal);
+
+                if (rutaArchivoRemoto == null) {
+                    log.error("✗ Fallo al transferir archivo de audio al peer {}", peerDestinoId);
+                    return false;
+                }
+
+                log.info("✓ Archivo de audio transferido exitosamente. Ruta remota: {}", rutaArchivoRemoto);
+                // Actualizar el content con la ruta remota
+                content = rutaArchivoRemoto;
+            }
+
             Map<String, Object> payload = new HashMap<>();
             payload.put("messageId", mensaje.getMessageId().toString());
             payload.put("channelId", mensaje.getChannelId().toString());
             payload.put("authorId", mensaje.getAuthor().getUserId().toString());
             payload.put("authorUsername", mensaje.getAuthor().getUsername());
-            payload.put("content", mensaje.getContent());
+            payload.put("content", content);
             payload.put("messageType", mensaje.getMessageType());
             payload.put("timestamp", mensaje.getTimestamp().toString());
 
@@ -141,6 +163,39 @@ public class PeerNotificationServiceImpl implements IPeerNotificationService {
                 // Convertir el data a UserResponseDto
                 String jsonData = gson.toJson(response.getData());
                 UserResponseDto user = gson.fromJson(jsonData, UserResponseDto.class);
+                
+                // ✅ Si el usuario tiene imagen en Base64, guardarla localmente
+                if (user.getImagenBase64() != null && !user.getImagenBase64().isEmpty()) {
+                    try {
+                        log.info("→ Guardando foto de perfil de usuario remoto: {}", user.getUsername());
+                        
+                        // Decodificar y guardar la imagen localmente
+                        byte[] imageBytes = java.util.Base64.getDecoder().decode(user.getImagenBase64());
+                        
+                        // Obtener extensión del archivo original o usar .jpg por defecto
+                        String extension = ".jpg";
+                        if (user.getPhotoAddress() != null && user.getPhotoAddress().contains(".")) {
+                            extension = user.getPhotoAddress().substring(user.getPhotoAddress().lastIndexOf("."));
+                        }
+                        
+                        String fileName = user.getUserId().toString() + extension;
+                        
+                        // Guardar en storage/user_photos/
+                        com.arquitectura.utils.file.IFileStorageService fileStorage = 
+                            org.springframework.context.ApplicationContextProvider.getBean(
+                                com.arquitectura.utils.file.IFileStorageService.class);
+                        
+                        String localPath = fileStorage.storeFile(imageBytes, fileName, "user_photos");
+                        user.setPhotoAddress(localPath); // Actualizar con la ruta local
+                        
+                        log.info("✓ Foto guardada localmente en: {}", localPath);
+                        
+                    } catch (Exception e) {
+                        log.warn("⚠ No se pudo guardar la foto del usuario: {}", e.getMessage());
+                        // Continuar sin la foto
+                    }
+                }
+                
                 log.info("✓ [PeerNotificationService] Info de usuario obtenida");
                 return user;
             }

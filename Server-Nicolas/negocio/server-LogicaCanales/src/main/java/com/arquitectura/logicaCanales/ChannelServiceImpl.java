@@ -43,13 +43,15 @@ public class ChannelServiceImpl implements IChannelService {
     private final NetworkUtils networkUtils;
     private final ApplicationEventPublisher eventPublisher;
     private final UserPeerMappingService userPeerMappingService;
+    private final ChannelInvitationP2PService channelInvitationP2PService;
 
 
     @Autowired
     public ChannelServiceImpl(ChannelRepository channelRepository, UserRepository userRepository, 
                               MembresiaCanalRepository membresiaCanalRepository, PeerRepository peerRepository,
                               NetworkUtils networkUtils, ApplicationEventPublisher eventPublisher,
-                              UserPeerMappingService userPeerMappingService) {
+                              UserPeerMappingService userPeerMappingService,
+                              ChannelInvitationP2PService channelInvitationP2PService) {
         this.channelRepository = channelRepository;
         this.userRepository = userRepository;
         this.membresiaCanalRepository = membresiaCanalRepository;
@@ -57,6 +59,7 @@ public class ChannelServiceImpl implements IChannelService {
         this.networkUtils = networkUtils;
         this.eventPublisher = eventPublisher;
         this.userPeerMappingService = userPeerMappingService;
+        this.channelInvitationP2PService = channelInvitationP2PService;
     }
 
     @Override
@@ -94,8 +97,29 @@ public class ChannelServiceImpl implements IChannelService {
     @Override
     @Transactional
     public ChannelResponseDto crearCanalDirecto(UUID user1Id, UUID user2Id) throws Exception {
-        Channel channel = obtenerOCrearCanalDirecto(user1Id, user2Id);
-        return mapToChannelResponseDto(channel);
+        try {
+            // Intentar crear el canal normalmente
+            Channel channel = obtenerOCrearCanalDirecto(user1Id, user2Id);
+            return mapToChannelResponseDto(channel);
+
+        } catch (com.arquitectura.logicaCanales.exceptions.FederationRequiredException e) {
+            // El usuario está en otro servidor - crear canal con miembro remoto
+            System.out.println("→ [ChannelService] Canal directo requiere federación P2P");
+            System.out.println("  User1: " + user1Id);
+            System.out.println("  User2: " + user2Id);
+            System.out.println("  Peer remoto: " + e.getTargetPeerId());
+
+            // Crear el canal localmente solo con el usuario local
+            // El usuario remoto se agregará cuando acepte o cuando envíe su primer mensaje
+            Channel channel = obtenerOCrearCanalDirecto(user1Id, user2Id);
+
+            // Convertir a DTO y retornar
+            ChannelResponseDto channelDto = mapToChannelResponseDto(channel);
+
+            System.out.println("✓ [ChannelService] Canal directo cross-server creado: " + channelDto.getChannelId());
+
+            return channelDto;
+        }
     }
 
     @Override
@@ -240,11 +264,12 @@ public class ChannelServiceImpl implements IChannelService {
             throw new Exception("El usuario ya es miembro o tiene una invitación pendiente.");
         }
 
-        MembresiaCanal nuevaInvitacion = new MembresiaCanal(membresiaId, userToInvite, channel, EstadoMembresia.PENDIENTE);
-        membresiaCanalRepository.save(nuevaInvitacion);
-
-        ChannelResponseDto channelDto = mapToChannelResponseDto(channel);
-        eventPublisher.publishEvent(new UserInvitedEvent(this, userToInvite.getUserId(), channelDto));
+        // *** INTEGRACIÓN P2P: Usar el servicio para procesar la invitación ***
+        // Esto manejará automáticamente si el usuario es local o remoto
+        channelInvitationP2PService.procesarInvitacion(channel, userToInvite, ownerId);
+        
+        System.out.println("✓ [ChannelService] Invitación procesada: " + userToInvite.getUsername() + 
+                           " al canal " + channel.getName());
     }
 
     @Override
@@ -259,11 +284,19 @@ public class ChannelServiceImpl implements IChannelService {
             throw new Exception("No hay una invitación pendiente que responder.");
         }
 
+        Channel channel = invitacion.getCanal();
+
         if (requestDto.isAccepted()) {
             invitacion.setEstado(EstadoMembresia.ACTIVO);
             membresiaCanalRepository.save(invitacion);
+            
+            // *** INTEGRACIÓN P2P: Notificar aceptación al peer del canal si es remoto ***
+            channelInvitationP2PService.procesarAceptacionInvitacion(channel, userId);
+            
+            System.out.println("✓ [ChannelService] Invitación aceptada por " + userId);
         } else {
             membresiaCanalRepository.delete(invitacion);
+            System.out.println("✓ [ChannelService] Invitación rechazada por " + userId);
         }
     }
 
@@ -391,5 +424,53 @@ public class ChannelServiceImpl implements IChannelService {
                 .collect(Collectors.toList());
     }
 
-}
+    /**
+     * Obtiene los IDs de los usuarios LOCALES (de este servidor) que son miembros de un canal.
+     * Excluye usuarios de otros servidores P2P.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> obtenerMiembrosLocalesDelCanal(UUID channelId) {
+        System.out.println("→ [ChannelService] Obteniendo miembros locales del canal: " + channelId);
+        
+        // 1. Obtener el peer local (este servidor)
+        String serverIP = networkUtils.getServerIPAddress();
+        Peer localPeer = peerRepository.findByIp(serverIP).orElse(null);
+        
+        if (localPeer == null) {
+            System.out.println("⚠ [ChannelService] No se pudo obtener el peer local");
+            return java.util.Collections.emptyList();
+        }
+        
+        UUID localPeerId = localPeer.getPeerId();
+        System.out.println("  Peer local: " + localPeerId);
+        
+        // 2. Obtener todas las membresías activas del canal
+        List<MembresiaCanal> membresias = membresiaCanalRepository
+                .findAllByCanal_ChannelIdAndEstado(channelId, EstadoMembresia.ACTIVO);
+        
+        // 3. Filtrar solo usuarios cuyo peer coincida con el local
+        List<UUID> miembrosLocales = membresias.stream()
+                .filter(membresia -> {
+                    User usuario = membresia.getUsuario();
+                    Peer userPeer = usuario.getPeerId();
+                    
+                    // Incluir solo si el usuario pertenece al servidor local
+                    boolean esLocal = userPeer != null && userPeer.getPeerId().equals(localPeerId);
+                    
+                    if (!esLocal) {
+                        System.out.println("  → Excluyendo usuario remoto: " + usuario.getUsername() + 
+                                         " (Peer: " + (userPeer != null ? userPeer.getPeerId() : "null") + ")");
+                    }
+                    
+                    return esLocal;
+                })
+                .map(membresia -> membresia.getUsuario().getUserId())
+                .collect(Collectors.toList());
+        
+        System.out.println("✓ [ChannelService] Encontrados " + miembrosLocales.size() + " miembros locales");
+        
+        return miembrosLocales;
+    }
 
+}
