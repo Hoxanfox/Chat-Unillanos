@@ -23,6 +23,7 @@ import com.arquitectura.DTO.peers.RetransmitRequestDto;
 import com.arquitectura.DTO.peers.RetransmitResponseDto;
 import com.arquitectura.DTO.peers.UpdatePeerListRequestDto;
 import com.arquitectura.DTO.peers.UpdatePeerListResponseDto;
+
 import com.arquitectura.utils.chunkManager.FileUploadResponse;
 
 
@@ -45,13 +46,6 @@ public interface IChatFachada {
     void cambiarEstadoUsuario(UUID userId, boolean nuevoEstado) throws Exception;
     List<UserResponseDto> listarContactos(UUID excludeUserId);
 
-    /**
-     * Envía una notificación push al cliente para forzar su logout.
-     * @param userId ID del usuario al que se le pedirá cerrar sesión
-     * @param motivo Motivo del logout forzado (opcional)
-     * @throws Exception si el usuario no existe
-     */
-    void enviarPedidoLogout(UUID userId, String motivo) throws Exception;
 
     // --- Métodos de Peer (usando com.arquitectura.DTO.peers) ---
     List<com.arquitectura.DTO.peers.PeerResponseDto> listarPeersDisponibles(UUID excludePeerId) throws Exception;
@@ -109,6 +103,7 @@ public interface IChatFachada {
     FileUploadResponse endUpload(DTOEndUpload dto, UUID autorId, String subDirectory) throws Exception;
     DTODownloadInfo startDownload(String fileId) throws Exception;
     byte[] getChunk(String downloadId, int chunkNumber) throws Exception;
+
 
     // --- MÉTODOS P2P (PEER-TO-PEER) usando com.arquitectura.DTO.p2p ---
 
@@ -173,13 +168,6 @@ public interface IChatFachada {
      * @throws Exception si hay error en la retransmisión
      */
     DTOResponse retransmitirPeticion(UUID peerDestinoId, DTORequest peticionOriginal) throws Exception;
-
-    /**
-     * Descarga un archivo completo desde otro peer usando las rutas startFileDownload y requestFileChunk.
-     * @param peerDestinoId ID del peer desde donde descargar el archivo
-     * @param fileId ID del archivo a descargar
-     * @return Bytes del archivo completo descargado
-     * @throws Exception si hay error en la descarga
-     */
-    byte[] descargarArchivoDesdePeer(UUID peerDestinoId, String fileId) throws Exception;
 }
+
+

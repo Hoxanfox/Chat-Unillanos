@@ -49,5 +49,12 @@
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
+        
+        <!-- Dependencia para federación P2P - Solo UserPeerMappingService -->
+        <dependency>
+            <groupId>com.arquitectura</groupId>
+            <artifactId>server-LogicaPeers</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 </project>
