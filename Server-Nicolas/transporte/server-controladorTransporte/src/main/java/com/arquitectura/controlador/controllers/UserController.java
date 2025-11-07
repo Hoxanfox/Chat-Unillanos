@@ -238,46 +238,21 @@ public class UserController extends BaseController {
 
             List<UserResponseDto> contactos = chatFachada.listarContactos(usuarioId);
 
-            // Construir lista plana con los campos esperados por el cliente
             List<Map<String, Object>> contactosData = new ArrayList<>();
             for (UserResponseDto contacto : contactos) {
                 Map<String, Object> contactoMap = new HashMap<>();
-                contactoMap.put("id", contacto.getUserId() != null ? contacto.getUserId().toString() : null);
-
-                // peer id (si está disponible)
-                contactoMap.put("peerid", contacto.getPeerId() != null ? contacto.getPeerId().toString() : null);
-
+                contactoMap.put("id", contacto.getUserId().toString());
                 contactoMap.put("nombre", contacto.getUsername());
                 contactoMap.put("email", contacto.getEmail());
-
-                // Proveer tanto imagenBase64 (si el DTO ya la trae) como imagenId (ruta/identificador en servidor)
-                if (contacto.getImagenBase64() != null && !contacto.getImagenBase64().isEmpty()) {
-                    contactoMap.put("imagenBase64", contacto.getImagenBase64());
-                } else {
-                    contactoMap.put("imagenBase64", null);
-                }
-                contactoMap.put("imagenId", contacto.getPhotoAddress());
-
-                // Normalizar estado a "ONLINE" / "OFFLINE"
-                String estadoRaw = contacto.getEstado();
-                String conectado;
-                if (estadoRaw == null) {
-                    conectado = "OFFLINE";
-                } else {
-                    String lower = estadoRaw.trim().toLowerCase();
-                    if (lower.equals("true") || lower.equals("online") || lower.equals("activo") || lower.equals("1")) {
-                        conectado = "ONLINE";
-                    } else {
-                        conectado = "OFFLINE";
-                    }
-                }
-                contactoMap.put("conectado", conectado);
-
+                contactoMap.put("fileId", contacto.getPhotoAddress());
+                contactoMap.put("conectado", contacto.getEstado() != null ? contacto.getEstado() : "false");
                 contactosData.add(contactoMap);
             }
 
-            // Enviar la lista directamente en el campo data (no anidada)
-            sendJsonResponse(handler, "listarContactos", true, "Contactos obtenidos exitosamente", contactosData);
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("contactos", contactosData);
+
+            sendJsonResponse(handler, "listarContactos", true, "Contactos obtenidos exitosamente", responseData);
 
         } catch (IllegalArgumentException e) {
             sendJsonResponse(handler, "listarContactos", false, "Error al obtener contactos: usuarioId inválido", null);

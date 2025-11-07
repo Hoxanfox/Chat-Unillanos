@@ -1,9 +1,7 @@
 package com.arquitectura.logicaPeers.config;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.PropertySource;
 
 /**
  * Clase de configuración para propiedades P2P.
@@ -11,7 +9,6 @@ import org.springframework.context.annotation.PropertySource;
  * para los servicios P2P.
  */
 @Configuration
-@PropertySource("file:./config/p2p.properties")
 public class P2PConfig {
     
     // ==================== CONFIGURACIÓN GENERAL P2P ====================
@@ -214,18 +211,5 @@ public class P2PConfig {
                 ", heartbeatTimeout=" + heartbeatTimeout +
                 ", clientTimeout=" + clientTimeout +
                 '}';
-    }
-
-    // ==================== BEANS ====================
-
-    /**
-     * Crea y configura el bean de PeerConnectionPool.
-     *
-     * @return Instancia configurada de PeerConnectionPool
-     */
-    @Bean
-    public com.arquitectura.utils.p2p.PeerConnectionPool peerConnectionPool() {
-        System.out.println("→ [P2PConfig] Creando PeerConnectionPool con " + clientPoolThreads + " threads");
-        return new com.arquitectura.utils.p2p.PeerConnectionPool(clientPoolThreads);
     }
 }
