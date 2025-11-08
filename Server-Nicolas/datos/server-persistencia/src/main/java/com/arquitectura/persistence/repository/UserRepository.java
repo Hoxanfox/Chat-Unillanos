@@ -2,14 +2,20 @@ package com.arquitectura.persistence.repository;
 
 import com.arquitectura.domain.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param; // <-- 1. IMPORTA ESTO
 import org.springframework.stereotype.Repository;
 import java.util.Optional;
 import java.util.UUID;
 
-@Repository // 1. Le dice a Spring que esta es una clase de persistencia.
-public interface UserRepository extends JpaRepository<User, UUID> { // 2. Hereda todos los métodos CRUD básicos (save, findById, findAll, delete, etc.).
+@Repository
+public interface UserRepository extends JpaRepository<User, UUID> {
 
-    // 3. Spring Data JPA crea automáticamente la implementación de este método basándose en su nombre.
     Optional<User> findByUsername(String username);
+    Optional<User> findByEmail(String email);
     User findByUserId(UUID userId);
+
+    // --- AQUÍ ESTÁ LA CORRECCIÓN ---
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.peerId WHERE u.userId = :id")
+    Optional<User> findByIdWithPeer(@Param("id") UUID id); // <-- 2. AGREGA @Param("id") AQUÍ
 }

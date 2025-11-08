@@ -13,13 +13,17 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
 import observador.IObservador;
 
 import javax.sound.sampled.LineUnavailableException;
 import java.io.File;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
@@ -37,10 +41,17 @@ public class VistaCanal extends BorderPane implements IObservador {
     private final Label lblEstadoGrabacion;
 
     private GrabadorAudio grabadorAudio;
+    private boolean isRecording = false;
+
+    // Evitar mensajes duplicados
+    private final Set<String> mensajesMostrados = Collections.synchronizedSet(new HashSet<>());
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     public VistaCanal(DTOCanalCreado canal, Runnable onVolver, Consumer<DTOCanalCreado> onVerMiembros, IControladorCanales controlador) {
+        System.out.println("🔧 [VistaCanal]: Inicializando vista de canal...");
+        System.out.println("   → Canal: " + canal.getNombre() + " (ID: " + canal.getId() + ")");
+
         this.controlador = controlador;
         this.gestionArchivos = new GestionArchivosImpl();
         this.grabadorAudio = null;
@@ -48,6 +59,7 @@ public class VistaCanal extends BorderPane implements IObservador {
         this.setPadding(new Insets(10));
         this.setStyle("-fx-background-color: #ecf0f1;");
 
+        System.out.println("🔔 [VistaCanal]: Registrándose como observador del controlador...");
         controlador.registrarObservadorMensajes(this);
 
         // === HEADER ===
@@ -55,27 +67,32 @@ public class VistaCanal extends BorderPane implements IObservador {
         header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(0, 0, 10, 0));
 
-        Label tituloChat = new Label("Channel: " + canal.getNombre());
+        Label tituloChat = new Label("📢 Canal: " + canal.getNombre());
         tituloChat.setFont(Font.font("Arial", FontWeight.BOLD, 16));
 
         HBox spacer = new HBox();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button btnMiembros = new Button("Ver Miembros");
+        Button btnMiembros = new Button("👥 Ver Miembros");
+        btnMiembros.setStyle("-fx-background-color: #9b59b6; -fx-text-fill: white; -fx-padding: 5 10;");
         btnMiembros.setOnAction(e -> onVerMiembros.accept(canal));
 
         Button btnVolver = new Button("← Volver");
-        btnVolver.setOnAction(e -> onVolver.run());
+        btnVolver.setStyle("-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-padding: 5 10;");
+        btnVolver.setOnAction(e -> {
+            System.out.println("🔙 [VistaCanal]: Regresando a la lista de canales");
+            onVolver.run();
+        });
 
         header.getChildren().addAll(tituloChat, spacer, btnMiembros, btnVolver);
         this.setTop(header);
 
         // === MENSAJES ===
-        mensajesBox = new VBox(15);
+        mensajesBox = new VBox(10);
         mensajesBox.setPadding(new Insets(10));
-        mensajesBox.setStyle("-fx-background-color: white; -fx-border-color: #dcdcdc; -fx-border-radius: 5;");
+        mensajesBox.setStyle("-fx-background-color: #f9f9f9; -fx-border-color: #e0e0e0; -fx-border-radius: 5;");
 
-        Label cargando = new Label("Cargando mensajes...");
+        Label cargando = new Label("Cargando mensajes del canal...");
         cargando.setTextFill(Color.GRAY);
         mensajesBox.getChildren().add(cargando);
 
@@ -87,26 +104,20 @@ public class VistaCanal extends BorderPane implements IObservador {
         VBox inputArea = new VBox(5);
         HBox entradaBox = new HBox(10);
         entradaBox.setPadding(new Insets(10, 0, 5, 0));
+        entradaBox.setAlignment(Pos.CENTER);
 
         // Botón para grabar audio
-        btnGrabarAudio = new Button("🎤 Grabar");
-        btnGrabarAudio.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 5 10;");
+        btnGrabarAudio = new Button("🎤");
+        btnGrabarAudio.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-size: 16px; -fx-padding: 5 10;");
         btnGrabarAudio.setTooltip(new Tooltip("Grabar mensaje de audio"));
-        btnGrabarAudio.setOnAction(e -> iniciarGrabacionAudio());
-
-        // Botón para detener grabación
-        btnDetenerGrabacion = new Button("⏹ Detener");
-        btnDetenerGrabacion.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 5 10;");
-        btnDetenerGrabacion.setTooltip(new Tooltip("Detener y enviar grabación"));
-        btnDetenerGrabacion.setOnAction(e -> detenerGrabacionAudio());
-        btnDetenerGrabacion.setDisable(true);
+        btnGrabarAudio.setOnAction(e -> manejarBotonAudio());
 
         // Botón para cancelar grabación
         btnCancelarGrabacion = new Button("❌");
         btnCancelarGrabacion.setStyle("-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 5 10;");
         btnCancelarGrabacion.setTooltip(new Tooltip("Cancelar grabación"));
         btnCancelarGrabacion.setOnAction(e -> cancelarGrabacionAudio());
-        btnCancelarGrabacion.setDisable(true);
+        btnCancelarGrabacion.setVisible(false);
 
         // Botón para enviar archivo
         btnArchivo = new Button("📎");
@@ -116,23 +127,28 @@ public class VistaCanal extends BorderPane implements IObservador {
 
         // Campo de texto
         campoMensaje = new TextField();
-        campoMensaje.setPromptText("Type your message ...");
+        campoMensaje.setPromptText("Type your message...");
         HBox.setHgrow(campoMensaje, Priority.ALWAYS);
+        campoMensaje.setOnAction(e -> manejarBotonEnviar());
 
         // Botón enviar
         btnEnviar = new Button("Send");
         btnEnviar.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-padding: 5 15;");
-        btnEnviar.setOnAction(e -> enviarMensaje());
-        campoMensaje.setOnAction(e -> enviarMensaje());
+        btnEnviar.setOnAction(e -> manejarBotonEnviar());
 
-        entradaBox.getChildren().addAll(btnGrabarAudio, btnDetenerGrabacion, btnCancelarGrabacion, btnArchivo, campoMensaje, btnEnviar);
+        // Botón para detener grabación (oculto inicialmente)
+        btnDetenerGrabacion = new Button("⏹ Detener");
+        btnDetenerGrabacion.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-size: 14px; -fx-padding: 5 10;");
+        btnDetenerGrabacion.setVisible(false);
+
+        entradaBox.getChildren().addAll(btnGrabarAudio, btnCancelarGrabacion, btnArchivo, campoMensaje, btnEnviar);
 
         // Label de estado
         lblEstadoGrabacion = new Label("");
         lblEstadoGrabacion.setTextFill(Color.DARKBLUE);
         lblEstadoGrabacion.setFont(Font.font("Arial", FontWeight.BOLD, 12));
 
-        Label footerLabel = new Label("Canal ID: " + canal.getId());
+        Label footerLabel = new Label("📢 Todos los miembros del canal pueden ver los mensajes");
         footerLabel.setTextFill(Color.GRAY);
         footerLabel.setFont(Font.font("Arial", 10));
 
@@ -142,12 +158,47 @@ public class VistaCanal extends BorderPane implements IObservador {
         this.setBottom(inputArea);
 
         // Solicitar historial inicial
+        System.out.println("📡 [VistaCanal]: Solicitando historial del canal...");
         controlador.solicitarHistorialCanal(canal.getId(), 50);
+        System.out.println("✅ [VistaCanal]: Vista inicializada correctamente");
+    }
+
+    /**
+     * Maneja el botón de audio: inicia grabación o cancela si ya está grabando
+     */
+    private void manejarBotonAudio() {
+        if (isRecording) {
+            // Cancelar grabación
+            System.out.println("🎤 [VistaCanal]: Cancelando grabación...");
+            cancelarGrabacionAudio();
+        } else {
+            // Iniciar grabación
+            System.out.println("🔴 [VistaCanal]: Iniciando grabación...");
+            iniciarGrabacionAudio();
+        }
+    }
+
+    /**
+     * Maneja el botón de enviar: envía audio si está grabando, o mensaje de texto si no
+     */
+    private void manejarBotonEnviar() {
+        if (isRecording) {
+            // Detener y enviar audio
+            System.out.println("➡️ [VistaCanal]: Deteniendo y enviando grabación de audio...");
+            detenerGrabacionAudio();
+        } else {
+            // Enviar mensaje de texto
+            enviarMensaje();
+        }
     }
 
     private void enviarMensaje() {
         String contenido = campoMensaje.getText().trim();
         if (contenido.isEmpty()) return;
+
+        System.out.println("➡️ [VistaCanal]: Enviando mensaje de texto...");
+        System.out.println("   → Canal: " + canal.getId());
+        System.out.println("   → Contenido: " + contenido);
 
         btnEnviar.setDisable(true);
         campoMensaje.setDisable(true);
@@ -158,6 +209,7 @@ public class VistaCanal extends BorderPane implements IObservador {
                 btnEnviar.setDisable(false);
                 campoMensaje.setDisable(false);
                 campoMensaje.requestFocus();
+                System.out.println("✅ [VistaCanal]: Mensaje enviado exitosamente");
             }))
             .exceptionally(ex -> {
                 Platform.runLater(() -> {
@@ -165,6 +217,7 @@ public class VistaCanal extends BorderPane implements IObservador {
                     campoMensaje.setDisable(false);
                     mostrarError("Error al enviar mensaje: " + ex.getMessage());
                 });
+                System.err.println("❌ [VistaCanal]: Error al enviar mensaje: " + ex.getMessage());
                 return null;
             });
     }
@@ -174,21 +227,25 @@ public class VistaCanal extends BorderPane implements IObservador {
             grabadorAudio = new GrabadorAudio();
             grabadorAudio.iniciarGrabacion();
 
+            isRecording = true;
+
             Platform.runLater(() -> {
-                btnGrabarAudio.setDisable(true);
-                btnDetenerGrabacion.setDisable(false);
-                btnCancelarGrabacion.setDisable(false);
-                lblEstadoGrabacion.setText("🔴 Grabando audio... Presione 'Detener' para finalizar.");
+                btnGrabarAudio.setText("❌");
+                btnGrabarAudio.setStyle("-fx-background-color: #c0392b; -fx-text-fill: white; -fx-font-size: 16px; -fx-padding: 5 10;");
+                btnCancelarGrabacion.setVisible(true);
+                campoMensaje.setDisable(true);
+                btnArchivo.setDisable(true);
+                lblEstadoGrabacion.setText("🔴 Grabando audio... Presione 'Send' para enviar o '❌' para cancelar.");
                 lblEstadoGrabacion.setTextFill(Color.RED);
             });
 
-            System.out.println("🎤 Grabación de audio iniciada");
+            System.out.println("🎤 [VistaCanal]: Grabación de audio iniciada");
         } catch (LineUnavailableException e) {
             Platform.runLater(() -> {
                 mostrarError("Error al iniciar la grabación de audio: " + e.getMessage());
                 lblEstadoGrabacion.setText("❌ Error al acceder al micrófono");
             });
-            System.err.println("❌ Error al iniciar grabación: " + e.getMessage());
+            System.err.println("❌ [VistaCanal]: Error al iniciar grabación: " + e.getMessage());
         }
     }
 
@@ -198,8 +255,8 @@ public class VistaCanal extends BorderPane implements IObservador {
 
             Platform.runLater(() -> {
                 btnGrabarAudio.setDisable(true);
-                btnDetenerGrabacion.setDisable(true);
-                btnCancelarGrabacion.setDisable(true);
+                btnEnviar.setDisable(true);
+                btnCancelarGrabacion.setVisible(false);
                 lblEstadoGrabacion.setText("⏳ Subiendo audio al servidor...");
                 lblEstadoGrabacion.setTextFill(Color.DARKBLUE);
             });
@@ -207,9 +264,9 @@ public class VistaCanal extends BorderPane implements IObservador {
             // Primero subir el archivo al servidor
             gestionArchivos.subirArchivo(audioFile)
                 .thenCompose(fileId -> {
-                    System.out.println("✅ Audio subido con ID: " + fileId);
+                    System.out.println("✅ [VistaCanal]: Audio subido con ID: " + fileId);
                     Platform.runLater(() -> {
-                        lblEstadoGrabacion.setText("📤 Enviando mensaje de audio...");
+                        lblEstadoGrabacion.setText("📤 Enviando mensaje de audio al canal...");
                     });
 
                     // Luego enviar el mensaje con el ID del archivo
@@ -217,9 +274,9 @@ public class VistaCanal extends BorderPane implements IObservador {
                 })
                 .thenRun(() -> {
                     Platform.runLater(() -> {
-                        lblEstadoGrabacion.setText("✅ Mensaje de audio enviado");
+                        lblEstadoGrabacion.setText("✅ Mensaje de audio enviado al canal");
                         lblEstadoGrabacion.setTextFill(Color.GREEN);
-                        btnGrabarAudio.setDisable(false);
+                        resetearEstadoGrabacion();
 
                         // Limpiar el mensaje después de 3 segundos
                         new Thread(() -> {
@@ -236,16 +293,16 @@ public class VistaCanal extends BorderPane implements IObservador {
                     if (audioFile != null && audioFile.exists()) {
                         audioFile.delete();
                     }
+
+                    System.out.println("✅ [VistaCanal]: Audio enviado exitosamente");
                 })
                 .exceptionally(ex -> {
                     Platform.runLater(() -> {
                         lblEstadoGrabacion.setText("❌ Error al enviar audio: " + ex.getMessage());
                         lblEstadoGrabacion.setTextFill(Color.RED);
-                        btnGrabarAudio.setDisable(false);
-                        btnDetenerGrabacion.setDisable(true);
-                        btnCancelarGrabacion.setDisable(true);
+                        resetearEstadoGrabacion();
                     });
-                    System.err.println("❌ Error al enviar audio: " + ex.getMessage());
+                    System.err.println("❌ [VistaCanal]: Error al enviar audio: " + ex.getMessage());
                     ex.printStackTrace();
                     return null;
                 });
@@ -257,11 +314,9 @@ public class VistaCanal extends BorderPane implements IObservador {
             grabadorAudio.cancelarGrabacion();
 
             Platform.runLater(() -> {
-                btnGrabarAudio.setDisable(false);
-                btnDetenerGrabacion.setDisable(true);
-                btnCancelarGrabacion.setDisable(true);
                 lblEstadoGrabacion.setText("❌ Grabación cancelada");
                 lblEstadoGrabacion.setTextFill(Color.ORANGE);
+                resetearEstadoGrabacion();
 
                 // Limpiar el mensaje después de 2 segundos
                 new Thread(() -> {
@@ -274,8 +329,19 @@ public class VistaCanal extends BorderPane implements IObservador {
                 }).start();
             });
 
-            System.out.println("❌ Grabación cancelada por el usuario");
+            System.out.println("❌ [VistaCanal]: Grabación cancelada por el usuario");
         }
+    }
+
+    private void resetearEstadoGrabacion() {
+        isRecording = false;
+        btnGrabarAudio.setText("🎤");
+        btnGrabarAudio.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-size: 16px; -fx-padding: 5 10;");
+        btnGrabarAudio.setDisable(false);
+        btnEnviar.setDisable(false);
+        btnCancelarGrabacion.setVisible(false);
+        campoMensaje.setDisable(false);
+        btnArchivo.setDisable(false);
     }
 
     private void seleccionarYEnviarArchivo() {
@@ -291,6 +357,9 @@ public class VistaCanal extends BorderPane implements IObservador {
         File archivo = fileChooser.showOpenDialog(this.getScene().getWindow());
 
         if (archivo != null) {
+            System.out.println("📎 [VistaCanal]: Enviando archivo al canal...");
+            System.out.println("   → Archivo: " + archivo.getName());
+
             btnArchivo.setDisable(true);
             lblEstadoGrabacion.setText("⏳ Subiendo archivo: " + archivo.getName() + "...");
             lblEstadoGrabacion.setTextFill(Color.DARKBLUE);
@@ -298,7 +367,7 @@ public class VistaCanal extends BorderPane implements IObservador {
             // Primero subir el archivo al servidor
             gestionArchivos.subirArchivo(archivo)
                 .thenCompose(fileId -> {
-                    System.out.println("✅ Archivo subido con ID: " + fileId);
+                    System.out.println("✅ [VistaCanal]: Archivo subido con ID: " + fileId);
                     Platform.runLater(() -> {
                         lblEstadoGrabacion.setText("📤 Enviando archivo al canal...");
                     });
@@ -322,6 +391,7 @@ public class VistaCanal extends BorderPane implements IObservador {
                             }
                         }).start();
                     });
+                    System.out.println("✅ [VistaCanal]: Archivo enviado exitosamente");
                 })
                 .exceptionally(ex -> {
                     Platform.runLater(() -> {
@@ -329,7 +399,7 @@ public class VistaCanal extends BorderPane implements IObservador {
                         lblEstadoGrabacion.setTextFill(Color.RED);
                         btnArchivo.setDisable(false);
                     });
-                    System.err.println("❌ Error al enviar archivo: " + ex.getMessage());
+                    System.err.println("❌ [VistaCanal]: Error al enviar archivo: " + ex.getMessage());
                     ex.printStackTrace();
                     return null;
                 });
@@ -338,53 +408,100 @@ public class VistaCanal extends BorderPane implements IObservador {
 
     @Override
     public void actualizar(String tipoDeDato, Object datos) {
+        System.out.println("📥 [VistaCanal]: Notificación recibida - Tipo: " + tipoDeDato);
+
         Platform.runLater(() -> {
             switch (tipoDeDato) {
                 case "HISTORIAL_CANAL_RECIBIDO":
                     if (datos instanceof List) {
+                        List<?> lista = (List<?>) datos;
+                        System.out.println("📜 [VistaCanal]: Historial recibido - Total mensajes: " + lista.size());
                         cargarHistorial((List<DTOMensajeCanal>) datos);
                     }
                     break;
+
                 case "MENSAJE_CANAL_RECIBIDO":
+                case "NUEVO_MENSAJE_CANAL":
                     if (datos instanceof DTOMensajeCanal) {
                         DTOMensajeCanal mensaje = (DTOMensajeCanal) datos;
                         if (mensaje.getCanalId().equals(canal.getId())) {
+                            System.out.println("💬 [VistaCanal]: Nuevo mensaje recibido");
+                            System.out.println("   → De: " + mensaje.getNombreRemitente());
+                            System.out.println("   → Tipo: " + mensaje.getTipo());
                             agregarMensaje(mensaje);
                         }
                     }
                     break;
+
                 case "ERROR_OPERACION":
-                    mostrarError(datos.toString());
+                case "ERROR_ENVIO_MENSAJE":
+                    String error = datos != null ? datos.toString() : "Error desconocido";
+                    System.err.println("❌ [VistaCanal]: Error: " + error);
+                    mostrarError(error);
                     break;
+
+                default:
+                    System.out.println("⚠️ [VistaCanal]: Tipo de notificación no manejado: " + tipoDeDato);
             }
         });
     }
 
     private void cargarHistorial(List<DTOMensajeCanal> mensajes) {
         mensajesBox.getChildren().clear();
+        mensajesMostrados.clear();
+
         if (mensajes.isEmpty()) {
-            Label sinMensajes = new Label("No hay mensajes en este canal.");
+            Label sinMensajes = new Label("📭 No hay mensajes en este canal. ¡Sé el primero en escribir!");
             sinMensajes.setTextFill(Color.GRAY);
+            sinMensajes.setFont(Font.font("Arial", FontWeight.BOLD, 14));
             mensajesBox.getChildren().add(sinMensajes);
+            System.out.println("📭 [VistaCanal]: No hay mensajes en el historial");
         } else {
             for (DTOMensajeCanal mensaje : mensajes) {
                 agregarMensaje(mensaje);
             }
+            System.out.println("✅ [VistaCanal]: Historial cargado en la vista");
         }
     }
 
     private void agregarMensaje(DTOMensajeCanal mensaje) {
-        VBox bubble = new VBox(3);
-        bubble.setPadding(new Insets(8));
-        bubble.setMaxWidth(450);
-
-        if (mensaje.isEsPropio()) {
-            bubble.setAlignment(Pos.CENTER_RIGHT);
-            bubble.setStyle("-fx-background-color: #d4edda; -fx-background-radius: 10;");
-        } else {
-            bubble.setAlignment(Pos.CENTER_LEFT);
-            bubble.setStyle("-fx-background-color: #f8f9fa; -fx-background-radius: 10;");
+        // Validación para evitar burbujas vacías o duplicadas
+        String id = mensaje.getMensajeId();
+        if (id != null && !id.isEmpty() && mensajesMostrados.contains(id)) {
+            System.out.println("⚠️ [VistaCanal]: Mensaje ya mostrado, ignorando ID: " + id);
+            return;
         }
+
+        boolean hasText = mensaje.getContenido() != null && !mensaje.getContenido().trim().isEmpty();
+        boolean hasFile = mensaje.getFileId() != null && !mensaje.getFileId().isEmpty();
+
+        if (!hasText && !hasFile) {
+            System.out.println("⚠️ [VistaCanal]: Mensaje vacío, no se mostrará");
+            return;
+        }
+
+        // Mensajes propios a la IZQUIERDA (verde), otros a la DERECHA (blanco)
+        Pos alineacion = mensaje.isEsPropio() ? Pos.CENTER_LEFT : Pos.CENTER_RIGHT;
+
+        System.out.println("🔍 [VistaCanal]: Agregando mensaje:");
+        System.out.println("   → Tipo: " + mensaje.getTipo());
+        System.out.println("   → esPropio: " + mensaje.isEsPropio());
+        System.out.println("   → Alineación: " + (mensaje.isEsPropio() ? "IZQUIERDA (propio)" : "DERECHA (otros)"));
+
+        VBox burbuja = crearBurbujaMensaje(mensaje, alineacion);
+        mensajesBox.getChildren().add(burbuja);
+
+        if (id != null && !id.isEmpty()) {
+            mensajesMostrados.add(id);
+        }
+
+        System.out.println("✅ [VistaCanal]: Mensaje agregado a la vista");
+    }
+
+    private VBox crearBurbujaMensaje(DTOMensajeCanal mensaje, Pos alineacion) {
+        VBox burbuja = new VBox(5);
+        burbuja.setPadding(new Insets(8));
+        burbuja.setMaxWidth(400);
 
         String nombreAutor = mensaje.isEsPropio() ? "Tú" : mensaje.getNombreRemitente();
         String hora = mensaje.getFechaEnvio() != null ? mensaje.getFechaEnvio().format(FORMATTER) : "";
@@ -393,19 +510,79 @@ public class VistaCanal extends BorderPane implements IObservador {
         autorLabel.setFont(Font.font("Arial", FontWeight.BOLD, 11));
         autorLabel.setTextFill(mensaje.isEsPropio() ? Color.DARKGREEN : Color.DARKBLUE);
 
-        // Mostrar contenido según el tipo de mensaje
-        if ("audio".equals(mensaje.getTipo())) {
-            Label contenidoLabel = new Label("🎤 Mensaje de audio");
-            contenidoLabel.setStyle("-fx-font-style: italic;");
-            bubble.getChildren().addAll(autorLabel, contenidoLabel);
-        } else if (mensaje.getContenido() != null) {
-            Label contenidoLabel = new Label(mensaje.getContenido());
-            contenidoLabel.setWrapText(true);
-            contenidoLabel.setMaxWidth(400);
-            bubble.getChildren().addAll(autorLabel, contenidoLabel);
+        // Estilo según si es propio o no
+        if (mensaje.isEsPropio()) {
+            burbuja.setStyle("-fx-background-color: #dcf8c6; -fx-background-radius: 10;");
+        } else {
+            burbuja.setStyle("-fx-background-color: #ffffff; -fx-background-radius: 10; -fx-border-color: #e0e0e0; -fx-border-radius: 10;");
         }
 
-        mensajesBox.getChildren().add(bubble);
+        // ✅ FIX: Usar comparación case-insensitive para tipo de mensaje (servidor envía "AUDIO"/"TEXT")
+        // Mostrar contenido según el tipo de mensaje
+        if ("AUDIO".equalsIgnoreCase(mensaje.getTipo())) {
+            HBox audioBox = new HBox(10);
+            audioBox.setAlignment(Pos.CENTER_LEFT);
+
+            Button btnPlay = new Button("▶️");
+            btnPlay.setStyle("-fx-font-size: 16px;");
+            btnPlay.setOnAction(e -> {
+                System.out.println("🎵 [VistaCanal]: Reproducir audio - FileId: " + mensaje.getFileId());
+                // TODO: Implementar reproducción de audio
+                btnPlay.setText("⏳");
+                btnPlay.setDisable(true);
+
+                // Simulación - en producción usar controlador.reproducirAudio()
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ex) {
+                        ex.printStackTrace();
+                    }
+                    Platform.runLater(() -> {
+                        btnPlay.setText("✅");
+                        new Thread(() -> {
+                            try {
+                                Thread.sleep(1000);
+                            } catch (InterruptedException ex) {
+                                ex.printStackTrace();
+                            }
+                            Platform.runLater(() -> {
+                                btnPlay.setText("▶️");
+                                btnPlay.setDisable(false);
+                            });
+                        }).start();
+                    });
+                }).start();
+            });
+
+            Label audioLabel = new Label("🎤 Mensaje de audio");
+            audioLabel.setStyle("-fx-font-size: 12px; -fx-font-style: italic;");
+
+            audioBox.getChildren().addAll(btnPlay, audioLabel);
+            burbuja.getChildren().addAll(autorLabel, audioBox);
+        } else if ("ARCHIVO".equalsIgnoreCase(mensaje.getTipo()) || mensaje.getFileId() != null) {
+            Button btnDescargar = new Button("📎 Descargar archivo");
+            btnDescargar.setStyle("-fx-font-size: 12px;");
+            btnDescargar.setOnAction(e -> {
+                System.out.println("📥 [VistaCanal]: Descargar archivo - FileId: " + mensaje.getFileId());
+                // TODO: Implementar descarga
+            });
+            burbuja.getChildren().addAll(autorLabel, btnDescargar);
+
+            if (mensaje.getContenido() != null && !mensaje.getContenido().isEmpty()) {
+                Text contenidoText = new Text(mensaje.getContenido());
+                contenidoText.setWrappingWidth(380);
+                burbuja.getChildren().add(contenidoText);
+            }
+        } else if (mensaje.getContenido() != null && !mensaje.getContenido().isEmpty()) {
+            Text contenidoText = new Text(mensaje.getContenido());
+            contenidoText.setWrappingWidth(380);
+            burbuja.getChildren().addAll(autorLabel, contenidoText);
+        }
+
+        HBox wrapper = new HBox(burbuja);
+        wrapper.setAlignment(alineacion);
+        return new VBox(wrapper);
     }
 
     private void mostrarError(String mensaje) {
@@ -413,5 +590,6 @@ public class VistaCanal extends BorderPane implements IObservador {
         errorLabel.setTextFill(Color.RED);
         errorLabel.setFont(Font.font("Arial", FontWeight.BOLD, 11));
         mensajesBox.getChildren().add(errorLabel);
+        System.err.println("❌ [VistaCanal]: " + mensaje);
     }
 }

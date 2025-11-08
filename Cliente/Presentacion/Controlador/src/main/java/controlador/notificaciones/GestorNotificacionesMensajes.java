@@ -104,7 +104,7 @@ public class GestorNotificacionesMensajes implements IObservador {
             DTOMensaje mensaje = (DTOMensaje) datos;
             
             // Si el mensaje NO es mío (yo no lo envié)
-            if (!mensaje.esMio()) {
+            if (!mensaje.isEsMio()) {
                 String contactoId = mensaje.getRemitenteId();
                 
                 // Si el chat NO está activo o es de otro contacto
@@ -157,4 +157,3 @@ public class GestorNotificacionesMensajes implements IObservador {
         notificarObservadores("CONTADORES_REINICIADOS", null);
     }
 }
-

@@ -21,7 +21,11 @@ public class ServerMainWindow extends JFrame {
     private ConnectedUsersReportPanel connectedUsersReportPanel;
     private TranscriptionsReportPanel transcriptionsReportPanel;
     private BroadcastMessagePanel broadcastMessagePanel;
-    // Aquí añadirías los otros paneles de informes a medida que los crees
+    
+    // Paneles P2P
+    private PeersMonitorPanel peersMonitorPanel;
+    private NetworkTopologyPanel networkTopologyPanel;
+    private P2PUsersDistributionPanel p2pUsersDistributionPanel;
 
     public ServerMainWindow(ServerViewController controller) {
         this.controller = controller;
@@ -54,6 +58,11 @@ public class ServerMainWindow extends JFrame {
         connectedUsersReportPanel = new ConnectedUsersReportPanel(controller);
         transcriptionsReportPanel = new TranscriptionsReportPanel(controller);
         broadcastMessagePanel = new BroadcastMessagePanel(controller);
+        
+        // Paneles P2P
+        peersMonitorPanel = new PeersMonitorPanel(controller);
+        networkTopologyPanel = new NetworkTopologyPanel(controller);
+        p2pUsersDistributionPanel = new P2PUsersDistributionPanel(controller);
 
         // Añadimos los paneles al CardLayout con un nombre único
         mainContentPanel.add(registerUserPanel, "REGISTER_USER_PANEL");
@@ -63,6 +72,11 @@ public class ServerMainWindow extends JFrame {
         mainContentPanel.add(connectedUsersReportPanel, "CONNECTED_USERS_PANEL");
         mainContentPanel.add(transcriptionsReportPanel, "TRANSCRIPTIONS_PANEL");
         mainContentPanel.add(broadcastMessagePanel, "BROADCAST_PANEL");
+        
+        // Paneles P2P
+        mainContentPanel.add(peersMonitorPanel, "PEERS_MONITOR_PANEL");
+        mainContentPanel.add(networkTopologyPanel, "NETWORK_TOPOLOGY_PANEL");
+        mainContentPanel.add(p2pUsersDistributionPanel, "P2P_USERS_PANEL");
 
         add(mainContentPanel, BorderLayout.CENTER);
         cardLayout.show(mainContentPanel, "REGISTER_USER_PANEL");
@@ -97,7 +111,11 @@ public class ServerMainWindow extends JFrame {
         JButton btnShowTranscriptions = new JButton("Texto de Mensaje de audio");
         JButton btnBroadcast = new JButton("Enviar Mensaje Global");
         JButton btnLogs = new JButton("Logs");
-        // ... otros botones ...
+        
+        // Botones P2P
+        JButton btnPeersMonitor = new JButton("Monitor de Peers");
+        JButton btnNetworkTopology = new JButton("Topología de Red");
+        JButton btnP2PUsers = new JButton("Usuarios P2P");
 
         // Guardamos los botones en un array para manipularlos fácilmente
         JButton[] buttons = {
@@ -107,8 +125,10 @@ public class ServerMainWindow extends JFrame {
                 btnShowConnectedUsers,
                 btnShowTranscriptions,
                 btnLogs,
-                btnBroadcast
-                // ... añade los otros botones aquí
+                btnBroadcast,
+                btnPeersMonitor,
+                btnNetworkTopology,
+                btnP2PUsers
         };
 
         int maxWidth = 0;
@@ -164,7 +184,28 @@ public class ServerMainWindow extends JFrame {
             logsReportPanel.stopAutoRefresh(); // Detener el refresco de logs si estaba activo
             cardLayout.show(mainContentPanel, "BROADCAST_PANEL");
         });
-
+        
+        // Listeners para botones P2P
+        btnPeersMonitor.addActionListener(e -> {
+            logsReportPanel.stopAutoRefresh();
+            peersMonitorPanel.refreshReport();
+            peersMonitorPanel.startAutoRefresh();
+            cardLayout.show(mainContentPanel, "PEERS_MONITOR_PANEL");
+        });
+        
+        btnNetworkTopology.addActionListener(e -> {
+            logsReportPanel.stopAutoRefresh();
+            peersMonitorPanel.stopAutoRefresh();
+            networkTopologyPanel.refreshReport();
+            cardLayout.show(mainContentPanel, "NETWORK_TOPOLOGY_PANEL");
+        });
+        
+        btnP2PUsers.addActionListener(e -> {
+            logsReportPanel.stopAutoRefresh();
+            peersMonitorPanel.stopAutoRefresh();
+            p2pUsersDistributionPanel.refreshReport();
+            cardLayout.show(mainContentPanel, "P2P_USERS_PANEL");
+        });
 
         return panel;
     }

@@ -62,7 +62,9 @@ public class GestorRespuesta implements IGestorRespuesta {
                 System.out.println("Gestor de respuestas iniciado. Esperando mensajes...");
                 String respuestaServidor;
                 while (!Thread.currentThread().isInterrupted() && (respuestaServidor = in.readLine()) != null) {
-                    System.out.println("<< Respuesta recibida: " + respuestaServidor);
+                    // Truncar respuestas muy largas para evitar imprimir imágenes en base64
+                    String respuestaParaLog = truncarRespuesta(respuestaServidor, 500);
+                    System.out.println("<< Respuesta recibida: " + respuestaParaLog);
                     procesarRespuesta(respuestaServidor);
                 }
             } catch (IOException e) {
@@ -116,5 +118,45 @@ public class GestorRespuesta implements IGestorRespuesta {
     @Override
     public void registrarManejador(String tipoOperacion, Consumer<DTOResponse> manejador) {
         manejadores.put(tipoOperacion, manejador);
+    }
+
+    /**
+     * Trunca la respuesta para evitar imprimir mensajes demasiado largos que contengan imágenes en base64.
+     * También elimina el campo imagenBase64 si está presente.
+     *
+     * @param respuesta La respuesta completa del servidor.
+     * @param maxLength La longitud máxima del mensaje truncado.
+     * @return El mensaje limpio y truncado si es necesario.
+     */
+    private String truncarRespuesta(String respuesta, int maxLength) {
+        // Si la respuesta contiene imagenBase64, eliminarlo del log
+        if (respuesta.contains("\"imagenBase64\":")) {
+            try {
+                // Usar regex para eliminar el campo imagenBase64 y su valor
+                String respuestaLimpia = respuesta.replaceAll(
+                    "\"imagenBase64\":\\s*\"[^\"]*\"\\s*,?",
+                    "\"imagenBase64\":\"[IMAGEN_OMITIDA]\","
+                );
+
+                // Si después de limpiar aún es muy largo, truncar
+                if (respuestaLimpia.length() > maxLength) {
+                    return respuestaLimpia.substring(0, maxLength) + "... [mensaje truncado]";
+                }
+                return respuestaLimpia;
+            } catch (Exception e) {
+                // Si falla el regex, solo truncar
+                if (respuesta.length() > maxLength) {
+                    return respuesta.substring(0, maxLength) + "... [mensaje truncado]";
+                }
+                return respuesta;
+            }
+        }
+
+        // Si no contiene imagenBase64 pero es muy largo, truncar normalmente
+        if (respuesta.length() > maxLength) {
+            return respuesta.substring(0, maxLength) + "... [mensaje truncado]";
+        }
+
+        return respuesta;
     }
 }

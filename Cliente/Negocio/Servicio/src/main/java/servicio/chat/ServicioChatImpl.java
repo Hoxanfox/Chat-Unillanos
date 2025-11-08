@@ -10,22 +10,17 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.DataLine;
-import javax.sound.sampled.SourceDataLine;
 
 /**
- * Implementación del servicio de chat que AHORA depende de la FachadaContactos.
+ * Implementación del servicio de chat que AHORA depende de las Fachadas.
+ * ✅ Respeta la arquitectura: Servicio -> Fachada -> Gestión
  */
 public class ServicioChatImpl implements IServicioChat, IObservador {
 
     private final List<IObservador> observadores = new ArrayList<>();
-    // CORRECCIÓN: La dependencia ahora es con la fachada de contactos.
     private final IFachadaContactos fachadaContactos;
     private final IFachadaArchivos fachadaArchivos;
-    private final GestorAudio gestorAudio;
+    private final GestorAudio gestorAudio; // ✅ Solo para grabación (entrada de audio)
 
     public ServicioChatImpl() {
         System.out.println("🔧 [ServicioChat]: Inicializando servicio de chat...");
@@ -33,12 +28,12 @@ public class ServicioChatImpl implements IServicioChat, IObservador {
         // Obtiene las fachadas desde la Fachada General
         this.fachadaContactos = FachadaGeneralImpl.getInstancia().getFachadaContactos();
         this.fachadaArchivos = FachadaGeneralImpl.getInstancia().getFachadaArchivos();
-        this.gestorAudio = GestorAudio.getInstancia();
+        this.gestorAudio = GestorAudio.getInstancia(); // ✅ Solo para captura de audio del micrófono
 
-        // Se suscribe a la fachada de contactos para recibir notificaciones (de nuevos mensajes, etc.)
+        // Se suscribe a la fachada de contactos para recibir notificaciones
         this.fachadaContactos.registrarObservador(this);
 
-        System.out.println("✅ [ServicioChat]: Servicio inicializado con FachadaContactos, FachadaArchivos y GestorAudio");
+        System.out.println("✅ [ServicioChat]: Servicio inicializado respetando arquitectura");
     }
 
     @Override
@@ -112,118 +107,67 @@ public class ServicioChatImpl implements IServicioChat, IObservador {
 
     @Override
     public void reproducirAudio(String fileId) {
-        System.out.println("⚠️ [ServicioChat]: Método LEGACY - Usando reproducción en memoria en su lugar");
-        // Delegar al nuevo método de reproducción en memoria
-        reproducirAudioEnMemoria(fileId);
+        System.out.println("⚠️ [ServicioChat]: Delegando reproducción a FachadaArchivos");
+        fachadaArchivos.reproducirAudio(fileId);
     }
 
     @Override
     public CompletableFuture<Void> reproducirAudioEnMemoria(String fileId) {
-        System.out.println("➡️ [ServicioChat]: Iniciando reproducción de audio EN MEMORIA - FileId: " + fileId);
-
-        // 1. Descargar el audio en memoria (como bytes)
-        return fachadaArchivos.descargarArchivoEnMemoria(fileId)
-            .thenCompose(audioBytes -> {
-                System.out.println("✅ [ServicioChat]: Audio descargado en memoria - Tamaño: " + audioBytes.length + " bytes");
-
-                // 2. Reproducir directamente desde los bytes usando GestorAudio
-                try {
-                    reproducirAudioDesdeBytes(audioBytes);
-                    return CompletableFuture.completedFuture(null);
-                } catch (Exception e) {
-                    System.err.println("❌ [ServicioChat]: Error al reproducir audio desde bytes: " + e.getMessage());
-                    CompletableFuture<Void> future = new CompletableFuture<>();
-                    future.completeExceptionally(e);
-                    return future;
-                }
-            })
-            .exceptionally(ex -> {
-                System.err.println("❌ [ServicioChat]: Error al descargar/reproducir audio en memoria: " + ex.getMessage());
-                ex.printStackTrace();
-                return null;
-            });
+        System.out.println("➡️ [ServicioChat]: Delegando reproducción de audio a FachadaArchivos - FileId: " + fileId);
+        // ✅ CORRECCIÓN: Delegar completamente a la fachada (respeta arquitectura)
+        return fachadaArchivos.reproducirAudio(fileId);
     }
 
     /**
-     * Reproduce audio directamente desde un array de bytes en memoria usando GestorAudio
+     * Descarga automáticamente un archivo de audio a la carpeta local.
      */
-    private void reproducirAudioDesdeBytes(byte[] audioBytes) throws Exception {
-        System.out.println("🔊 [ServicioChat]: Reproduciendo audio desde bytes - Tamaño: " + audioBytes.length);
-
-        new Thread(() -> {
-            try (AudioInputStream audioStream = AudioSystem.getAudioInputStream(
-                    new java.io.ByteArrayInputStream(audioBytes))) {
-
-                AudioFormat format = audioStream.getFormat();
-                DataLine.Info info = new DataLine.Info(SourceDataLine.class, format);
-
-                SourceDataLine audioLine = (SourceDataLine) AudioSystem.getLine(info);
-                audioLine.open(format);
-                audioLine.start();
-
-                System.out.println("▶️ [ServicioChat]: Reproducción iniciada desde memoria");
-
-                byte[] bufferBytes = new byte[4096];
-                int readBytes = 0;
-
-                while ((readBytes = audioStream.read(bufferBytes)) != -1) {
-                    audioLine.write(bufferBytes, 0, readBytes);
-                }
-
-                audioLine.drain();
-                audioLine.stop();
-                audioLine.close();
-
-                System.out.println("✅ [ServicioChat]: Reproducción completada desde memoria");
-
-            } catch (Exception e) {
-                System.err.println("❌ [ServicioChat]: Error durante reproducción desde memoria: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }).start();
+    public CompletableFuture<File> descargarAudioALocal(String fileId) {
+        System.out.println("➡️ [ServicioChat]: Delegando descarga de audio a FachadaArchivos - FileId: " + fileId);
+        // ✅ CORRECCIÓN: Delegar completamente a la fachada (respeta arquitectura)
+        return fachadaArchivos.descargarAudioALocal(fileId);
     }
 
     /**
-     * Reproduce un archivo de audio WAV usando Java Sound API
+     * ✅ NUEVO: Guarda un audio que viene en Base64 (desde PUSH del servidor) como archivo físico
+     * y en la base de datos local para uso offline.
      */
-    private void reproducirArchivoAudio(File archivoAudio) throws Exception {
-        System.out.println("🔊 [ServicioChat]: Reproduciendo audio - " + archivoAudio.getName());
-
-        new Thread(() -> {
-            try (AudioInputStream audioStream = AudioSystem.getAudioInputStream(archivoAudio)) {
-                AudioFormat format = audioStream.getFormat();
-                DataLine.Info info = new DataLine.Info(SourceDataLine.class, format);
-
-                SourceDataLine audioLine = (SourceDataLine) AudioSystem.getLine(info);
-                audioLine.open(format);
-                audioLine.start();
-
-                System.out.println("▶️ [ServicioChat]: Reproducción iniciada");
-
-                byte[] bufferBytes = new byte[4096];
-                int readBytes = 0;
-
-                while ((readBytes = audioStream.read(bufferBytes)) != -1) {
-                    audioLine.write(bufferBytes, 0, readBytes);
-                }
-
-                audioLine.drain();
-                audioLine.stop();
-                audioLine.close();
-
-                System.out.println("✅ [ServicioChat]: Reproducción completada");
-
-            } catch (Exception e) {
-                System.err.println("❌ [ServicioChat]: Error durante reproducción: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }).start();
+    @Override
+    public CompletableFuture<File> guardarAudioDesdeBase64(String base64Audio, String mensajeId) {
+        System.out.println("➡️ [ServicioChat]: Delegando guardado de audio desde Base64 a FachadaArchivos");
+        System.out.println("   → MensajeId: " + mensajeId);
+        return fachadaArchivos.guardarAudioDesdeBase64(base64Audio, mensajeId);
     }
+
+    /**
+     * Extrae el nombre del archivo desde un fileId del formato "audio_files/user_timestamp.wav"
+     */
+    private String extraerNombreDeFileId(String fileId) {
+        if (fileId == null || fileId.isEmpty()) {
+            return "audio_unknown.wav";
+        }
+
+        // Si contiene '/', tomar la última parte
+        if (fileId.contains("/")) {
+            String[] partes = fileId.split("/");
+            return partes[partes.length - 1];
+        }
+
+        return fileId;
+    }
+
 
     @Override
     public void actualizar(String tipoDeDato, Object datos) {
         System.out.println("📢 [ServicioChat]: Recibida notificación de la fachada - Tipo: " + tipoDeDato);
-        // Pasa la notificación (ej. "NUEVO_MENSAJE_PRIVADO") hacia arriba a la vista.
+
+        // ✅ CORRECCIÓN: Filtrar solo notificaciones relacionadas con MENSAJES
+        // No procesar notificaciones de actualización de contactos (eso lo hace ServicioContactos)
+        if ("ACTUALIZAR_CONTACTOS".equals(tipoDeDato)) {
+            System.out.println("⏭️ [ServicioChat]: Ignorando notificación de actualización de contactos (no es responsabilidad de ServicioChat)");
+            return;
+        }
+
+        // Pasa solo notificaciones relevantes de mensajes hacia arriba a la vista.
         notificarObservadores(tipoDeDato, datos);
     }
 

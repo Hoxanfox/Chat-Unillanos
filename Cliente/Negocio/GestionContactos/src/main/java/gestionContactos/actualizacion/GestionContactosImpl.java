@@ -6,21 +6,26 @@ import comunicacion.EnviadorPeticiones;
 import comunicacion.GestorRespuesta;
 import comunicacion.IEnviadorPeticiones;
 import comunicacion.IGestorRespuesta;
+import dominio.Contacto;
 import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
 import dto.featureContactos.DTOContacto;
 import observador.IObservador;
+import repositorio.contacto.IRepositorioContacto;
+import repositorio.contacto.RepositorioContactoImpl;
+import gestionUsuario.sesion.GestorSesionUsuario;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Implementación del gestor de contactos.
  * - listarContactos: Respuesta a petición REQUEST del cliente
- * - solicitarListaContactos: Notificación PUSH del servidor
+ * - solicitarListaContactos: Notificación PUSH del servidor (actualización automática)
  */
 public class GestionContactosImpl implements IGestionContactos {
 
@@ -28,12 +33,14 @@ public class GestionContactosImpl implements IGestionContactos {
     private List<DTOContacto> contactosCache = new ArrayList<>();
     private final IEnviadorPeticiones enviadorPeticiones;
     private final IGestorRespuesta gestorRespuesta;
+    private final IRepositorioContacto repositorioContacto;
     private final Gson gson;
     private String usuarioIdActual;
 
     public GestionContactosImpl() {
         this.enviadorPeticiones = new EnviadorPeticiones();
         this.gestorRespuesta = GestorRespuesta.getInstancia();
+        this.repositorioContacto = new RepositorioContactoImpl();
         this.gson = new Gson();
 
         // REQUEST: Respuesta a petición del cliente
@@ -84,8 +91,66 @@ public class GestionContactosImpl implements IGestionContactos {
      */
     private void procesarListaContactos(DTOResponse respuesta, String tipo) {
         try {
-            Type tipoLista = new TypeToken<ArrayList<DTOContacto>>() {}.getType();
-            this.contactosCache = gson.fromJson(gson.toJson(respuesta.getData()), tipoLista);
+            Object data = respuesta.getData();
+            List<DTOContacto> contactosRecibidos;
+
+            // El servidor puede enviar los datos en dos formatos:
+            // 1. PUSH (solicitarListaContactos): {"total": 5, "contacts": [...]}
+            // 2. REQUEST (listarContactos): [...]
+
+            if (data instanceof Map) {
+                // Formato PUSH: Es un objeto con la estructura {"total": X, "contacts": [...]}
+                Map<String, Object> dataMap = (Map<String, Object>) data;
+                Object contactsArray = dataMap.get("contacts");
+
+                if (contactsArray != null) {
+                    Type tipoLista = new TypeToken<ArrayList<DTOContacto>>() {}.getType();
+                    contactosRecibidos = gson.fromJson(gson.toJson(contactsArray), tipoLista);
+                    System.out.println("📦 [GestionContactos][" + tipo + "]: Parseado formato objeto (total: " + dataMap.get("total") + ")");
+                } else {
+                    System.err.println("❌ [GestionContactos][" + tipo + "]: El objeto no contiene campo 'contacts'");
+                    notificarObservadores("ERROR_CONTACTOS", "Formato de datos inválido");
+                    return;
+                }
+            } else {
+                // Formato REQUEST: Es un array directo
+                Type tipoLista = new TypeToken<ArrayList<DTOContacto>>() {}.getType();
+                contactosRecibidos = gson.fromJson(gson.toJson(data), tipoLista);
+                System.out.println("📦 [GestionContactos][" + tipo + "]: Parseado formato array");
+            }
+
+            this.contactosCache = contactosRecibidos;
+
+            // ✅ IMPORTANTE: Registrar los peerIds de los contactos en el gestor
+            gestionContactos.GestorContactoPeers gestorPeers = gestionContactos.GestorContactoPeers.getInstancia();
+            for (DTOContacto contacto : contactosRecibidos) {
+                if (contacto.getPeerId() != null && !contacto.getPeerId().isEmpty()) {
+                    gestorPeers.registrarPeerDeContacto(contacto.getId(), contacto.getPeerId());
+                }
+            }
+
+            // Obtener userId de la sesión (si hay sesión activa) para filtrar el usuario local
+            String localUserId = null;
+            try {
+                if (GestorSesionUsuario.getInstancia().haySesionActiva()) {
+                    localUserId = GestorSesionUsuario.getInstancia().getUserId();
+                }
+            } catch (Exception ignored) {
+                // Si no hay sesión o falla al obtenerla, no filtramos
+            }
+
+            // Filtrar contacto local si corresponde
+            if (localUserId != null && !localUserId.isEmpty()) {
+                List<DTOContacto> filtrados = new ArrayList<>();
+                for (DTOContacto contacto : this.contactosCache) {
+                    if (!localUserId.equals(contacto.getId())) {
+                        filtrados.add(contacto);
+                    } else {
+                        System.out.println("⤵️ [GestionContactos][" + tipo + "]: Eliminado usuario local de la lista: " + contacto.getId());
+                    }
+                }
+                this.contactosCache = filtrados;
+            }
 
             System.out.println("✅ [GestionContactos][" + tipo + "]: " + contactosCache.size() + " contactos procesados");
 
@@ -93,10 +158,10 @@ public class GestionContactosImpl implements IGestionContactos {
             if (contactosCache.size() > 0) {
                 System.out.println("📋 [GestionContactos][" + tipo + "]: Contactos actualizados:");
                 for (DTOContacto contacto : contactosCache) {
-                    System.out.println("   - " + contacto.getNombre() + 
-                        " (" + contacto.getEmail() + ") " +
-                        "[" + contacto.getEstado() + "]" +
-                        " ID: " + contacto.getId());
+                    System.out.println("   - " + contacto.getNombre() +
+                            " (" + contacto.getEmail() + ") " +
+                            "[" + contacto.getEstado() + "]" +
+                            " ID: " + contacto.getId());
                 }
             } else {
                 System.out.println("ℹ️ [GestionContactos][" + tipo + "]: Lista de contactos vacía");
@@ -135,6 +200,79 @@ public class GestionContactosImpl implements IGestionContactos {
     @Override
     public List<DTOContacto> getContactos() {
         return new ArrayList<>(contactosCache);
+    }
+
+    @Override
+    public void sincronizarContactosConBD(List<DTOContacto> contactos) {
+        System.out.println("🔄 [GestionContactos]: Sincronizando " + contactos.size() + " contactos con la BD...");
+
+        int nuevos = 0;
+        int actualizados = 0;
+
+        for (DTOContacto dtoContacto : contactos) {
+            try {
+                UUID idContacto = UUID.fromString(dtoContacto.getId());
+
+                // Verificar si el contacto ya existe en la BD
+                Contacto contactoExistente = repositorioContacto.obtenerPorId(idContacto);
+
+                if (contactoExistente == null) {
+                    // Contacto nuevo - guardarlo
+                    Contacto nuevoContacto = convertirDTOADominio(dtoContacto);
+                    repositorioContacto.guardar(nuevoContacto);
+                    nuevos++;
+                    System.out.println("  ✅ Nuevo contacto guardado: " + dtoContacto.getNombre() + " (" + dtoContacto.getId() + ")");
+                } else {
+                    // Contacto existente - actualizarlo
+                    actualizarDominioDesdeDTO(contactoExistente, dtoContacto);
+                    repositorioContacto.actualizar(contactoExistente);
+                    actualizados++;
+                    System.out.println("  🔄 Contacto actualizado: " + dtoContacto.getNombre() + " (" + dtoContacto.getId() + ")");
+                }
+
+            } catch (Exception e) {
+                System.err.println("  ❌ Error al sincronizar contacto " + dtoContacto.getNombre() + ": " + e.getMessage());
+            }
+        }
+
+        System.out.println("✅ [GestionContactos]: Sincronización completada - Nuevos: " + nuevos + ", Actualizados: " + actualizados);
+    }
+
+    /**
+     * Convierte un DTOContacto en una entidad de dominio Contacto.
+     */
+    private Contacto convertirDTOADominio(DTOContacto dto) {
+        UUID id = UUID.fromString(dto.getId());
+        boolean estado = "ONLINE".equalsIgnoreCase(dto.getEstado()) ||
+                        "activo".equalsIgnoreCase(dto.getEstado()) ||
+                        "true".equalsIgnoreCase(dto.getEstado());
+
+        return new Contacto(
+            id,
+            dto.getNombre(),
+            dto.getEmail(),
+            estado,
+            dto.getPhotoId(),
+            dto.getPeerId(),
+            dto.getFechaRegistro()
+        );
+    }
+
+    /**
+     * Actualiza una entidad de dominio Contacto con datos del DTO.
+     */
+    private void actualizarDominioDesdeDTO(Contacto dominio, DTOContacto dto) {
+        dominio.setNombre(dto.getNombre());
+        dominio.setEmail(dto.getEmail());
+
+        boolean estado = "ONLINE".equalsIgnoreCase(dto.getEstado()) ||
+                        "activo".equalsIgnoreCase(dto.getEstado()) ||
+                        "true".equalsIgnoreCase(dto.getEstado());
+        dominio.setEstado(estado);
+
+        dominio.setPhotoId(dto.getPhotoId());
+        dominio.setPeerId(dto.getPeerId());
+        dominio.setFechaRegistro(dto.getFechaRegistro());
     }
 
     // --- Métodos del Patrón Observador ---

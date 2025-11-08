@@ -74,7 +74,23 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
         try {
             // Convertir el objeto Data a DTOMensajeCanal
             Map<String, Object> data = (Map<String, Object>) respuesta.getData();
+
+            // ✅ VALIDACIÓN: Verificar que sea un mensaje de canal válido
+            String channelId = getString(data, "channelId");
+            if (channelId == null || channelId.isEmpty()) {
+                System.out.println("⚠️ [GestorMensajesCanal]: Mensaje recibido sin channelId - NO es un mensaje de canal, ignorando...");
+                System.out.println("   → Este mensaje probablemente es un mensaje directo mal enrutado por el servidor");
+                System.out.println("   → Debería llegar con action='nuevoMensajeDirecto', no 'nuevoMensajeCanal'");
+                return;
+            }
+
             DTOMensajeCanal mensaje = construirDTOMensajeDesdeMap(data);
+
+            // Validación adicional: verificar que el canalId sea válido
+            if (mensaje.getCanalId() == null || mensaje.getCanalId().isEmpty()) {
+                System.out.println("⚠️ [GestorMensajesCanal]: Mensaje sin canalId válido después de construir - ignorando");
+                return;
+            }
 
             // Determinar si el mensaje es propio
             String usuarioActual = gestorSesion.getUserId();
@@ -138,9 +154,9 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
             // Sincronizar con la base de datos local
             if (!historial.isEmpty()) {
                 String canalId = historial.get(0).getCanalId();
-                repositorioMensajes.sincronizarHistorial(canalId, historial)
+                repositorioMensajes.sincronizarHistorial(canalId, usuarioActual, historial)
                     .thenAccept(v -> {
-                        // Notificar a la UI con el historial
+                        // Notificar a la UI con el historial UNA SOLA VEZ
                         notificarObservadores("HISTORIAL_CANAL_RECIBIDO", historial);
                         System.out.println("✓ Historial de canal sincronizado: " + historial.size() + " mensajes");
                     })
@@ -309,27 +325,41 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
     private DTOMensajeCanal construirDTOMensajeDesdeMap(Map<String, Object> data) {
         DTOMensajeCanal mensaje = new DTOMensajeCanal();
 
-        // El servidor puede enviar 'id' o 'mensajeId'
-        mensaje.setMensajeId(getString(data, "id") != null ? getString(data, "id") : getString(data, "mensajeId"));
-        mensaje.setCanalId(getString(data, "canalId"));
+        // Lee los IDs principales (usando los nombres del log)
+        mensaje.setMensajeId(getString(data, "messageId"));
+        mensaje.setCanalId(getString(data, "channelId"));
 
-        // El servidor puede enviar 'usuarioId' o 'remitenteId'
-        mensaje.setRemitenteId(getString(data, "usuarioId") != null ? getString(data, "usuarioId") : getString(data, "remitenteId"));
+        // Verifica si existe el objeto anidado "author"
+        if (data.containsKey("author") && data.get("author") instanceof Map) {
+            Map<String, Object> authorMap = (Map<String, Object>) data.get("author");
+            mensaje.setRemitenteId(getString(authorMap, "userId"));
+            mensaje.setNombreRemitente(getString(authorMap, "username"));
+        } else {
+            mensaje.setRemitenteId(getString(data, "usuarioId") != null ? getString(data, "usuarioId") : getString(data, "remitenteId"));
+            mensaje.setNombreRemitente(getString(data, "nombreUsuario") != null ? getString(data, "nombreUsuario") : getString(data, "nombreRemitente"));
+        }
 
-        // El servidor puede enviar 'nombreUsuario' o 'nombreRemitente'
-        mensaje.setNombreRemitente(getString(data, "nombreUsuario") != null ? getString(data, "nombreUsuario") : getString(data, "nombreRemitente"));
+        // ✅ FIX: Normalizar tipo de mensaje a MAYÚSCULAS (servidor envía "TEXT"/"AUDIO")
+        String messageType = getString(data, "messageType");
+        if (messageType != null) {
+            messageType = messageType.toUpperCase(); // Normalizar a MAYÚSCULAS
+        }
+        mensaje.setTipo(messageType);
 
-        mensaje.setTipo(getString(data, "tipo"));
-        mensaje.setContenido(getString(data, "contenido"));
+        mensaje.setContenido(getString(data, "content"));
         mensaje.setFileId(getString(data, "fileId"));
 
-        // El servidor puede enviar 'timestamp' o 'fechaEnvio'
+        // Manejo de la fecha
         String fechaStr = getString(data, "timestamp") != null ? getString(data, "timestamp") : getString(data, "fechaEnvio");
         if (fechaStr != null) {
             try {
                 mensaje.setFechaEnvio(LocalDateTime.parse(fechaStr));
             } catch (Exception e) {
-                mensaje.setFechaEnvio(LocalDateTime.now());
+                try {
+                    mensaje.setFechaEnvio(LocalDateTime.parse(fechaStr, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                } catch (Exception e2) {
+                    mensaje.setFechaEnvio(LocalDateTime.now());
+                }
             }
         }
 

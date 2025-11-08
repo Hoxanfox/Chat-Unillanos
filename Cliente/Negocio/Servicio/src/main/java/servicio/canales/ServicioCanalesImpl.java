@@ -103,4 +103,22 @@ public class ServicioCanalesImpl implements IServicioCanales {
         System.out.println("🔔 [ServicioCanales]: Registrando observador de miembros");
         fachadaCanales.registrarObservadorMiembros(observador);
     }
+
+    @Override
+    public CompletableFuture<List<dto.canales.DTOCanalCreado>> solicitarInvitacionesPendientes() {
+        System.out.println("➡️ [ServicioCanales]: Solicitando invitaciones pendientes");
+        return fachadaCanales.solicitarInvitacionesPendientes();
+    }
+
+    @Override
+    public CompletableFuture<Void> responderInvitacion(String canalId, boolean aceptar) {
+        System.out.println("➡️ [ServicioCanales]: Respondiendo invitación - Canal: " + canalId + ", Aceptar: " + aceptar);
+        return fachadaCanales.responderInvitacion(canalId, aceptar);
+    }
+
+    @Override
+    public void registrarObservadorInvitaciones(IObservador observador) {
+        System.out.println("🔔 [ServicioCanales]: Registrando observador de invitaciones");
+        fachadaCanales.registrarObservadorInvitaciones(observador);
+    }
 }

@@ -33,4 +33,9 @@ public interface IServicioCanales {
     CompletableFuture<Void> invitarMiembro(String canalId, String contactoId);
     void solicitarMiembrosCanal(String canalId);
     void registrarObservadorMiembros(IObservador observador);
+
+    // === INVITACIONES ===
+    CompletableFuture<List<dto.canales.DTOCanalCreado>> solicitarInvitacionesPendientes();
+    CompletableFuture<Void> responderInvitacion(String canalId, boolean aceptar);
+    void registrarObservadorInvitaciones(IObservador observador);
 }

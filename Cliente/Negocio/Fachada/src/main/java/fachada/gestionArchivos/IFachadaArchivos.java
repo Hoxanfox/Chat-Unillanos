@@ -43,6 +43,33 @@ public interface IFachadaArchivos {
     CompletableFuture<byte[]> descargarArchivoEnMemoria(String fileId);
 
     /**
+     * ✅ NUEVO: Reproduce un archivo de audio. Si existe en caché local, lo reproduce desde ahí.
+     * Si no existe, lo descarga y reproduce desde memoria.
+     *
+     * @param fileId El ID del archivo de audio en el servidor
+     * @return CompletableFuture que se completa cuando inicia la reproducción
+     */
+    CompletableFuture<Void> reproducirAudio(String fileId);
+
+    /**
+     * Descarga un archivo de audio a la carpeta local de audios.
+     *
+     * @param fileId El ID del archivo de audio en el servidor
+     * @return CompletableFuture que se completa con el archivo de audio descargado
+     */
+    CompletableFuture<File> descargarAudioALocal(String fileId);
+
+    /**
+     * ✅ NUEVO: Guarda un audio que viene en Base64 (desde PUSH del servidor) como archivo físico
+     * y en la base de datos local para uso offline.
+     *
+     * @param base64Audio El contenido del audio en Base64
+     * @param mensajeId El ID del mensaje (usado para generar nombre único)
+     * @return CompletableFuture que se completa con el archivo guardado
+     */
+    CompletableFuture<File> guardarAudioDesdeBase64(String base64Audio, String mensajeId);
+
+    /**
      * Obtiene un archivo por su fileId. Si ya existe localmente, lo devuelve inmediatamente.
      * Si no existe, lo descarga desde el servidor.
      *
@@ -67,4 +94,20 @@ public interface IFachadaArchivos {
      * @return CompletableFuture que se completa con true si existe localmente
      */
     CompletableFuture<Boolean> existeArchivoLocalmente(String fileId);
+
+    /**
+     * Verifica si un archivo ya existe localmente (en disco y en BD).
+     *
+     * @param fileId El identificador del archivo en el servidor
+     * @return CompletableFuture que se completa con true si existe, false si no
+     */
+    CompletableFuture<Boolean> existeLocalmente(String fileId);
+
+    /**
+     * Obtiene la ruta local de un archivo si ya existe en disco.
+     *
+     * @param fileId El identificador del archivo en el servidor
+     * @return CompletableFuture que se completa con el archivo local, o null si no existe
+     */
+    CompletableFuture<File> obtenerRutaLocal(String fileId);
 }

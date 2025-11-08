@@ -1,18 +1,28 @@
 version: '3.8'
 
 services:
-  db:
+  # Base de datos MySQL para el servidor
+  mysql-server:
     image: mysql:8.0
-    container_name: chat-db
-    restart: always
+    container_name: mysql-chat-server
+    command: --default-authentication-plugin=mysql_native_password
     environment:
-      MYSQL_ROOT_PASSWORD: root1234
+      MYSQL_ROOT_PASSWORD: root123
       MYSQL_DATABASE: chat_db
+      MYSQL_ROOT_HOST: '%'
+      # --- AÑADE ESTAS DOS LÍNEAS ---
+      MYSQL_USER: 'chatuser'
+      MYSQL_PASSWORD: 'chatpass123'
     ports:
-
       - "3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
+    networks:
+      - chat-network
 
 volumes:
   mysql-data:
+
+networks:
+  chat-network:
+    driver: bridge

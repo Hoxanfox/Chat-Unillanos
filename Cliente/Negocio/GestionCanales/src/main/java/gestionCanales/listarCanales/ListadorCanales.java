@@ -73,7 +73,7 @@ public class ListadorCanales implements IListadorCanales {
 
             List<Canal> canalesDelServidor = new ArrayList<>();
             for (Map<String, Object> mapa : listaDeMapas) {
-                System.out.println("🔄 [ListadorCanales]: Convirtiendo canal - ID: " + mapa.get("id") + ", Nombre: " + mapa.get("nombre"));
+                System.out.println("🔄 [ListadorCanales]: Convirtiendo canal - idCanal: " + mapa.get("idCanal") + ", nombreCanal: " + mapa.get("nombreCanal"));
                 canalesDelServidor.add(convertirMapaACanal(mapa));
             }
             System.out.println("✅ [ListadorCanales]: Convertidos " + canalesDelServidor.size() + " canales a objetos de dominio");
@@ -111,10 +111,11 @@ public class ListadorCanales implements IListadorCanales {
     }
 
     private Canal convertirMapaACanal(Map<String, Object> data) {
-        String id = (String) data.get("id");
-        String nombre = (String) data.get("nombre");
-        // El creadorId puede no estar presente en todos los DTOs, manejarlo con cuidado
-        String idAdministrador = (String) data.getOrDefault("creadorId", null);
+        // El servidor envía "idCanal" y "nombreCanal", no "id" y "nombre"
+        String id = (String) data.get("idCanal");
+        String nombre = (String) data.get("nombreCanal");
+        // El servidor envía "ownerId", no "creadorId"
+        String idAdministrador = (String) data.getOrDefault("ownerId", null);
 
         return new Canal(
                 UUID.fromString(id),

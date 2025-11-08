@@ -9,6 +9,8 @@ import comunicacion.IGestorRespuesta;
 import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
 import dto.comunicacion.peticion.mensaje.DTOEnviarMensaje;
+import dto.comunicacion.peticion.mensaje.DTOEnviarMensajeAudio;
+import dto.comunicacion.peticion.mensaje.DTOEnviarMensajeAudioPayload;
 import dto.comunicacion.peticion.mensaje.DTOSolicitarHistorial;
 import dto.vistaContactoChat.DTOMensaje;
 import gestionContactos.GestorContactoPeers;
@@ -34,6 +36,10 @@ public class GestionMensajesImpl implements IGestionMensajes {
     private final GestorContactoPeers gestorContactoPeers;
     private final Gson gson;
 
+    // ✅ Cachés temporales para completar mensajes cuando el servidor responde
+    private DTOMensaje ultimoMensajeTextoEnviado;
+    private DTOMensaje ultimoMensajeAudioEnviado;
+
     public GestionMensajesImpl() {
         System.out.println("🔧 [GestionMensajes]: Inicializando gestor de mensajes...");
 
@@ -57,6 +63,9 @@ public class GestionMensajesImpl implements IGestionMensajes {
         System.out.println("   → Push: nuevoMensajeDirecto, nuevoMensajeDirectoAudio");
     }
 
+// java
+// Modificaciones en `Negocio/GestionContactos/src/main/java/gestionContactos/mensajes/GestionMensajesImpl.java`
+
     @Override
     public void solicitarHistorial(String contactoId) {
         String userId = gestorSesionUsuario.getUserId();
@@ -70,20 +79,20 @@ public class GestionMensajesImpl implements IGestionMensajes {
         System.out.println("   → PeerDestinatarioId: " + peerDestinatarioId);
 
         if (peerDestinatarioId == null) {
-            System.err.println("❌ [GestionMensajes]: No se pudo obtener el peerId del destinatario");
-            notificarObservadores("ERROR_PEER_NO_ENCONTRADO", "El contacto no está disponible para obtener el historial");
-            return;
+            System.out.println("⚠️ [GestionMensajes]: No se encontró peerId del destinatario — se enviará la petición con peerDestinatarioId = null");
+            notificarObservadores("ADVERTENCIA_PEER_NO_ENCONTRADO", "Se solicitará historial sin peerId del destinatario");
+            // continuar y enviar con peerDestinatarioId == null
         }
 
-        // Crear el DTO con los 4 campos requeridos
         DTOSolicitarHistorial payload = new DTOSolicitarHistorial(
-            userId,
-            peerRemitenteId,
-            contactoId,
-            peerDestinatarioId
+                userId,
+                peerRemitenteId,
+                contactoId,
+                peerDestinatarioId // puede ser null
         );
 
-        DTORequest peticion = new DTORequest("solicitarHistorialPrivado", payload);
+        // ✅ CORRECCIÓN: El servidor espera la acción en minúsculas sin camelCase
+        DTORequest peticion = new DTORequest("solicitarhistorialprivado", payload);
         enviadorPeticiones.enviar(peticion);
         System.out.println("✅ [GestionMensajes]: Petición de historial enviada al servidor");
     }
@@ -100,134 +109,315 @@ public class GestionMensajesImpl implements IGestionMensajes {
         System.out.println("   → Contenido: " + contenido);
 
         if (peerDestinoId == null) {
-            System.err.println("❌ [GestionMensajes]: No se pudo obtener el peerId del destinatario");
-            notificarObservadores("ERROR_PEER_NO_ENCONTRADO", "El contacto no está disponible");
-            return CompletableFuture.completedFuture(null);
+            System.out.println("⚠️ [GestionMensajes]: No se encontró peerId del destinatario — se enviará el mensaje con peerDestinoId = null");
+            notificarObservadores("ADVERTENCIA_PEER_NO_ENCONTRADO", "Se enviará mensaje de texto sin peerId del destinatario");
         }
 
-        DTOEnviarMensaje payload = DTOEnviarMensaje.deTexto(peerRemitenteId, peerDestinoId, remitenteId, destinatarioId, contenido);
-        DTORequest peticion = new DTORequest("enviarMensajeDirecto", payload);
+        DTOEnviarMensaje payload = DTOEnviarMensaje.deTexto(
+                peerRemitenteId,
+                peerDestinoId, // puede ser null
+                remitenteId,
+                destinatarioId,
+                contenido
+        );
+        // ✅ CORRECCIÓN: El servidor espera la acción en minúsculas sin camelCase
+        DTORequest peticion = new DTORequest("enviarmensajedirecto", payload);
         enviadorPeticiones.enviar(peticion);
+
+        // ✅ NUEVO: Almacenar en caché el mensaje enviado
+        ultimoMensajeTextoEnviado = new DTOMensaje();
+        ultimoMensajeTextoEnviado.setContenido(contenido);
+        ultimoMensajeTextoEnviado.setTipo("TEXTO");
+        ultimoMensajeTextoEnviado.setRemitenteId(remitenteId);
+        ultimoMensajeTextoEnviado.setDestinatarioId(destinatarioId);
+        ultimoMensajeTextoEnviado.setPeerRemitenteId(peerRemitenteId);
+        ultimoMensajeTextoEnviado.setPeerDestinoId(peerDestinoId);
 
         System.out.println("✅ [GestionMensajes]: Mensaje de texto enviado al servidor");
         return CompletableFuture.completedFuture(null);
     }
 
     @Override
-    public CompletableFuture<Void> enviarMensajeAudio(String destinatarioId, String audioBase64) {
+    public CompletableFuture<Void> enviarMensajeAudio(String destinatarioId, String audioFileId) {
         String remitenteId = gestorSesionUsuario.getUserId();
         String peerRemitenteId = gestorSesionUsuario.getPeerId();
         String peerDestinoId = gestorContactoPeers.getPeerIdDeContacto(destinatarioId);
 
-        System.out.println("📤 [GestionMensajes]: Enviando mensaje de AUDIO (Base64)");
+        System.out.println("📤 [GestionMensajes]: Enviando mensaje de AUDIO (ruta de archivo)");
         System.out.println("   → Remitente: " + remitenteId + " (Peer: " + peerRemitenteId + ")");
         System.out.println("   → Destinatario: " + destinatarioId + " (Peer: " + peerDestinoId + ")");
-        System.out.println("   → AudioBase64 length: " + (audioBase64 != null ? audioBase64.length() : 0));
+        System.out.println("   → AudioFileId: " + audioFileId);
 
         if (peerDestinoId == null) {
-            System.err.println("❌ [GestionMensajes]: No se pudo obtener el peerId del destinatario");
-            notificarObservadores("ERROR_PEER_NO_ENCONTRADO", "El contacto no está disponible");
-            return CompletableFuture.completedFuture(null);
+            System.out.println("⚠️ [GestionMensajes]: No se encontró peerId del destinatario — se enviará el audio con peerDestinoId = null");
+            notificarObservadores("ADVERTENCIA_PEER_NO_ENCONTRADO", "Se enviará mensaje de audio sin peerId del destinatario");
         }
 
-        // Usar el nuevo DTO específico para mensajes de audio
-        dto.comunicacion.peticion.mensaje.DTOEnviarMensajeAudio payload =
-            new dto.comunicacion.peticion.mensaje.DTOEnviarMensajeAudio(
-                peerDestinoId, peerRemitenteId, remitenteId, destinatarioId, audioBase64
-            );
+        // ✅ CORRECCIÓN: Usar DTOEnviarMensajeAudioPayload con el campo 'audioId' según API del servidor
+        DTOEnviarMensajeAudioPayload payload = new DTOEnviarMensajeAudioPayload(
+                peerRemitenteId,
+                peerDestinoId, // puede ser null
+                remitenteId,
+                destinatarioId,
+                audioFileId // Este es el audioId que espera el servidor
+        );
 
-        DTORequest peticion = new DTORequest("enviarMensajeDirectoAudio", payload);
+        // ✅ CORRECCIÓN: El servidor espera la acción en minúsculas sin camelCase
+        DTORequest peticion = new DTORequest("enviarmensajedirectoaudio", payload);
         enviadorPeticiones.enviar(peticion);
+
+        // ✅ NUEVO: Almacenar en caché el mensaje de audio enviado
+        ultimoMensajeAudioEnviado = new DTOMensaje();
+        ultimoMensajeAudioEnviado.setContenido(audioFileId);
+        ultimoMensajeAudioEnviado.setTipo("AUDIO");
+        ultimoMensajeAudioEnviado.setRemitenteId(remitenteId);
+        ultimoMensajeAudioEnviado.setDestinatarioId(destinatarioId);
+        ultimoMensajeAudioEnviado.setPeerRemitenteId(peerRemitenteId);
+        ultimoMensajeAudioEnviado.setPeerDestinoId(peerDestinoId);
 
         System.out.println("✅ [GestionMensajes]: Mensaje de audio enviado al servidor");
         return CompletableFuture.completedFuture(null);
     }
 
+
     /**
-     * Envía un mensaje con imagen adjunta.
+     * Helper: normaliza tipo según fileId/contenido
+     * - Si el tipo YA viene definido del servidor (ej: "AUDIO"), respetarlo
+     * - Si fileId presente y contenido vacío -> AUDIO
+     * - Si contenido presente y fileId vacío -> TEXTO
+     * - Si ambos presentes -> FILE (o conservar tipo si ya viene)
+     * - Si ninguno presente -> TEXTO por defecto
+     * - Si contenido es Base64 de audio (empieza con "UklGR" o "data:audio") -> AUDIO
      */
-    public CompletableFuture<Void> enviarMensajeImagen(String destinatarioId, String contenido,
-                                                        String imageFileId, String fileName) {
-        String remitenteId = gestorSesionUsuario.getUserId();
-        String peerRemitenteId = gestorSesionUsuario.getPeerId();
-        String peerDestinoId = gestorContactoPeers.getPeerIdDeContacto(destinatarioId);
+    private void determinarTipoMensaje(DTOMensaje mensaje) {
+        if (mensaje == null) return;
 
-        System.out.println("📤 [GestionMensajes]: Enviando mensaje de IMAGEN");
-        System.out.println("   → Remitente: " + remitenteId + " (Peer: " + peerRemitenteId + ")");
-        System.out.println("   → Destinatario: " + destinatarioId + " (Peer: " + peerDestinoId + ")");
-        System.out.println("   → ImageFileId: " + imageFileId);
-        System.out.println("   → FileName: " + fileName);
-
-        if (peerDestinoId == null) {
-            System.err.println("❌ [GestionMensajes]: No se pudo obtener el peerId del destinatario");
-            notificarObservadores("ERROR_PEER_NO_ENCONTRADO", "El contacto no está disponible");
-            return CompletableFuture.completedFuture(null);
+        // ✅ CORRECCIÓN: Si el tipo YA viene del servidor (ej: "AUDIO"), respetarlo
+        String tipoExistente = mensaje.getTipo();
+        if (tipoExistente != null && !tipoExistente.isEmpty() &&
+            (tipoExistente.equalsIgnoreCase("AUDIO") ||
+             tipoExistente.equalsIgnoreCase("IMAGEN") ||
+             tipoExistente.equalsIgnoreCase("FILE"))) {
+            // El tipo ya está definido correctamente, no modificar
+            System.out.println("🔍 [GestionMensajes]: Tipo ya definido por servidor: " + tipoExistente);
+            return;
         }
 
-        DTOEnviarMensaje payload = DTOEnviarMensaje.deImagen(peerRemitenteId, peerDestinoId, remitenteId, destinatarioId, contenido, imageFileId, fileName);
-        DTORequest peticion = new DTORequest("enviarMensajeDirecto", payload);
-        enviadorPeticiones.enviar(peticion);
+        boolean hasFile = mensaje.getFileId() != null && !mensaje.getFileId().isEmpty();
+        boolean hasText = mensaje.getContenido() != null && !mensaje.getContenido().isEmpty();
 
-        System.out.println("✅ [GestionMensajes]: Mensaje de imagen enviado al servidor");
-        return CompletableFuture.completedFuture(null);
+        // ✅ NUEVO: Detectar si el contenido es Base64 de audio WAV (empieza con "UklGR" = "RIFF" en Base64)
+        boolean isAudioBase64 = false;
+        if (hasText && mensaje.getContenido() != null) {
+            String contenido = mensaje.getContenido();
+            isAudioBase64 = contenido.startsWith("UklGR") || // RIFF header en Base64 (WAV)
+                           contenido.startsWith("data:audio/") || // Data URI de audio
+                           contenido.startsWith("//") || // Algunos formatos de audio en Base64
+                           contenido.startsWith("AAAA"); // Otro posible formato de audio
+        }
+
+        if (hasFile && !hasText) {
+            mensaje.setTipo("AUDIO");
+            System.out.println("🔍 [GestionMensajes]: Tipo determinado: AUDIO (fileId presente)");
+        } else if (isAudioBase64) {
+            // ✅ NUEVO: Si el contenido es Base64 de audio, marcar como AUDIO
+            mensaje.setTipo("AUDIO");
+            System.out.println("🔍 [GestionMensajes]: Tipo determinado: AUDIO (Base64 detectado)");
+        } else if (hasText && !hasFile) {
+            mensaje.setTipo("TEXTO");
+            System.out.println("🔍 [GestionMensajes]: Tipo determinado: TEXTO");
+        } else if (hasFile && hasText) {
+            if (mensaje.getTipo() == null || mensaje.getTipo().isEmpty()) {
+                mensaje.setTipo("FILE");
+                System.out.println("🔍 [GestionMensajes]: Tipo determinado: FILE");
+            }
+        } else {
+            if (mensaje.getTipo() == null || mensaje.getTipo().isEmpty()) {
+                mensaje.setTipo("TEXTO");
+                System.out.println("🔍 [GestionMensajes]: Tipo determinado: TEXTO (por defecto)");
+            }
+        }
     }
 
     /**
-     * Envía un mensaje con archivo adjunto.
+     * Mapea la respuesta del servidor (con estructura del push)
+     * al formato esperado por DTOMensaje (remitenteId/contenido/tipo).
+     *
+     * Estructura esperada del servidor para PUSH:
+     * - mensajeId, remitenteId, remitenteNombre, peerRemitenteId, peerDestinoId
+     * - tipo, contenido, fechaEnvio, destinatarioId
+     *
+     * Nota: Los mensajes de audio en PUSH vienen con contenido en Base64
      */
-    public CompletableFuture<Void> enviarMensajeArchivo(String destinatarioId, String contenido,
-                                                         String fileId, String fileName) {
-        String remitenteId = gestorSesionUsuario.getUserId();
-        String peerRemitenteId = gestorSesionUsuario.getPeerId();
-        String peerDestinoId = gestorContactoPeers.getPeerIdDeContacto(destinatarioId);
+    private DTOMensaje mapearMensajeDesdeServidor(Object data) {
+        DTOMensaje mensaje = new DTOMensaje();
 
-        System.out.println("📤 [GestionMensajes]: Enviando mensaje de ARCHIVO");
-        System.out.println("   → Remitente: " + remitenteId + " (Peer: " + peerRemitenteId + ")");
-        System.out.println("   → Destinatario: " + destinatarioId + " (Peer: " + peerDestinoId + ")");
-        System.out.println("   → FileId: " + fileId);
-        System.out.println("   → FileName: " + fileName);
+        try {
+            // Convertir a Map para acceder a los campos
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> map = (java.util.Map<String, Object>) data;
 
-        if (peerDestinoId == null) {
-            System.err.println("❌ [GestionMensajes]: No se pudo obtener el peerId del destinatario");
-            notificarObservadores("ERROR_PEER_NO_ENCONTRADO", "El contacto no está disponible");
-            return CompletableFuture.completedFuture(null);
+            // Mapear mensajeId directamente (el push usa este nombre)
+            if (map.containsKey("mensajeId")) {
+                mensaje.setMensajeId((String) map.get("mensajeId"));
+            }
+
+            // Mapear fechaEnvio directamente (el push usa este nombre)
+            if (map.containsKey("fechaEnvio")) {
+                mensaje.setFechaEnvio((String) map.get("fechaEnvio"));
+            }
+
+            // Mapear remitenteId directamente (el push usa este nombre)
+            if (map.containsKey("remitenteId")) {
+                mensaje.setRemitenteId((String) map.get("remitenteId"));
+            }
+
+            // Mapear remitenteNombre directamente (el push usa este nombre)
+            if (map.containsKey("remitenteNombre")) {
+                mensaje.setRemitenteNombre((String) map.get("remitenteNombre"));
+            }
+
+            // Mapear peerRemitenteId directamente (el push usa este nombre)
+            if (map.containsKey("peerRemitenteId")) {
+                mensaje.setPeerRemitenteId((String) map.get("peerRemitenteId"));
+            }
+
+            // Mapear peerDestinoId directamente (el push usa este nombre)
+            if (map.containsKey("peerDestinoId")) {
+                mensaje.setPeerDestinoId((String) map.get("peerDestinoId"));
+            }
+
+            // Mapear destinatarioId directamente (el push usa este nombre)
+            if (map.containsKey("destinatarioId")) {
+                mensaje.setDestinatarioId((String) map.get("destinatarioId"));
+            }
+
+            // Mapear tipo directamente (el push usa "texto" o "audio" en minúsculas)
+            String tipo = null;
+            if (map.containsKey("tipo")) {
+                tipo = (String) map.get("tipo");
+                // Convertir a formato esperado por el cliente (TEXTO/AUDIO en mayúsculas)
+                mensaje.setTipo(tipo.toUpperCase());
+            }
+
+            // Mapear contenido directamente (el push usa este nombre)
+            // Para mensajes de texto: contenido normal
+            // Para mensajes de audio: datos Base64 (data:audio/webm;base64,...)
+            String contenido = null;
+            if (map.containsKey("contenido")) {
+                contenido = (String) map.get("contenido");
+                mensaje.setContenido(contenido);
+            }
+
+            // ✅ NUEVO: Mapear audioId del servidor al fileId del cliente
+            // El servidor envía el campo "audioId" para mensajes de audio
+            if (map.containsKey("audioId")) {
+                String audioId = (String) map.get("audioId");
+                mensaje.setFileId(audioId);
+                System.out.println("✅ [GestionMensajes]: AudioId mapeado a fileId: " + audioId);
+            }
+
+            // ✅ CORRECCIÓN CRÍTICA: Si el tipo es "audio" pero no hay audioId,
+            // usar el contenido como fileId (el servidor envía el path en contenido)
+            if (tipo != null && tipo.equalsIgnoreCase("audio") &&
+                mensaje.getFileId() == null && contenido != null && !contenido.isEmpty()) {
+
+                // Solo si el contenido NO es Base64 (los Base64 son muy largos)
+                boolean esBase64 = contenido.startsWith("UklGR") ||
+                                  contenido.startsWith("data:audio/") ||
+                                  contenido.length() > 1000;
+
+                if (!esBase64) {
+                    mensaje.setFileId(contenido);
+                    System.out.println("✅ [GestionMensajes]: Contenido mapeado a fileId para audio: " + contenido);
+                }
+            }
+
+            // ✅ NUEVO: También mapear otros tipos de archivos si vienen en el futuro
+            if (map.containsKey("fileId")) {
+                mensaje.setFileId((String) map.get("fileId"));
+            }
+
+            if (map.containsKey("fileName")) {
+                mensaje.setFileName((String) map.get("fileName"));
+            }
+
+        } catch (Exception e) {
+            System.err.println("❌ [GestionMensajes]: Error al mapear mensaje desde servidor: " + e.getMessage());
+            e.printStackTrace();
         }
 
-        DTOEnviarMensaje payload = DTOEnviarMensaje.deArchivo(peerRemitenteId, peerDestinoId, remitenteId, destinatarioId, contenido, fileId, fileName);
-        DTORequest peticion = new DTORequest("enviarMensajeDirecto", payload);
-        enviadorPeticiones.enviar(peticion);
-
-        System.out.println("✅ [GestionMensajes]: Mensaje de archivo enviado al servidor");
-        return CompletableFuture.completedFuture(null);
+        return mensaje;
     }
 
     /**
-     * Maneja la RESPUESTA del servidor después de enviar un mensaje.
-     * Esta es la confirmación de que el mensaje fue enviado exitosamente.
+     * Convierte el tipo de mensaje del servidor (TEXT, IMAGE, AUDIO, FILE)
+     * al formato esperado por el cliente (TEXTO, IMAGEN, AUDIO, ARCHIVO).
      */
+    private String convertirTipoMensaje(String messageType) {
+        if (messageType == null) return "TEXTO";
+
+        switch (messageType.toUpperCase()) {
+            case "TEXT":
+                return "TEXTO";
+            case "IMAGE":
+                return "IMAGEN";
+            case "AUDIO":
+                return "AUDIO";
+            case "FILE":
+                return "ARCHIVO";
+            default:
+                return messageType;
+        }
+    }
+
     private void manejarRespuestaEnvioMensaje(DTOResponse r) {
         System.out.println("📥 [GestionMensajes]: Recibida RESPUESTA de envío de mensaje - Status: " + r.getStatus());
 
-        if(r.fueExitoso()) {
+        if (r.fueExitoso()) {
             DTOMensaje mensaje = gson.fromJson(gson.toJson(r.getData()), DTOMensaje.class);
+
+            // ✅ NUEVO: Completar con datos de caché si el servidor no devolvió el contenido
+            if (ultimoMensajeTextoEnviado != null) {
+                System.out.println("🔄 [GestionMensajes]: Completando mensaje con datos de caché");
+
+                String idServidor = mensaje.getMensajeId();
+                String fechaServidor = mensaje.getFechaEnvio();
+
+                mensaje.setContenido(ultimoMensajeTextoEnviado.getContenido());
+                mensaje.setTipo(ultimoMensajeTextoEnviado.getTipo());
+                mensaje.setRemitenteId(ultimoMensajeTextoEnviado.getRemitenteId());
+                mensaje.setDestinatarioId(ultimoMensajeTextoEnviado.getDestinatarioId());
+                mensaje.setPeerRemitenteId(ultimoMensajeTextoEnviado.getPeerRemitenteId());
+                mensaje.setPeerDestinoId(ultimoMensajeTextoEnviado.getPeerDestinoId());
+
+                mensaje.setMensajeId(idServidor);
+                mensaje.setFechaEnvio(fechaServidor);
+
+                ultimoMensajeTextoEnviado = null;
+
+                System.out.println("✅ [GestionMensajes]: Mensaje completado - Contenido: " + mensaje.getContenido());
+            }
+
+            determinarTipoMensaje(mensaje);
+
             System.out.println("✅ [GestionMensajes]: Mensaje confirmado por servidor");
             System.out.println("   → ID: " + mensaje.getMensajeId());
             System.out.println("   → Fecha: " + mensaje.getFechaEnvio());
+            System.out.println("   → Tipo: " + mensaje.getTipo());
+            System.out.println("   → Contenido: " + mensaje.getContenido());
 
-            // Marcar como "es mío" ya que es el mensaje que nosotros enviamos
             mensaje.setEsMio(true);
-
-            // Notificar a los observadores que el mensaje fue enviado exitosamente
             notificarObservadores("MENSAJE_ENVIADO_EXITOSO", mensaje);
         } else {
-            // Manejo granular de errores según la especificación
+            ultimoMensajeTextoEnviado = null; // Limpiar caché en caso de error
+
             String errorMsg = r.getMessage();
             System.err.println("❌ [GestionMensajes]: Error en respuesta de envío: " + errorMsg);
 
             if (errorMsg.contains("Destinatario no encontrado") || errorMsg.contains("desconectado")) {
                 notificarObservadores("ERROR_DESTINATARIO_NO_DISPONIBLE", errorMsg);
             } else if (errorMsg.contains("inválidos") || errorMsg.contains("Datos de mensaje inválidos")) {
-                // Intentar extraer detalles del error de validación
                 notificarObservadores("ERROR_VALIDACION", r.getData() != null ? r.getData() : errorMsg);
             } else {
                 notificarObservadores("ERROR_ENVIO_MENSAJE", errorMsg);
@@ -235,33 +425,56 @@ public class GestionMensajesImpl implements IGestionMensajes {
         }
     }
 
-    /**
-     * Maneja la RESPUESTA del servidor después de enviar un mensaje de audio.
-     * Esta es la confirmación de que el mensaje de audio fue enviado exitosamente.
-     */
     private void manejarRespuestaEnvioMensajeAudio(DTOResponse r) {
         System.out.println("📥 [GestionMensajes]: Recibida RESPUESTA de envío de mensaje de audio - Status: " + r.getStatus());
 
-        if(r.fueExitoso()) {
+        if (r.fueExitoso()) {
             DTOMensaje mensaje = gson.fromJson(gson.toJson(r.getData()), DTOMensaje.class);
+
+            // ✅ NUEVO: Completar con datos de caché si el servidor no devolvió el contenido
+            if (ultimoMensajeAudioEnviado != null) {
+                System.out.println("🔄 [GestionMensajes]: Completando mensaje de audio con datos de caché");
+
+                String idServidor = mensaje.getMensajeId();
+                String fechaServidor = mensaje.getFechaEnvio();
+                String audioFileId = ultimoMensajeAudioEnviado.getContenido();
+
+                mensaje.setContenido(audioFileId);
+                mensaje.setTipo(ultimoMensajeAudioEnviado.getTipo());
+                mensaje.setRemitenteId(ultimoMensajeAudioEnviado.getRemitenteId());
+                mensaje.setDestinatarioId(ultimoMensajeAudioEnviado.getDestinatarioId());
+                mensaje.setPeerRemitenteId(ultimoMensajeAudioEnviado.getPeerRemitenteId());
+                mensaje.setPeerDestinoId(ultimoMensajeAudioEnviado.getPeerDestinoId());
+
+                // ✅ CORRECCIÓN CRÍTICA: También asignar al fileId para que la reproducción funcione
+                mensaje.setFileId(audioFileId);
+
+                mensaje.setMensajeId(idServidor);
+                mensaje.setFechaEnvio(fechaServidor);
+
+                ultimoMensajeAudioEnviado = null;
+
+                System.out.println("✅ [GestionMensajes]: Mensaje de audio completado - FileId: " + audioFileId);
+            }
+
+            determinarTipoMensaje(mensaje);
+
             System.out.println("✅ [GestionMensajes]: Mensaje de audio confirmado por servidor");
             System.out.println("   → ID: " + mensaje.getMensajeId());
             System.out.println("   → Fecha: " + mensaje.getFechaEnvio());
+            System.out.println("   → FileId: " + mensaje.getFileId());
 
-            // Marcar como "es mío" ya que es el mensaje que nosotros enviamos
             mensaje.setEsMio(true);
-
-            // Notificar a los observadores que el mensaje de audio fue enviado exitosamente
             notificarObservadores("MENSAJE_AUDIO_ENVIADO_EXITOSO", mensaje);
         } else {
-            // Manejo granular de errores según la especificación
+            ultimoMensajeAudioEnviado = null; // Limpiar caché en caso de error
+
             String errorMsg = r.getMessage();
             System.err.println("❌ [GestionMensajes]: Error en respuesta de envío de mensaje de audio: " + errorMsg);
 
             if (errorMsg.contains("Destinatario no encontrado") || errorMsg.contains("desconectado")) {
                 notificarObservadores("ERROR_DESTINATARIO_NO_DISPONIBLE", errorMsg);
             } else if (errorMsg.contains("inválidos") || errorMsg.contains("Datos de mensaje inválidos")) {
-                // Intentar extraer detalles del error de validación
                 notificarObservadores("ERROR_VALIDACION", r.getData() != null ? r.getData() : errorMsg);
             } else {
                 notificarObservadores("ERROR_ENVIO_MENSAJE_AUDIO", errorMsg);
@@ -269,124 +482,106 @@ public class GestionMensajesImpl implements IGestionMensajes {
         }
     }
 
-    /**
-     * Maneja las NOTIFICACIONES PUSH de nuevos mensajes directos.
-     * Esto se ejecuta cuando otro usuario nos envía un mensaje.
-     * Ahora incluye información de peers WebRTC y filtrado de duplicados.
-     */
     private void manejarNuevoMensajePush(DTOResponse r) {
-        System.out.println("🔔 [GestionMensajes]: Recibida NOTIFICACIÓN PUSH de nuevo mensaje - Status: " + r.getStatus());
+        System.out.println("📥 [GestionMensajes]: Recibido PUSH de nuevo mensaje directo");
 
-        if(r.fueExitoso()) {
-            DTOMensaje mensaje = gson.fromJson(gson.toJson(r.getData()), DTOMensaje.class);
-
-            String myUserId = gestorSesionUsuario.getUserId();
-            String myPeerId = gestorSesionUsuario.getPeerId();
-
-            System.out.println("✅ [GestionMensajes]: Nuevo mensaje recibido");
-            System.out.println("   → De: " + mensaje.getRemitenteNombre() + " (" + mensaje.getRemitenteId() + ")");
-            System.out.println("   → Peer Remitente: " + mensaje.getPeerRemitenteId());
-            System.out.println("   → Peer Destino: " + mensaje.getPeerDestinoId());
-            System.out.println("   → Tipo: " + mensaje.getTipo());
-            System.out.println("   → Contenido: " + (mensaje.getContenido() != null ? mensaje.getContenido() : "[archivo]"));
-            System.out.println("   → Fecha: " + mensaje.getFechaEnvio());
-
-            // ✅ FILTRO 1: Ignorar pushes de mis propios mensajes (ya procesados en respuesta)
-            boolean esMio = mensaje.getRemitenteId().equals(myUserId);
-            if (esMio) {
-                System.out.println("⚠️ [GestionMensajes]: Ignorando push de mi propio mensaje (ya procesado)");
-                return;
-            }
-
-            // ✅ FILTRO 2: Validar que el mensaje es para mi peer actual
-            if (myPeerId != null && mensaje.getPeerDestinoId() != null &&
-                !mensaje.getPeerDestinoId().equals(myPeerId)) {
-                System.out.println("⚠️ [GestionMensajes]: Mensaje no es para mi peer actual");
-                System.out.println("   → Peer destino del mensaje: " + mensaje.getPeerDestinoId());
-                System.out.println("   → Mi peer actual: " + myPeerId);
-                return;
-            }
-
-            // Marcar como mensaje del otro usuario
-            mensaje.setEsMio(false);
-
-            // Notificar a los observadores que llegó un nuevo mensaje
-            System.out.println("📢 [GestionMensajes]: Notificando nuevo mensaje de: " + mensaje.getRemitenteNombre());
-            notificarObservadores("NUEVO_MENSAJE_PRIVADO", mensaje);
-
-        } else {
-            String errorMsg = r.getMessage();
-            System.err.println("❌ [GestionMensajes]: Error en notificación push: " + errorMsg);
-            notificarObservadores("ERROR_NOTIFICACION_MENSAJE", errorMsg);
+        if (!r.fueExitoso()) {
+            System.err.println("❌ [GestionMensajes]: Push de mensaje con error: " + r.getMessage());
+            notificarObservadores("ERROR_NOTIFICACION_MENSAJE", r.getMessage());
+            return;
         }
+
+        // Usar el método de mapeo para convertir la estructura del servidor al DTO esperado
+        DTOMensaje mensaje = mapearMensajeDesdeServidor(r.getData());
+        determinarTipoMensaje(mensaje);
+
+        String myUserId = gestorSesionUsuario.getUserId();
+        String myPeerId = gestorSesionUsuario.getPeerId();
+
+        // Marcar si el mensaje es mío
+        boolean esMio = myUserId != null && myUserId.equals(mensaje.getRemitenteId());
+        mensaje.setEsMio(esMio);
+
+        // Null-safe peer destination filter - solo filtrar si NO es mío
+        if (!esMio && myPeerId != null && mensaje.getPeerDestinoId() != null &&
+                !myPeerId.equals(mensaje.getPeerDestinoId())) {
+            System.out.println("⏩ [GestionMensajes]: Ignorando mensaje dirigido a otro peer");
+            return;
+        }
+
+        System.out.println("✅ [GestionMensajes]: Nuevo mensaje privado recibido");
+        System.out.println("   → De: " + mensaje.getRemitenteId() + (esMio ? " (YO)" : ""));
+        System.out.println("   → Tipo: " + mensaje.getTipo());
+        System.out.println("   → Contenido: " + mensaje.getContenido());
+
+        notificarObservadores("NUEVO_MENSAJE_PRIVADO", mensaje);
     }
 
-    /**
-     * Maneja las NOTIFICACIONES PUSH de nuevos mensajes directos de audio.
-     * Esto se ejecuta cuando otro usuario nos envía un mensaje de audio.
-     */
     private void manejarNuevoMensajeAudioPush(DTOResponse r) {
-        System.out.println("🔔 [GestionMensajes]: Recibida NOTIFICACIÓN PUSH de nuevo mensaje de audio - Status: " + r.getStatus());
+        System.out.println("📥 [GestionMensajes]: Recibido PUSH de nuevo mensaje de audio");
 
-        if(r.fueExitoso()) {
-            DTOMensaje mensaje = gson.fromJson(gson.toJson(r.getData()), DTOMensaje.class);
-
-            String myUserId = gestorSesionUsuario.getUserId();
-            String myPeerId = gestorSesionUsuario.getPeerId();
-
-            System.out.println("✅ [GestionMensajes]: Nuevo mensaje de audio recibido");
-            System.out.println("   → De: " + mensaje.getRemitenteNombre() + " (" + mensaje.getRemitenteId() + ")");
-            System.out.println("   → Peer Remitente: " + mensaje.getPeerRemitenteId());
-            System.out.println("   → Peer Destino: " + mensaje.getPeerDestinoId());
-            System.out.println("   → Tipo: " + mensaje.getTipo());
-            System.out.println("   → AudioFileId: " + mensaje.getContenido());
-            System.out.println("   → Fecha: " + mensaje.getFechaEnvio());
-
-            // ✅ FILTRO 1: Ignorar pushes de mis propios mensajes (ya procesados en respuesta)
-            boolean esMio = mensaje.getRemitenteId().equals(myUserId);
-            if (esMio) {
-                System.out.println("⚠️ [GestionMensajes]: Ignorando push de mi propio mensaje de audio (ya procesado)");
-                return;
-            }
-
-            // ✅ FILTRO 2: Validar que el mensaje de audio es para mi peer actual
-            if (myPeerId != null && mensaje.getPeerDestinoId() != null &&
-                !mensaje.getPeerDestinoId().equals(myPeerId)) {
-                System.out.println("⚠️ [GestionMensajes]: Mensaje de audio no es para mi peer actual");
-                System.out.println("   → Peer destino del mensaje de audio: " + mensaje.getPeerDestinoId());
-                System.out.println("   → Mi peer actual: " + myPeerId);
-                return;
-            }
-
-            // Marcar como mensaje del otro usuario
-            mensaje.setEsMio(false);
-
-            // Notificar a los observadores que llegó un nuevo mensaje de audio
-            System.out.println("📢 [GestionMensajes]: Notificando nuevo mensaje de audio de: " + mensaje.getRemitenteNombre());
-            notificarObservadores("NUEVO_MENSAJE_AUDIO_PRIVADO", mensaje);
-
-        } else {
-            String errorMsg = r.getMessage();
-            System.err.println("❌ [GestionMensajes]: Error en notificación push de mensaje de audio: " + errorMsg);
-            notificarObservadores("ERROR_NOTIFICACION_MENSAJE_AUDIO", errorMsg);
+        if (!r.fueExitoso()) {
+            System.err.println("❌ [GestionMensajes]: Push de audio con error: " + r.getMessage());
+            notificarObservadores("ERROR_NOTIFICACION_MENSAJE_AUDIO", r.getMessage());
+            return;
         }
+
+        // Usar el método de mapeo para convertir la estructura del servidor al DTO esperado
+        DTOMensaje mensaje = mapearMensajeDesdeServidor(r.getData());
+        determinarTipoMensaje(mensaje);
+
+        String myUserId = gestorSesionUsuario.getUserId();
+        String myPeerId = gestorSesionUsuario.getPeerId();
+
+        // Marcar si el mensaje es mío
+        boolean esMio = myUserId != null && myUserId.equals(mensaje.getRemitenteId());
+        mensaje.setEsMio(esMio);
+
+        // Null-safe peer destination filter - solo filtrar si NO es mío
+        if (!esMio && myPeerId != null && mensaje.getPeerDestinoId() != null &&
+                !myPeerId.equals(mensaje.getPeerDestinoId())) {
+            System.out.println("⏩ [GestionMensajes]: Ignorando mensaje de audio dirigido a otro peer");
+            return;
+        }
+
+        System.out.println("✅ [GestionMensajes]: Nuevo mensaje de audio recibido");
+        System.out.println("   → De: " + mensaje.getRemitenteId() + (esMio ? " (YO)" : ""));
+        System.out.println("   → Tipo: " + mensaje.getTipo());
+        // El contenido de audio en PUSH viene en Base64 (data:audio/webm;base64,...)
+        if (mensaje.getContenido() != null && mensaje.getContenido().startsWith("data:audio")) {
+            System.out.println("   → Audio Base64: Sí (listo para reproducir)");
+        } else {
+            System.out.println("   → Contenido: " + mensaje.getContenido());
+        }
+
+        notificarObservadores("NUEVO_MENSAJE_AUDIO_PRIVADO", mensaje);
     }
 
-    /**
-     * Maneja la respuesta del servidor con el historial de mensajes.
-     */
     private void manejarHistorial(DTOResponse r) {
         System.out.println("📥 [GestionMensajes]: Recibida respuesta de historial - Status: " + r.getStatus());
 
-        if(r.fueExitoso()) {
-            Type listType = new TypeToken<List<DTOMensaje>>(){}.getType();
-            List<DTOMensaje> mensajes = gson.fromJson(gson.toJson(r.getData()), listType);
+        if (r.fueExitoso()) {
+            // ✅ CORRECCIÓN: Usar mapearMensajeDesdeServidor() para cada mensaje
+            // En vez de parsear directamente con Gson
+            List<DTOMensaje> mensajes = new ArrayList<>();
+
+            Object data = r.getData();
+            if (data instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<Object> listData = (List<Object>) data;
+
+                for (Object item : listData) {
+                    // Mapear cada mensaje usando el método que sí hace el mapeo contenido->fileId
+                    DTOMensaje mensaje = mapearMensajeDesdeServidor(item);
+                    mensajes.add(mensaje);
+                }
+            }
 
             String myUserId = gestorSesionUsuario.getUserId();
-
-            // Marcar cada mensaje como "mío" o "del otro"
             for (DTOMensaje mensaje : mensajes) {
-                mensaje.setEsMio(mensaje.getRemitenteId().equals(myUserId));
+                // Null-safe esMio assignment
+                mensaje.setEsMio(myUserId != null && myUserId.equals(mensaje.getRemitenteId()));
+                determinarTipoMensaje(mensaje);
             }
 
             System.out.println("✅ [GestionMensajes]: Historial recibido con " + mensajes.size() + " mensajes");

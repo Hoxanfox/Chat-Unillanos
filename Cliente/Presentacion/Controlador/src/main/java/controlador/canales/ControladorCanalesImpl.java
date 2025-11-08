@@ -93,4 +93,22 @@ public class ControladorCanalesImpl implements IControladorCanales {
         System.out.println("🔔 [ControladorCanales]: Registrando observador de miembros");
         servicioCanales.registrarObservadorMiembros(observador);
     }
+
+    @Override
+    public CompletableFuture<List<DTOCanalCreado>> solicitarInvitacionesPendientes() {
+        System.out.println("📨 [ControladorCanales]: Solicitando invitaciones pendientes");
+        return servicioCanales.solicitarInvitacionesPendientes();
+    }
+
+    @Override
+    public CompletableFuture<Void> responderInvitacion(String canalId, boolean aceptar) {
+        System.out.println((aceptar ? "✓" : "✗") + " [ControladorCanales]: Respondiendo invitación - Aceptar: " + aceptar);
+        return servicioCanales.responderInvitacion(canalId, aceptar);
+    }
+
+    @Override
+    public void registrarObservadorInvitaciones(IObservador observador) {
+        System.out.println("🔔 [ControladorCanales]: Registrando observador de invitaciones");
+        servicioCanales.registrarObservadorInvitaciones(observador);
+    }
 }

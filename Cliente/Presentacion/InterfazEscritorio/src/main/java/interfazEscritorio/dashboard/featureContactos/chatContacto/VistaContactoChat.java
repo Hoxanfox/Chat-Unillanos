@@ -1,3 +1,4 @@
+// java
 package interfazEscritorio.dashboard.featureContactos.chatContacto;
 
 import controlador.chat.IControladorChat;
@@ -20,9 +21,14 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 
 import java.util.List;
+import java.util.Set;
+import java.util.Collections;
+import java.util.HashSet;
 
 /**
  * Vista de chat privado que AHORA gestiona el estado de grabación de audio.
+ * Ajustes: mensajes del usuario actual a la izquierda, del contacto a la derecha.
+ * Evita burbujas vacías o duplicadas.
  */
 public class VistaContactoChat extends BorderPane implements IObservador {
 
@@ -31,6 +37,9 @@ public class VistaContactoChat extends BorderPane implements IObservador {
     private final Runnable onVolver;
     private final VBox mensajesBox;
     private boolean isRecording = false; // Estado para saber si se está grabando
+
+    // Evitar mensajes duplicados
+    private final Set<String> mensajesMostrados = Collections.synchronizedSet(new HashSet<>());
 
     public VistaContactoChat(DTOContacto contacto, IControladorChat controlador, Runnable onVolver) {
         System.out.println("🔧 [VistaContactoChat]: Inicializando vista de chat...");
@@ -154,12 +163,59 @@ public class VistaContactoChat extends BorderPane implements IObservador {
                 if (datos instanceof DTOMensaje) {
                     DTOMensaje mensaje = (DTOMensaje) datos;
 
+                    // Validación null-safe para prevenir NullPointerException
+                    if (mensaje.getRemitenteId() == null) {
+                        System.err.println("⚠️ [VistaContactoChat]: Mensaje recibido con remitenteId null, ignorando...");
+                        break;
+                    }
+
                     // Solo mostrar si es de nuestro contacto actual o si somos nosotros
                     if (mensaje.getRemitenteId().equals(contacto.getId()) || mensaje.esMio()) {
                         System.out.println("💬 [VistaContactoChat]: Nuevo mensaje recibido");
                         System.out.println("   → De: " + mensaje.getRemitenteNombre());
                         System.out.println("   → Tipo: " + mensaje.getTipo());
                         System.out.println("   → Contenido: " + mensaje.getContenido());
+
+                        // ✅ NUEVO: Si es un mensaje de audio, detectar si viene como Base64 o fileId
+                        if (mensaje.esAudio() && mensaje.getContenido() != null && !mensaje.getContenido().isEmpty()) {
+                            String contenido = mensaje.getContenido();
+
+                            // Detectar si es Base64 de audio WAV (empieza con "UklGR" = RIFF header)
+                            boolean esBase64Audio = contenido.startsWith("UklGR") ||
+                                                   contenido.startsWith("data:audio/") ||
+                                                   contenido.length() > 1000; // Los fileId son cortos, Base64 es largo
+
+                            if (esBase64Audio) {
+                                System.out.println("🎵 [VistaContactoChat]: Audio recibido en Base64, guardando localmente...");
+                                controlador.guardarAudioDesdeBase64(contenido, mensaje.getMensajeId())
+                                        .thenAccept(archivo -> {
+                                            if (archivo != null) {
+                                                System.out.println("✅ [VistaContactoChat]: Audio guardado en caché: " + archivo.getAbsolutePath());
+                                                // Actualizar el mensaje para usar la ruta local en lugar del Base64
+                                                mensaje.setContenido(archivo.getAbsolutePath());
+                                            }
+                                        })
+                                        .exceptionally(ex -> {
+                                            System.err.println("❌ [VistaContactoChat]: Error al guardar audio: " + ex.getMessage());
+                                            return null;
+                                        });
+                            } else {
+                                // Es un fileId, descargar normalmente
+                                System.out.println("📥 [VistaContactoChat]: Descargando audio desde servidor - FileId: " + contenido);
+                                controlador.descargarAudioALocal(contenido)
+                                        .thenAccept(archivo -> {
+                                            if (archivo != null) {
+                                                System.out.println("✅ [VistaContactoChat]: Audio descargado a caché: " + archivo.getAbsolutePath());
+                                            }
+                                        })
+                                        .exceptionally(ex -> {
+                                            System.err.println("❌ [VistaContactoChat]: Error al descargar audio: " + ex.getMessage());
+                                            return null;
+                                        });
+                            }
+                        }
+
+                        // Ejecutar en UI thread y dejar que agregarMensaje maneje duplicados/vacíos
                         Platform.runLater(() -> agregarMensaje(mensaje));
                     } else {
                         System.out.println("⚠️ [VistaContactoChat]: Mensaje ignorado (no es del contacto actual)");
@@ -168,16 +224,41 @@ public class VistaContactoChat extends BorderPane implements IObservador {
                 break;
 
             case "MENSAJE_ENVIADO_EXITOSO":
+            case "MENSAJE_AUDIO_ENVIADO_EXITOSO":
                 // Confirmación de que nuestro mensaje fue enviado
                 if (datos instanceof DTOMensaje) {
                     DTOMensaje mensaje = (DTOMensaje) datos;
                     System.out.println("✅ [VistaContactoChat]: Mensaje enviado exitosamente");
                     System.out.println("   → ID: " + mensaje.getMensajeId());
                     System.out.println("   → Tipo: " + mensaje.getTipo());
-                    Platform.runLater(() -> agregarMensaje(mensaje));
+
+                    // ✅ IMPORTANTE: Verificar que sea para este contacto
+                    if (mensaje.getDestinatarioId() != null && mensaje.getDestinatarioId().equals(contacto.getId())) {
+                        // ✅ NUEVO: Si es un mensaje de audio que YO envié, descargar a caché local
+                        if (mensaje.esAudio() && mensaje.getContenido() != null && !mensaje.getContenido().isEmpty()) {
+                            String fileId = mensaje.getContenido();
+                            System.out.println("📥 [VistaContactoChat]: Descargando mi audio enviado a caché - FileId: " + fileId);
+                            controlador.descargarAudioALocal(fileId)
+                                    .thenAccept(archivo -> {
+                                        if (archivo != null) {
+                                            System.out.println("✅ [VistaContactoChat]: Mi audio descargado a caché: " + archivo.getAbsolutePath());
+                                        }
+                                    })
+                                    .exceptionally(ex -> {
+                                        System.err.println("❌ [VistaContactoChat]: Error al descargar mi audio: " + ex.getMessage());
+                                        return null;
+                                    });
+                        }
+
+                        // Agregar en UI (agregarMensaje ignorará duplicados/vacíos)
+                        Platform.runLater(() -> agregarMensaje(mensaje));
+                    } else {
+                        System.out.println("⚠️ [VistaContactoChat]: Mensaje enviado ignorado (no es para este chat)");
+                    }
                 }
                 break;
 
+            case "HISTORIAL_MENSAJES_RECIBIDO":
             case "HISTORIAL_MENSAJES":
                 // Historial completo recibido
                 if (datos instanceof List) {
@@ -185,9 +266,29 @@ public class VistaContactoChat extends BorderPane implements IObservador {
                     System.out.println("📜 [VistaContactoChat]: Historial recibido - Total mensajes: " + lista.size());
                     Platform.runLater(() -> {
                         mensajesBox.getChildren().clear();
+                        mensajesMostrados.clear();
+
+                        // ✅ NUEVO: Descargar todos los audios del historial a caché local
                         for (Object obj : lista) {
                             if (obj instanceof DTOMensaje) {
-                                agregarMensaje((DTOMensaje) obj);
+                                DTOMensaje mensaje = (DTOMensaje) obj;
+                                agregarMensaje(mensaje);
+
+                                // ✅ CORRECCIÓN: Si es audio, descargar usando el FILEID (no el contenido)
+                                if (mensaje.esAudio() && mensaje.getFileId() != null && !mensaje.getFileId().isEmpty()) {
+                                    String fileId = mensaje.getFileId();
+                                    System.out.println("📥 [VistaContactoChat]: Descargando audio del historial - FileId: " + fileId);
+                                    controlador.descargarAudioALocal(fileId)
+                                            .thenAccept(archivo -> {
+                                                if (archivo != null) {
+                                                    System.out.println("✅ [VistaContactoChat]: Audio del historial descargado: " + archivo.getName());
+                                                }
+                                            })
+                                            .exceptionally(ex -> {
+                                                System.err.println("⚠️ [VistaContactoChat]: Error al descargar audio del historial: " + ex.getMessage());
+                                                return null;
+                                            });
+                                }
                             }
                         }
                         System.out.println("✅ [VistaContactoChat]: Historial cargado en la vista");
@@ -196,6 +297,7 @@ public class VistaContactoChat extends BorderPane implements IObservador {
                 break;
 
             case "ERROR_ENVIO_MENSAJE":
+            case "ERROR_ENVIO_MENSAJE_AUDIO": // ✅ Agregado para errores de audio
                 // Error al enviar mensaje
                 String error = datos != null ? datos.toString() : "Error desconocido";
                 System.err.println("❌ [VistaContactoChat]: Error al enviar mensaje: " + error);
@@ -221,24 +323,35 @@ public class VistaContactoChat extends BorderPane implements IObservador {
     }
 
     private void agregarMensaje(DTOMensaje mensaje) {
+        // Validaciones para evitar burbujas vacías o duplicadas
+        String id = mensaje.getMensajeId();
+        if (id != null && !id.isEmpty() && mensajesMostrados.contains(id)) {
+            System.out.println("⚠️ [VistaContactoChat]: Mensaje ya mostrado, ignorando ID: " + id);
+            return;
+        }
+
+        boolean hasText = mensaje.getContenido() != null && !mensaje.getContenido().trim().isEmpty();
+        boolean hasFile = mensaje.getFileId() != null && !mensaje.getFileId().isEmpty();
+
+        if (!hasText && !hasFile) {
+            System.out.println("⚠️ [VistaContactoChat]: Mensaje vacío, no se mostrará");
+            return;
+        }
+
+        // ✅ CORRECTO: Mensajes del usuario a la DERECHA, mensajes del contacto a la IZQUIERDA
         Pos alineacion = mensaje.esMio() ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT;
 
         // 🔍 DEBUG: Ver todos los datos del mensaje
         System.out.println("🔍 [VistaContactoChat]: Analizando mensaje para mostrar:");
         System.out.println("   → Tipo: " + mensaje.getTipo());
-        System.out.println("   → FileId: " + mensaje.getFileId());
-        System.out.println("   → FileName: " + mensaje.getFileName());
-        System.out.println("   → Contenido: " + mensaje.getContenido());
-        System.out.println("   → esTexto(): " + mensaje.esTexto());
-        System.out.println("   → esAudio(): " + mensaje.esAudio());
-        System.out.println("   → esImagen(): " + mensaje.esImagen());
-        System.out.println("   → esArchivo(): " + mensaje.esArchivo());
+        System.out.println("   → esMio: " + mensaje.esMio());
+        System.out.println("   → Alineación: " + (mensaje.esMio() ? "DERECHA (usuario)" : "IZQUIERDA (contacto)"));
 
         // Crear burbuja según el tipo de mensaje
         VBox burbuja;
         if (mensaje.esTexto()) {
             System.out.println("✅ [VistaContactoChat]: Mostrando como TEXTO");
-            burbuja = crearBurbujaMensaje(mensaje.getAutorConFecha(), mensaje.getContenido(), alineacion);
+            burbuja = crearBurbujaMensaje(mensaje, mensaje.getAutorConFecha(), mensaje.getContenido(), alineacion);
         } else if (mensaje.esAudio()) {
             System.out.println("🎵 [VistaContactoChat]: Mostrando como AUDIO");
             burbuja = crearBurbujaAudio(mensaje, alineacion);
@@ -251,16 +364,21 @@ public class VistaContactoChat extends BorderPane implements IObservador {
         } else {
             System.out.println("⚠️ [VistaContactoChat]: Tipo desconocido, mostrando como texto");
             // Tipo desconocido, mostrar como texto
-            burbuja = crearBurbujaMensaje(mensaje.getAutorConFecha(),
-                "[" + mensaje.getTipo() + "] " + mensaje.getContenido(), alineacion);
+            burbuja = crearBurbujaMensaje(mensaje, mensaje.getAutorConFecha(),
+                    "[" + mensaje.getTipo() + "] " + mensaje.getContenido(), alineacion);
         }
 
         mensajesBox.getChildren().add(burbuja);
+
+        if (id != null && !id.isEmpty()) {
+            mensajesMostrados.add(id);
+        }
+
         System.out.println("✅ [VistaContactoChat]: Mensaje agregado a la vista - " +
-            (mensaje.esMio() ? "Enviado" : "Recibido") + " - Tipo: " + mensaje.getTipo());
+                (mensaje.esMio() ? "Enviado (izquierda)" : "Recibido (derecha)") + " - Tipo: " + mensaje.getTipo());
     }
 
-    private VBox crearBurbujaMensaje(String autor, String contenido, Pos alineacion) {
+    private VBox crearBurbujaMensaje(DTOMensaje mensaje, String autor, String contenido, Pos alineacion) {
         VBox burbuja = new VBox(3);
         burbuja.setPadding(new Insets(8));
         burbuja.setMaxWidth(300);
@@ -268,7 +386,8 @@ public class VistaContactoChat extends BorderPane implements IObservador {
         autorLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #888;");
         Text contenidoText = new Text(contenido);
         contenidoText.setWrappingWidth(280);
-        if (alineacion == Pos.CENTER_RIGHT) {
+        // Estilo basado en si es mío (color verde) o no (blanco)
+        if (mensaje.esMio()) {
             burbuja.setStyle("-fx-background-color: #dcf8c6; -fx-background-radius: 10;");
         } else {
             burbuja.setStyle("-fx-background-color: #ffffff; -fx-background-radius: 10; -fx-border-color: #e0e0e0; -fx-border-radius: 10;");
@@ -304,43 +423,43 @@ public class VistaContactoChat extends BorderPane implements IObservador {
 
             // Reproducir el audio EN MEMORIA a través del controlador
             controlador.reproducirAudioEnMemoria(mensaje.getFileId())
-                .thenRun(() -> {
-                    Platform.runLater(() -> {
-                        btnPlay.setText("✅");
-                        System.out.println("✅ [VistaContactoChat]: Audio reproducido exitosamente");
-                    });
-
-                    // Re-habilitar el botón después de 2 segundos
-                    new Thread(() -> {
-                        try {
-                            Thread.sleep(2000);
-                        } catch (InterruptedException ex) {
-                            ex.printStackTrace();
-                        }
+                    .thenRun(() -> {
                         Platform.runLater(() -> {
-                            btnPlay.setDisable(false);
-                            btnPlay.setText("▶️");
+                            btnPlay.setText("✅");
+                            System.out.println("✅ [VistaContactoChat]: Audio reproducido exitosamente");
                         });
-                    }).start();
-                })
-                .exceptionally(ex -> {
-                    System.err.println("❌ [VistaContactoChat]: Error al reproducir audio: " + ex.getMessage());
-                    Platform.runLater(() -> {
-                        btnPlay.setText("❌");
-                        btnPlay.setDisable(false);
 
-                        // Restaurar después de 2 segundos
+                        // Re-habilitar el botón después de 2 segundos
                         new Thread(() -> {
                             try {
                                 Thread.sleep(2000);
-                            } catch (InterruptedException e2) {
-                                e2.printStackTrace();
+                            } catch (InterruptedException ex) {
+                                ex.printStackTrace();
                             }
-                            Platform.runLater(() -> btnPlay.setText("▶️"));
+                            Platform.runLater(() -> {
+                                btnPlay.setDisable(false);
+                                btnPlay.setText("▶️");
+                            });
                         }).start();
+                    })
+                    .exceptionally(ex -> {
+                        System.err.println("❌ [VistaContactoChat]: Error al reproducir audio: " + ex.getMessage());
+                        Platform.runLater(() -> {
+                            btnPlay.setText("❌");
+                            btnPlay.setDisable(false);
+
+                            // Restaurar después de 2 segundos
+                            new Thread(() -> {
+                                try {
+                                    Thread.sleep(2000);
+                                } catch (InterruptedException e2) {
+                                    e2.printStackTrace();
+                                }
+                                Platform.runLater(() -> btnPlay.setText("▶️"));
+                            }).start();
+                        });
+                        return null;
                     });
-                    return null;
-                });
         });
 
         Label audioLabel = new Label("🎤 Audio" + (mensaje.getFileName() != null ? " - " + mensaje.getFileName() : ""));
@@ -348,8 +467,8 @@ public class VistaContactoChat extends BorderPane implements IObservador {
 
         audioBox.getChildren().addAll(btnPlay, audioLabel);
 
-        // Estilo de la burbuja
-        if (alineacion == Pos.CENTER_RIGHT) {
+        // Estilo de la burbuja según propietario
+        if (mensaje.esMio()) {
             burbuja.setStyle("-fx-background-color: #dcf8c6; -fx-background-radius: 10;");
         } else {
             burbuja.setStyle("-fx-background-color: #ffffff; -fx-background-radius: 10; -fx-border-color: #e0e0e0; -fx-border-radius: 10;");
@@ -375,7 +494,7 @@ public class VistaContactoChat extends BorderPane implements IObservador {
 
         // Placeholder de imagen
         Button btnVerImagen = new Button("🖼️ Ver imagen: " +
-            (mensaje.getFileName() != null ? mensaje.getFileName() : "imagen.jpg"));
+                (mensaje.getFileName() != null ? mensaje.getFileName() : "imagen.jpg"));
         btnVerImagen.setStyle("-fx-font-size: 12px;");
         btnVerImagen.setOnAction(e -> {
             System.out.println("🖼️ [VistaContactoChat]: Descargar/Ver imagen - FileId: " + mensaje.getFileId());
@@ -393,7 +512,7 @@ public class VistaContactoChat extends BorderPane implements IObservador {
         }
 
         // Estilo de la burbuja
-        if (alineacion == Pos.CENTER_RIGHT) {
+        if (mensaje.esMio()) {
             burbuja.setStyle("-fx-background-color: #dcf8c6; -fx-background-radius: 10;");
         } else {
             burbuja.setStyle("-fx-background-color: #ffffff; -fx-background-radius: 10; -fx-border-color: #e0e0e0; -fx-border-radius: 10;");
@@ -418,7 +537,7 @@ public class VistaContactoChat extends BorderPane implements IObservador {
 
         // Botón de descarga
         Button btnDescargar = new Button("📎 Descargar: " +
-            (mensaje.getFileName() != null ? mensaje.getFileName() : "archivo"));
+                (mensaje.getFileName() != null ? mensaje.getFileName() : "archivo"));
         btnDescargar.setStyle("-fx-font-size: 12px;");
         btnDescargar.setOnAction(e -> {
             System.out.println("📥 [VistaContactoChat]: Descargar archivo - FileId: " + mensaje.getFileId());
@@ -436,7 +555,7 @@ public class VistaContactoChat extends BorderPane implements IObservador {
         }
 
         // Estilo de la burbuja
-        if (alineacion == Pos.CENTER_RIGHT) {
+        if (mensaje.esMio()) {
             burbuja.setStyle("-fx-background-color: #dcf8c6; -fx-background-radius: 10;");
         } else {
             burbuja.setStyle("-fx-background-color: #ffffff; -fx-background-radius: 10; -fx-border-color: #e0e0e0; -fx-border-radius: 10;");

@@ -3,6 +3,7 @@ package com.arquitectura.transporte;
 import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 import com.arquitectura.controlador.IClientHandler;
+import com.arquitectura.controlador.IContactListBroadcaster;
 import com.arquitectura.controlador.RequestDispatcher;
 import com.arquitectura.events.*;
 import com.google.gson.Gson;
@@ -22,15 +23,15 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-@PropertySource("file:./config/server.properties")
+@PropertySource(value = "file:./config/server.properties", ignoreResourceNotFound = true)
 @Component
-public class ServerListener {
+public class ServerListener implements IContactListBroadcaster {
 
     private static final Logger log = LoggerFactory.getLogger(ServerListener.class);
 
-    @Value("${server.port}")
+    @Value("${server.port:22100}")
     private int port;
-    @Value("${server.max.connections}")
+    @Value("${server.max.connections:100}")
     private int maxConnectedUsers;
 
     private final Gson gson;
@@ -97,18 +98,54 @@ public class ServerListener {
         MessageResponseDto originalDto = event.getMessageDto();
         log.info("Nuevo mensaje en canal {}. Propagando a los miembros conectados.", originalDto.getChannelId());
         List<UUID> memberIds = event.getRecipientUserIds();
+        
+        // Determinar el tipo de acción según el tipo de mensaje
+        String action = "TEXT".equals(originalDto.getMessageType()) ? "nuevoMensajeDirecto" : "nuevoMensajeDirectoAudio";
+        String message = "TEXT".equals(originalDto.getMessageType()) ? "Nuevo mensaje recibido" : "Nuevo mensaje de audio recibido";
+        
+        // Enriquecer el mensaje (convertir audio a base64 si es necesario)
         MessageResponseDto dtoParaPropagar = requestDispatcher.enrichOutgoingMessage(originalDto);
-        if (dtoParaPropagar != originalDto) { // Comprobamos si el DTO fue modificado
+        if (dtoParaPropagar != originalDto) {
             log.info("Mensaje de audio ID {} codificado a Base64 para su propagación.", originalDto.getMessageId());
         }
 
-        DTOResponse response = new DTOResponse("nuevoMensajeCanal", "success", "Nuevo mensaje recibido", dtoParaPropagar);
+        // Construir el objeto de datos de la notificación en el formato solicitado
+        Map<String, Object> notificationData = new HashMap<>();
+        notificationData.put("mensajeId", dtoParaPropagar.getMessageId().toString());
+        notificationData.put("remitenteId", dtoParaPropagar.getAuthor().getUserId().toString());
+        notificationData.put("remitenteNombre", dtoParaPropagar.getAuthor().getUsername());
+        
+        // Peer IDs (si están disponibles)
+        if (dtoParaPropagar.getAuthor().getPeerId() != null) {
+            notificationData.put("peerRemitenteId", dtoParaPropagar.getAuthor().getPeerId().toString());
+        } else {
+            notificationData.put("peerRemitenteId", null);
+        }
+        notificationData.put("peerDestinoId", null); // TODO: Obtener del destinatario si es necesario
+        
+        // Tipo y contenido
+        String tipo = "TEXT".equals(dtoParaPropagar.getMessageType()) ? "texto" : "audio";
+        notificationData.put("tipo", tipo);
+        notificationData.put("contenido", dtoParaPropagar.getContent());
+        notificationData.put("fechaEnvio", dtoParaPropagar.getTimestamp().toString());
+
+        DTOResponse response = new DTOResponse(action, "success", message, notificationData);
         String notification = gson.toJson(response);
 
+        // Enviar a todos los destinatarios EXCEPTO al remitente
+        UUID remitenteId = dtoParaPropagar.getAuthor().getUserId();
         memberIds.forEach(memberId -> {
-            List<IClientHandler> userSessions = activeClientsById.get(memberId);
-            if (userSessions != null) {
-                userSessions.forEach(handler -> handler.sendMessage(notification));
+            // Solo enviar si NO es el remitente
+            if (!memberId.equals(remitenteId)) {
+                notificationData.put("destinatarioId", memberId.toString());
+                // Reconstruir el response con el destinatarioId actualizado
+                DTOResponse recipientResponse = new DTOResponse(action, "success", message, notificationData);
+                String recipientNotification = gson.toJson(recipientResponse);
+
+                List<IClientHandler> userSessions = activeClientsById.get(memberId);
+                if (userSessions != null) {
+                    userSessions.forEach(handler -> handler.sendMessage(recipientNotification));
+                }
             }
         });
     }
@@ -129,6 +166,40 @@ public class ServerListener {
     public void handleConnectedUsersRequest(ConnectedUsersRequestEvent event) {
         // Obtenemos la "canasta" vacía del evento y la llenamos con nuestros datos.
         event.getResponseContainer().addAll(this.activeClientsById.keySet());
+    }
+
+    @EventListener
+    public void handleContactListUpdate(ContactListUpdateEvent event) {
+        log.info("Evento de actualización de lista de contactos recibido. Enviando a todos los clientes conectados.");
+        // Este evento será manejado por el RequestDispatcher para construir y enviar la lista
+    }
+
+    @EventListener
+    public void handleForceLogoutEvent(ForceLogoutEvent event) {
+        UUID userId = event.getUserId();
+        log.info("Evento de logout forzado recibido para usuario {}. Motivo: {}", userId, event.getMotivo());
+
+        // Construir la notificación en el formato solicitado
+        Map<String, Object> logoutData = new HashMap<>();
+        logoutData.put("estado", "OFFLINE");
+        logoutData.put("id", userId.toString());
+        logoutData.put("peerId", event.getPeerId() != null ? event.getPeerId().toString() : null);
+
+        DTOResponse response = new DTOResponse("pedirLogout", "success", "Cerrar sesión!", logoutData);
+        String notification = gson.toJson(response);
+
+        // Enviar a todas las sesiones del usuario
+        List<IClientHandler> userSessions = activeClientsById.get(userId);
+        if (userSessions != null && !userSessions.isEmpty()) {
+            log.info("Enviando pedido de logout a {} sesiones del usuario {}", userSessions.size(), userId);
+            List<IClientHandler> sessionsToNotify = new ArrayList<>(userSessions);
+            sessionsToNotify.forEach(handler -> {
+                handler.sendMessage(notification);
+                log.info("Notificación de logout enviada a sesión de usuario {} desde IP {}", userId, handler.getClientIpAddress());
+            });
+        } else {
+            log.warn("No se encontraron sesiones activas para el usuario {} al intentar enviar pedido de logout", userId);
+        }
     }
 
     // --- MÉTODOS PÚBLICOS PARA GESTIÓN DE SESIONES ---
@@ -156,6 +227,24 @@ public class ServerListener {
         }
     }
 
+    /**
+     * Envía la lista de contactos actualizada a TODOS los clientes conectados
+     */
+    public void broadcastContactListUpdate(Object contactListData) {
+        log.info("📢 Broadcasting actualización de lista de contactos a {} usuarios conectados", activeClientsById.size());
+        DTOResponse response = new DTOResponse("solicitarListaContactos", "success", "Lista de contactos obtenida exitosamente", contactListData);
+        String notification = gson.toJson(response);
+
+        int totalNotifications = 0;
+        for (List<IClientHandler> handlerList : activeClientsById.values()) {
+            for (IClientHandler handler : handlerList) {
+                handler.sendMessage(notification);
+                totalNotifications++;
+            }
+        }
+        log.info("✅ Lista de contactos enviada a {} sesiones activas", totalNotifications);
+    }
+
     // --- MÉTODO PRIVADO DE LIMPIEZA ---
 
     private void removeClient(IClientHandler clientHandler) {
@@ -174,3 +263,4 @@ public class ServerListener {
         log.info("Cliente [{}] desconectado.", clientHandler.getClientIpAddress());
     }
 }
+

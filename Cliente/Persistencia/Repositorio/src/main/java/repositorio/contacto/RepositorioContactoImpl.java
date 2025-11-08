@@ -21,14 +21,18 @@ public class RepositorioContactoImpl implements IRepositorioContacto {
 
     @Override
     public void guardar(Contacto contacto) {
-        String sql = "INSERT INTO contactos (id_contacto, nombre, estado) VALUES (?, ?, ?)";
+        String sql = "INSERT INTO contactos (id_contacto, nombre, email, estado, photo_id, peer_id, fecha_registro) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         try (Connection conn = gestorConexion.getConexion();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
 
             stmt.setObject(1, contacto.getIdContacto());
             stmt.setString(2, contacto.getNombre());
-            stmt.setBoolean(3, contacto.isEstado());
+            stmt.setString(3, contacto.getEmail());
+            stmt.setBoolean(4, contacto.isEstado());
+            stmt.setString(5, contacto.getPhotoId());
+            stmt.setString(6, contacto.getPeerId());
+            stmt.setString(7, contacto.getFechaRegistro());
 
             stmt.executeUpdate();
             System.out.println("✅ [RepositorioContacto]: Contacto guardado - ID: " + contacto.getIdContacto());
@@ -62,14 +66,18 @@ public class RepositorioContactoImpl implements IRepositorioContacto {
 
     @Override
     public void actualizar(Contacto contacto) {
-        String sql = "UPDATE contactos SET nombre = ?, estado = ? WHERE id_contacto = ?";
+        String sql = "UPDATE contactos SET nombre = ?, email = ?, estado = ?, photo_id = ?, peer_id = ?, fecha_registro = ? WHERE id_contacto = ?";
 
         try (Connection conn = gestorConexion.getConexion();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
 
             stmt.setString(1, contacto.getNombre());
-            stmt.setBoolean(2, contacto.isEstado());
-            stmt.setObject(3, contacto.getIdContacto());
+            stmt.setString(2, contacto.getEmail());
+            stmt.setBoolean(3, contacto.isEstado());
+            stmt.setString(4, contacto.getPhotoId());
+            stmt.setString(5, contacto.getPeerId());
+            stmt.setString(6, contacto.getFechaRegistro());
+            stmt.setObject(7, contacto.getIdContacto());
 
             stmt.executeUpdate();
             System.out.println("✅ [RepositorioContacto]: Contacto actualizado");
@@ -144,7 +152,11 @@ public class RepositorioContactoImpl implements IRepositorioContacto {
         Contacto contacto = new Contacto();
         contacto.setIdContacto((UUID) rs.getObject("id_contacto"));
         contacto.setNombre(rs.getString("nombre"));
+        contacto.setEmail(rs.getString("email"));
         contacto.setEstado(rs.getBoolean("estado"));
+        contacto.setPhotoId(rs.getString("photo_id"));
+        contacto.setPeerId(rs.getString("peer_id"));
+        contacto.setFechaRegistro(rs.getString("fecha_registro"));
         return contacto;
     }
 }

@@ -3,6 +3,8 @@ package fachada.gestionCanales;
 import dominio.Canal;
 import gestionCanales.invitarMiembro.IInvitadorMiembro;
 import gestionCanales.invitarMiembro.InvitadorMiembro;
+import gestionCanales.invitaciones.IGestorInvitaciones;
+import gestionCanales.invitaciones.GestorInvitacionesImpl;
 import gestionCanales.listarCanales.IListadorCanales;
 import gestionCanales.listarCanales.ListadorCanales;
 import gestionCanales.listarMiembros.IListadorMiembros;
@@ -34,6 +36,7 @@ public class FachadaCanalesImpl implements IFachadaCanales {
     private final IGestorMensajesCanal gestorMensajes;
     private final IInvitadorMiembro invitadorMiembro;
     private final IListadorMiembros listadorMiembros;
+    private final IGestorInvitaciones gestorInvitaciones;
 
     private FachadaCanalesImpl() {
         IRepositorioCanal repositorioCanal = new RepositorioCanalImpl();
@@ -44,6 +47,7 @@ public class FachadaCanalesImpl implements IFachadaCanales {
         this.gestorMensajes = new GestorMensajesCanalImpl(repositorioMensajes);
         this.invitadorMiembro = new InvitadorMiembro(repositorioCanal);
         this.listadorMiembros = new ListadorMiembros(repositorioCanal);
+        this.gestorInvitaciones = new GestorInvitacionesImpl(repositorioCanal);
 
         // ✅ SOLUCIÓN: Configurar la referencia para actualizaciones automáticas
         ((CreadorCanal) this.creadorCanal).setListadorCanales(this.listadorCanales);
@@ -130,5 +134,23 @@ public class FachadaCanalesImpl implements IFachadaCanales {
     public void registrarObservadorMiembros(IObservador observador) {
         System.out.println("🔔 [FachadaCanales]: Registrando observador en ListadorMiembros");
         listadorMiembros.registrarObservador(observador);
+    }
+
+    @Override
+    public CompletableFuture<List<dto.canales.DTOCanalCreado>> solicitarInvitacionesPendientes() {
+        System.out.println("📨 [FachadaCanales]: Solicitando invitaciones pendientes");
+        return gestorInvitaciones.solicitarInvitacionesPendientes();
+    }
+
+    @Override
+    public CompletableFuture<Void> responderInvitacion(String canalId, boolean aceptar) {
+        System.out.println((aceptar ? "✓" : "✗") + " [FachadaCanales]: Respondiendo invitación");
+        return gestorInvitaciones.responderInvitacion(canalId, aceptar);
+    }
+
+    @Override
+    public void registrarObservadorInvitaciones(IObservador observador) {
+        System.out.println("🔔 [FachadaCanales]: Registrando observador de invitaciones");
+        gestorInvitaciones.registrarObservador(observador);
     }
 }

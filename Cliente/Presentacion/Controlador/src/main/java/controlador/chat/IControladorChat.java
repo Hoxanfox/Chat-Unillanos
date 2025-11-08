@@ -1,6 +1,8 @@
 package controlador.chat;
 
+import dto.vistaContactoChat.DTOMensaje;
 import observador.IObservador;
+import java.io.File;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -52,6 +54,23 @@ public interface IControladorChat {
      * @return CompletableFuture que se completa cuando la reproducción inicia
      */
     CompletableFuture<Void> reproducirAudioEnMemoria(String fileId);
+
+    /**
+     * Descarga un audio a la carpeta local para tener caché.
+     * @param fileId El ID del archivo en el servidor
+     * @return CompletableFuture que se completa con el archivo descargado
+     */
+    CompletableFuture<File> descargarAudioALocal(String fileId);
+
+    /**
+     * ✅ NUEVO: Guarda un audio que viene en Base64 (desde PUSH del servidor) como archivo físico
+     * y en la base de datos local para uso offline.
+     *
+     * @param base64Audio El contenido del audio en Base64
+     * @param mensajeId El ID del mensaje (usado para generar nombre único)
+     * @return CompletableFuture que se completa con el archivo guardado
+     */
+    CompletableFuture<File> guardarAudioDesdeBase64(String base64Audio, String mensajeId);
 
     /**
      * Permite que la vista se registre como observador de nuevos mensajes.

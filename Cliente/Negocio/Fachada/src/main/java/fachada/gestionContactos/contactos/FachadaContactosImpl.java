@@ -8,16 +8,16 @@ import gestionContactos.mensajes.GestionMensajesImpl;
 import gestionContactos.mensajes.IGestionMensajes;
 import gestionUsuario.sesion.GestorSesionUsuario;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Implementación de la Fachada de contactos. Orquesta el componente de gestión de contactos.
  */
 public class FachadaContactosImpl implements IFachadaContactos, IObservador {
 
-    private final List<IObservador> observadores = new ArrayList<>(); // Sus observadores (el Servicio)
+    private final List<IObservador> observadores = new CopyOnWriteArrayList<>(); // Thread-safe para evitar ConcurrentModificationException
     private final IGestionContactos gestionContactos;
     private final IGestionMensajes gestionMensajes;
     private final GestorSesionUsuario gestorSesion;
@@ -67,6 +67,12 @@ public class FachadaContactosImpl implements IFachadaContactos, IObservador {
         List<DTOContacto> contactos = gestionContactos.getContactos();
         System.out.println("📋 [FachadaContactos]: Obteniendo lista de contactos - Total: " + contactos.size());
         return contactos;
+    }
+
+    @Override
+    public void sincronizarContactosConBD(List<DTOContacto> contactos) {
+        System.out.println("🔄 [FachadaContactos]: Delegando sincronización de contactos al gestor");
+        gestionContactos.sincronizarContactosConBD(contactos);
     }
 
     /**

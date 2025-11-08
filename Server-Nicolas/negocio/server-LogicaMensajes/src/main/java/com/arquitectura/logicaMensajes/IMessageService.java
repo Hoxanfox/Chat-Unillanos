@@ -35,6 +35,16 @@ public interface IMessageService {
      * @return Una lista con los mensajes del canal.
      */
     List<MessageResponseDto> obtenerMensajesPorCanal(UUID canalId, UUID userId) throws Exception;
+
+    /**
+     * Obtiene el historial de mensajes privados entre dos usuarios.
+     * @param remitenteId ID del usuario que solicita el historial
+     * @param destinatarioId ID del contacto con quien tiene la conversación
+     * @return Lista de MessageResponseDto con el historial privado
+     * @throws Exception en caso de error
+     */
+    List<MessageResponseDto> obtenerHistorialPrivado(UUID remitenteId, UUID destinatarioId) throws Exception;
+
     void enviarMensajeBroadcast(String contenido, UUID adminId) throws Exception;
 
     List<TranscriptionResponseDto> getAllTranscriptions();
