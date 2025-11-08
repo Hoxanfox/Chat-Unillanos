@@ -10,6 +10,9 @@ services:
       MYSQL_ROOT_PASSWORD: root123
       MYSQL_DATABASE: chat_db
       MYSQL_ROOT_HOST: '%'
+      # --- AÑADE ESTAS DOS LÍNEAS ---
+      MYSQL_USER: 'chatuser'
+      MYSQL_PASSWORD: 'chatpass123'
     ports:
       - "3306:3306"
     volumes:
