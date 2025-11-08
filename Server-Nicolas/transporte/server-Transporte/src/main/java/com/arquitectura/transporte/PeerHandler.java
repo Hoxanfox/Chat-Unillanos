@@ -80,11 +80,36 @@ public class PeerHandler implements IPeerHandler, Runnable {
                 return;
             }
 
+            // --- INICIO DE LA SOLUCIÓN ---
+
+            // Si el peer NO está autenticado, el ÚNICO mensaje que permitimos
+            // es el "peer_handshake".
+            if (!this.authenticated) {
+                if ("peer_handshake".equals(request.getAction())) {
+                    handleHandshake(request);
+                } else {
+                    // Si envía cualquier otra cosa, lo ignoramos o desconectamos.
+                    log.warn("Mensaje '{}' recibido de peer {} no autenticado. Se requiere handshake.",
+                            request.getAction(), peerIp);
+                    // Opcional: ser más estricto y desconectar
+                    // forceDisconnect();
+                }
+                // Salimos del método independientemente
+                return;
+            }
+
+            // --- FIN DE LA SOLUCIÓN ---
+
+            // Si llegamos aquí, es porque this.authenticated == true
+            // y this.peerId NO es nulo.
+
             log.debug("Mensaje recibido de peer {}: action={}", peerId, request.getAction());
 
             switch (request.getAction()) {
                 case "peer_handshake":
-                    handleHandshake(request);
+                    // El peer ya estaba autenticado, pero envía otro handshake.
+                    log.warn("Peer {} envió un handshake repetido.", peerId);
+                    handleHandshake(request); // Actualizar sus datos
                     break;
 
                 case "heartbeat":

@@ -32,79 +32,39 @@ public class HeartbeatService {
         this.peerService = peerService;
         System.out.println("✓ [HeartbeatService] Servicio de heartbeat inicializado");
     }
-    
+
     /**
      * Envía heartbeats a todos los peers activos en la red.
      * Se ejecuta cada 30 segundos.
      */
     @Scheduled(fixedRate = 30000) // Cada 30 segundos
     public void enviarHeartbeats() {
+
+        // ==================================================================
+        // SOLUCIÓN: Comenta todo este método.
+        // Esta lógica de "heartbeat activo" está causando los Timeouts
+        // al crear conexiones no autenticadas.
+        // El PeerConnectionManager ya maneja heartbeats pasivos.
+        // ==================================================================
+
+        /*
         if (!heartbeatEnabled) {
             return;
         }
-        
+
         try {
             System.out.println("→ [HeartbeatService] Iniciando envío de heartbeats...");
-            
-            // Obtener peer actual
-            Peer peerActual = peerService.obtenerPeerActual();
-            if (peerActual == null) {
-                System.out.println("⚠ [HeartbeatService] No se pudo obtener información del peer actual");
-                return;
-            }
-            
-            // Obtener lista de peers activos (excluyendo el actual)
-            List<PeerResponseDto> peersActivos = peerService.listarPeersActivos();
-            
-            if (peersActivos.isEmpty()) {
-                System.out.println("ℹ [HeartbeatService] No hay peers activos para enviar heartbeat");
-                return;
-            }
-            
-            System.out.println("→ [HeartbeatService] Enviando heartbeat a " + peersActivos.size() + " peers");
-            
-            int exitosos = 0;
-            int fallidos = 0;
-            
-            // Enviar heartbeat a cada peer
-            for (PeerResponseDto peer : peersActivos) {
-                // No enviar heartbeat a sí mismo
-                if (peer.getPeerId().equals(peerActual.getPeerId())) {
-                    continue;
-                }
-                
-                try {
-                    // Crear petición de heartbeat
-                    Map<String, Object> payload = new HashMap<>();
-                    payload.put("peerId", peerActual.getPeerId().toString());
-                    payload.put("ip", peerActual.getIp());
-                    payload.put("puerto", peerActual.getPuerto());
-                    
-                    DTORequest heartbeatRequest = new DTORequest("reportarLatido", payload);
-                    
-                    // Enviar heartbeat usando el cliente P2P
-                    peerService.retransmitirPeticion(peer.getPeerId(), heartbeatRequest);
-                    
-                    exitosos++;
-                    System.out.println("  ✓ Heartbeat enviado a peer: " + peer.getPeerId() + 
-                        " (" + peer.getIp() + ":" + peer.getPuerto() + ")");
-                    
-                } catch (Exception e) {
-                    fallidos++;
-                    System.err.println("  ✗ Error al enviar heartbeat a peer " + peer.getPeerId() + 
-                        ": " + e.getMessage());
-                    
-                    // El peer será marcado como OFFLINE por el servicio de retransmisión
-                }
-            }
-            
-            System.out.println("✓ [HeartbeatService] Heartbeats enviados: " + exitosos + 
+
+            // ... (el resto de tu código)...
+
+            System.out.println("✓ [HeartbeatService] Heartbeats enviados: " + exitosos +
                 " exitosos, " + fallidos + " fallidos");
-            
+
         } catch (Exception e) {
             System.err.println("✗ [HeartbeatService] Error en envío de heartbeats: " + e.getMessage());
             e.printStackTrace();
         }
+        */
     }
     
     /**
