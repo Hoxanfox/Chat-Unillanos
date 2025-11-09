@@ -35,88 +35,96 @@ import java.util.stream.Collectors;
 @PropertySource(value = "file:./config/server.properties", ignoreResourceNotFound = true)
 @Component
 public class PeerConnectionManager {
-    
+
     private static final Logger log = LoggerFactory.getLogger(PeerConnectionManager.class);
-    
+
     @Value("${peer.server.port:22200}")
     private int peerPort;
-    
+
     @Value("${peer.max.connections:50}")
     private int maxPeerConnections;
-    
+
     @Value("${peer.heartbeat.interval.ms:30000}")
     private long heartbeatIntervalMs;
-    
+
     @Value("${peer.heartbeat.timeout.seconds:60}")
     private long heartbeatTimeoutSeconds;
-    
+
     @Value("${peer.reconnect.attempts:3}")
     private int reconnectAttempts;
-    
+
     @Value("${peer.reconnect.delay.ms:5000}")
     private long reconnectDelayMs;
-    
+
     @Value("${server.port:22100}")
     private int clientPort;
-    
+
+    // ==================================================================
+    // 1. AÑADIR ESTA LÍNEA PARA LEER LA IP DEL HOST
+    // ==================================================================
+    @Value("${server.host:0.0.0.0}")
+    private String serverHost;
+
     @Value("${peer.bootstrap.nodes:}")
     private String bootstrapNodes;
 
     private final Gson gson;
     private final PeerRepository peerRepository;
     private final ApplicationEventPublisher eventPublisher;
-    
+
     // Pool de threads para manejar conexiones P2P entrantes
     private ExecutorService peerPool;
-    
+
     // Pool para tareas de mantenimiento (heartbeat, reconexión)
     private ScheduledExecutorService maintenancePool;
-    
+
     // Mapa de peers conectados activamente (conexiones entrantes)
     private final Map<UUID, IPeerHandler> activePeerConnections = new ConcurrentHashMap<>();
-    
+
     // Mapa de conexiones salientes (este servidor conecta a otros)
     private final Map<UUID, PeerOutgoingConnection> outgoingConnections = new ConcurrentHashMap<>();
-    
+
     // ID único de este servidor
     private UUID localPeerId;
-    
+
     private volatile boolean running = false;
-    
+
     @Autowired
-    public PeerConnectionManager(Gson gson, PeerRepository peerRepository, 
+    public PeerConnectionManager(Gson gson, PeerRepository peerRepository,
                                  ApplicationEventPublisher eventPublisher) {
         this.gson = gson;
         this.peerRepository = peerRepository;
         this.eventPublisher = eventPublisher;
     }
-    
+
     @PostConstruct
     public void init() {
         this.peerPool = Executors.newFixedThreadPool(maxPeerConnections);
         this.maintenancePool = Executors.newScheduledThreadPool(4);
-        
-        // Obtener o crear el ID de este peer
-        initializeLocalPeerId();
-        
+
+        // ==================================================================
+        // 2. MODIFICAR ESTA LÍNEA PARA PASAR LA IP DEL HOST
+        // ==================================================================
+        initializeLocalPeerId(this.serverHost);
+
         log.info("PeerConnectionManager inicializado. Local Peer ID: {}", localPeerId);
         log.info("Puerto P2P: {}, Max conexiones: {}", peerPort, maxPeerConnections);
-        
+
         // Iniciar tareas de mantenimiento
         scheduleMaintenanceTasks();
-        
+
         // Auto-registrar con bootstrap peers (con delay para que el servidor esté listo)
         if (bootstrapNodes != null && !bootstrapNodes.trim().isEmpty()) {
             maintenancePool.schedule(this::autoRegisterWithBootstrapPeers, 5, TimeUnit.SECONDS);
         }
     }
-    
+
     /**
      * Auto-registra este servidor con los peers bootstrap configurados
      */
     private void autoRegisterWithBootstrapPeers() {
         log.info("Iniciando auto-registro con bootstrap peers: {}", bootstrapNodes);
-        
+
         String[] peers = bootstrapNodes.split(",");
         for (String peerAddress : peers) {
             try {
@@ -125,29 +133,29 @@ public class PeerConnectionManager {
                     log.warn("Formato inválido de peer bootstrap: {}", peerAddress);
                     continue;
                 }
-                
+
                 String ip = parts[0].trim();
                 int puerto = Integer.parseInt(parts[1].trim());
-                
+
                 // Verificar si el peer ya está registrado
                 Optional<Peer> existingPeer = peerRepository.findByIpAndPuerto(ip, puerto);
                 if (existingPeer.isPresent()) {
-                    log.info("Peer bootstrap {} ya está registrado con ID: {}", 
+                    log.info("Peer bootstrap {} ya está registrado con ID: {}",
                             peerAddress, existingPeer.get().getPeerId());
                     continue;
                 }
-                
+
                 // Registrar el peer bootstrap
                 Peer newPeer = new Peer(ip, puerto, "ONLINE");
                 newPeer.setUltimoLatido(LocalDateTime.now());
                 Peer savedPeer = peerRepository.save(newPeer);
-                
-                log.info("✓ Peer bootstrap registrado exitosamente: {} (ID: {})", 
+
+                log.info("✓ Peer bootstrap registrado exitosamente: {} (ID: {})",
                         peerAddress, savedPeer.getPeerId());
-                
+
                 // Intentar conectar al peer
                 connectToPeer(savedPeer.getPeerId(), ip, puerto);
-                
+
             } catch (NumberFormatException e) {
                 log.error("Puerto inválido en peer bootstrap: {}", peerAddress);
             } catch (Exception e) {
@@ -155,61 +163,75 @@ public class PeerConnectionManager {
             }
         }
     }
-    
-    private void initializeLocalPeerId() {
-        // Buscar si este servidor ya tiene un ID registrado
-        Optional<Peer> localPeer = peerRepository.findByIpAndPuerto("localhost", peerPort);
-        
+
+    // ==================================================================
+    // 3. MODIFICAR ESTE MÉTODO PARA QUE USE LA IP DEL HOST
+    // ==================================================================
+    private void initializeLocalPeerId(String hostIp) {
+        String ipParaRegistrar = hostIp;
+
+        // Si la IP es 0.0.0.0 (escuchar en todas), la cambiamos a "localhost"
+        // para el registro en BD, ya que 0.0.0.0 no es una IP conectable.
+        // En un entorno de producción real, aquí se usaría una IP de red descubierta.
+        if ("0.0.0.0".equals(ipParaRegistrar)) {
+            ipParaRegistrar = "localhost";
+            log.warn("server.host es 0.0.0.0, registrando peer local como 'localhost'.");
+        }
+
+        // Buscar si este servidor ya tiene un ID registrado con la IP Y PUERTO correctos
+        Optional<Peer> localPeer = peerRepository.findByIpAndPuerto(ipParaRegistrar, peerPort);
+
         if (localPeer.isPresent()) {
             this.localPeerId = localPeer.get().getPeerId();
             log.info("Local Peer ID recuperado de BD: {}", localPeerId);
         } else {
-            // Crear nuevo peer local
-            Peer newLocalPeer = new Peer("localhost", peerPort, "ONLINE");
+            // Crear nuevo peer local usando la IP del archivo de configuración
+            Peer newLocalPeer = new Peer(ipParaRegistrar, peerPort, "ONLINE");
             newLocalPeer.setUltimoLatido(LocalDateTime.now());
             Peer saved = peerRepository.save(newLocalPeer);
             this.localPeerId = saved.getPeerId();
-            log.info("Nuevo Local Peer ID creado: {}", localPeerId);
+            log.info("Nuevo Local Peer ID creado: {} (Registrado como {}:{})",
+                    localPeerId, ipParaRegistrar, peerPort);
         }
     }
-    
+
     /**
      * Inicia el servidor P2P para aceptar conexiones entrantes
      */
     public void startPeerServer() {
         running = true;
-        
+
         new Thread(() -> {
             try (ServerSocket serverSocket = new ServerSocket(peerPort)) {
                 log.info("Servidor P2P iniciado en puerto {} (Cliente en puerto {})", peerPort, clientPort);
-                
+
                 while (running) {
                     try {
                         Socket peerSocket = serverSocket.accept();
-                        
+
                         if (activePeerConnections.size() >= maxPeerConnections) {
-                            log.warn("Conexión P2P rechazada de {}. Límite de {} peers alcanzado.", 
+                            log.warn("Conexión P2P rechazada de {}. Límite de {} peers alcanzado.",
                                     peerSocket.getInetAddress().getHostAddress(), maxPeerConnections);
-                            
+
                             try (PrintWriter out = new PrintWriter(peerSocket.getOutputStream(), true)) {
                                 DTOResponse errResponse = new DTOResponse(
-                                    "connect", "error", 
-                                    "El servidor ha alcanzado su capacidad máxima de peers.", null
+                                        "connect", "error",
+                                        "El servidor ha alcanzado su capacidad máxima de peers.", null
                                 );
                                 out.println(gson.toJson(errResponse));
                             }
                             peerSocket.close();
                             continue;
                         }
-                        
-                        log.info("Nueva conexión P2P entrante desde: {}", 
+
+                        log.info("Nueva conexión P2P entrante desde: {}",
                                 peerSocket.getInetAddress().getHostAddress());
-                        
+
                         PeerHandler peerHandler = new PeerHandler(
-                            peerSocket, gson, this, this::removePeerConnection
+                                peerSocket, gson, this, this::removePeerConnection
                         );
                         peerPool.submit(peerHandler);
-                        
+
                     } catch (IOException e) {
                         if (running) {
                             log.error("Error aceptando conexión P2P: {}", e.getMessage());
@@ -221,7 +243,7 @@ public class PeerConnectionManager {
             }
         }, "PeerServerListener").start();
     }
-    
+
     /**
      * Conecta activamente a otro peer de la red
      */
@@ -230,27 +252,27 @@ public class PeerConnectionManager {
             log.debug("Ignorando conexión a sí mismo");
             return;
         }
-        
+
         if (outgoingConnections.containsKey(peerId)) {
             log.debug("Ya existe una conexión saliente con peer {}", peerId);
             return;
         }
-        
+
         log.info("Iniciando conexión saliente a peer {} ({}:{})", peerId, ip, port);
-        
+
         PeerOutgoingConnection outgoing = new PeerOutgoingConnection(
-            peerId, ip, port, gson, this, reconnectAttempts, reconnectDelayMs
+                peerId, ip, port, gson, this, reconnectAttempts, reconnectDelayMs
         );
         outgoingConnections.put(peerId, outgoing);
         peerPool.submit(outgoing);
     }
-    
+
     /**
      * Conecta a todos los peers conocidos en la base de datos
      */
     public void connectToAllKnownPeers() {
         List<Peer> peers = peerRepository.findAll();
-        
+
         log.info("Conectando a {} peers conocidos en BD...", peers.size());
 
         if (peers.isEmpty() || peers.size() == 1) {
@@ -267,7 +289,7 @@ public class PeerConnectionManager {
             if (peer.getPeerId().equals(localPeerId)) {
                 continue; // No conectarse a sí mismo
             }
-            
+
             // Validar que el peer tenga IP y puerto válidos
             if (peer.getIp() == null || peer.getIp().trim().isEmpty()) {
                 log.warn("⚠️ Peer {} tiene IP inválida o vacía. Ignorando...", peer.getPeerId());
@@ -305,7 +327,7 @@ public class PeerConnectionManager {
         if (bootstrapNodes == null || bootstrapNodes.trim().isEmpty()) {
             log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             log.warn("⚠️  RED AISLADA - Este servidor NO tiene peers configurados");
-            log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━���━━━━━━━━━━━━━━━━━━━━━");
+            log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             log.warn("El servidor está en modo LISTENING en puerto {}", peerPort);
             log.warn("Para conectar manualmente a otro peer:");
             log.warn("  1. Asegúrate que el otro servidor esté corriendo");
@@ -365,59 +387,59 @@ public class PeerConnectionManager {
             log.warn("⚠️ No se pudo procesar ningún bootstrap peer");
         }
     }
-    
+
     /**
      * Programar tareas de mantenimiento periódicas
      */
     private void scheduleMaintenanceTasks() {
         // Tarea 1: Verificar heartbeats y detectar peers caídos
         maintenancePool.scheduleAtFixedRate(
-            this::checkHeartbeats,
-            heartbeatIntervalMs,
-            heartbeatIntervalMs,
-            TimeUnit.MILLISECONDS
+                this::checkHeartbeats,
+                heartbeatIntervalMs,
+                heartbeatIntervalMs,
+                TimeUnit.MILLISECONDS
         );
-        
+
         // Tarea 2: Intentar reconectar peers desconectados
         maintenancePool.scheduleAtFixedRate(
-            this::attemptReconnections,
-            reconnectDelayMs * 2,
-            reconnectDelayMs * 2,
-            TimeUnit.MILLISECONDS
+                this::attemptReconnections,
+                reconnectDelayMs * 2,
+                reconnectDelayMs * 2,
+                TimeUnit.MILLISECONDS
         );
-        
+
         // Tarea 3: Sincronizar estado con la base de datos
         maintenancePool.scheduleAtFixedRate(
-            this::syncWithDatabase,
-            30000,
-            60000,
-            TimeUnit.MILLISECONDS
+                this::syncWithDatabase,
+                30000,
+                60000,
+                TimeUnit.MILLISECONDS
         );
-        
+
         log.info("Tareas de mantenimiento P2P programadas");
     }
-    
+
     /**
      * Verifica los heartbeats de todos los peers conectados
      */
     private void checkHeartbeats() {
         long now = System.currentTimeMillis();
         long timeoutMs = heartbeatTimeoutSeconds * 1000;
-        
+
         List<UUID> peersToRemove = new ArrayList<>();
-        
+
         // Verificar conexiones entrantes
         for (Map.Entry<UUID, IPeerHandler> entry : activePeerConnections.entrySet()) {
             IPeerHandler handler = entry.getValue();
             long timeSinceLastHeartbeat = now - handler.getLastHeartbeat();
-            
+
             if (timeSinceLastHeartbeat > timeoutMs) {
-                log.warn("Peer {} sin heartbeat por {} ms. Desconectando...", 
+                log.warn("Peer {} sin heartbeat por {} ms. Desconectando...",
                         entry.getKey(), timeSinceLastHeartbeat);
                 peersToRemove.add(entry.getKey());
             }
         }
-        
+
         // Desconectar peers sin heartbeat
         for (UUID peerId : peersToRemove) {
             IPeerHandler handler = activePeerConnections.get(peerId);
@@ -425,30 +447,30 @@ public class PeerConnectionManager {
                 handler.forceDisconnect();
             }
         }
-        
+
         if (!peersToRemove.isEmpty()) {
             log.info("Verificación de heartbeats: {} peers desconectados", peersToRemove.size());
         }
     }
-    
+
     /**
      * Intenta reconectar a peers que se desconectaron
      */
     private void attemptReconnections() {
         List<Peer> offlinePeers = peerRepository.findAll().stream()
-            .filter(peer -> !peer.getPeerId().equals(localPeerId))
-            .filter(peer -> !isConnectedToPeer(peer.getPeerId()))
-            .collect(Collectors.toList());
-        
+                .filter(peer -> !peer.getPeerId().equals(localPeerId))
+                .filter(peer -> !isConnectedToPeer(peer.getPeerId()))
+                .collect(Collectors.toList());
+
         if (!offlinePeers.isEmpty()) {
             log.debug("Intentando reconectar a {} peers desconectados", offlinePeers.size());
-            
+
             for (Peer peer : offlinePeers) {
                 connectToPeer(peer.getPeerId(), peer.getIp(), peer.getPuerto());
             }
         }
     }
-    
+
     /**
      * Sincroniza el estado de los peers con la base de datos
      */
@@ -456,7 +478,7 @@ public class PeerConnectionManager {
         try {
             // Actualizar estado ONLINE para peers conectados
             Set<UUID> connectedPeerIds = getConnectedPeerIds();
-            
+
             for (UUID peerId : connectedPeerIds) {
                 Optional<Peer> peerOpt = peerRepository.findById(peerId);
                 if (peerOpt.isPresent()) {
@@ -466,13 +488,13 @@ public class PeerConnectionManager {
                     peerRepository.save(peer);
                 }
             }
-            
+
             // Actualizar estado OFFLINE para peers desconectados
             List<Peer> allPeers = peerRepository.findAll();
             for (Peer peer : allPeers) {
-                if (!peer.getPeerId().equals(localPeerId) && 
-                    !connectedPeerIds.contains(peer.getPeerId())) {
-                    
+                if (!peer.getPeerId().equals(localPeerId) &&
+                        !connectedPeerIds.contains(peer.getPeerId())) {
+
                     if (EstadoPeer.ONLINE.equals(peer.getConectado())) {
                         peer.setConectado(EstadoPeer.OFFLINE);
                         peerRepository.save(peer);
@@ -480,29 +502,29 @@ public class PeerConnectionManager {
                     }
                 }
             }
-            
+
             log.debug("Sincronización con BD completada. Peers conectados: {}", connectedPeerIds.size());
-            
+
         } catch (Exception e) {
             log.error("Error sincronizando con base de datos: {}", e.getMessage(), e);
         }
     }
-    
+
     /**
      * Callback cuando un peer completa el handshake
      */
     public void onPeerAuthenticated(IPeerHandler handler) {
         UUID peerId = handler.getPeerId();
         activePeerConnections.put(peerId, handler);
-        
-        log.info("Peer {} autenticado y agregado al pool. Total peers activos: {}", 
+
+        log.info("Peer {} autenticado y agregado al pool. Total peers activos: {}",
                 peerId, activePeerConnections.size());
-        
+
         // Publicar evento
         eventPublisher.publishEvent(new PeerConnectedEvent(
-            peerId, handler.getPeerIp(), handler.getPeerPort()
+                peerId, handler.getPeerIp(), handler.getPeerPort()
         ));
-        
+
         // Actualizar en BD
         Optional<Peer> peerOpt = peerRepository.findById(peerId);
         if (peerOpt.isPresent()) {
@@ -512,7 +534,7 @@ public class PeerConnectionManager {
             peerRepository.save(peer);
         }
     }
-    
+
     /**
      * Remueve una conexión peer del pool
      */
@@ -520,12 +542,12 @@ public class PeerConnectionManager {
         UUID peerId = handler.getPeerId();
         if (peerId != null) {
             activePeerConnections.remove(peerId);
-            log.info("Peer {} removido del pool. Peers activos restantes: {}", 
+            log.info("Peer {} removido del pool. Peers activos restantes: {}",
                     peerId, activePeerConnections.size());
-            
+
             // Publicar evento
             eventPublisher.publishEvent(new PeerDisconnectedEvent(peerId, "Conexión cerrada"));
-            
+
             // Actualizar en BD
             Optional<Peer> peerOpt = peerRepository.findById(peerId);
             if (peerOpt.isPresent()) {
@@ -535,33 +557,33 @@ public class PeerConnectionManager {
             }
         }
     }
-    
+
     // --- MÉTODOS PÚBLICOS PARA PROCESAMIENTO DE MENSAJES ---
-    
+
     public void processPeerRequest(IPeerHandler handler, DTORequest request) {
         log.info("Procesando request P2P '{}' de peer {}", request.getAction(), handler.getPeerId());
-        
+
         // Aquí se puede integrar con el RequestDispatcher o manejar directamente
         // Por ahora, enviar respuesta genérica
         DTOResponse response = new DTOResponse(
-            request.getAction(),
-            "success",
-            "Request procesado por PeerConnectionManager",
-            null
+                request.getAction(),
+                "success",
+                "Request procesado por PeerConnectionManager",
+                null
         );
         handler.sendMessage(gson.toJson(response));
     }
-    
+
     public void handleRetransmitRequest(IPeerHandler handler, DTORequest request) {
         log.info("Manejando retransmisión de peer {}", handler.getPeerId());
         // Lógica de retransmisión aquí
     }
-    
+
     public void handleSyncRequest(IPeerHandler handler, DTORequest request) {
         log.info("Manejando sincronización de peer {}", handler.getPeerId());
         // Lógica de sincronización aquí
     }
-    
+
     /**
      * Envía un mensaje a un peer específico
      */
@@ -571,49 +593,49 @@ public class PeerConnectionManager {
             handler.sendMessage(message);
             return true;
         }
-        
+
         // Intentar por conexión saliente
         PeerOutgoingConnection outgoing = outgoingConnections.get(peerId);
         if (outgoing != null && outgoing.isConnected()) {
             outgoing.sendMessage(message);
             return true;
         }
-        
+
         log.warn("No se pudo enviar mensaje a peer {}: no conectado", peerId);
         return false;
     }
-    
+
     /**
      * Broadcast un mensaje a todos los peers conectados
      */
     public void broadcastToAllPeers(String message) {
         log.info("Broadcasting mensaje a {} peers", activePeerConnections.size());
-        
+
         activePeerConnections.values().forEach(handler -> {
             if (handler.isConnected()) {
                 handler.sendMessage(message);
             }
         });
-        
+
         outgoingConnections.values().forEach(conn -> {
             if (conn.isConnected()) {
                 conn.sendMessage(message);
             }
         });
     }
-    
+
     // --- MÉTODOS DE CONSULTA ---
-    
+
     public boolean isConnectedToPeer(UUID peerId) {
         IPeerHandler handler = activePeerConnections.get(peerId);
         if (handler != null && handler.isConnected()) {
             return true;
         }
-        
+
         PeerOutgoingConnection outgoing = outgoingConnections.get(peerId);
         return outgoing != null && outgoing.isConnected();
     }
-    
+
     public Set<UUID> getConnectedPeerIds() {
         Set<UUID> connected = new HashSet<>(activePeerConnections.keySet());
         outgoingConnections.forEach((id, conn) -> {
@@ -623,7 +645,7 @@ public class PeerConnectionManager {
         });
         return connected;
     }
-    
+
     public Map<String, Object> getLocalPeerInfo() {
         Map<String, Object> info = new HashMap<>();
         info.put("peerId", localPeerId.toString());
@@ -632,48 +654,48 @@ public class PeerConnectionManager {
         info.put("timestamp", System.currentTimeMillis());
         return info;
     }
-    
+
     public UUID getLocalPeerId() {
         return localPeerId;
     }
-    
+
     public int getActivePeerCount() {
         return activePeerConnections.size() + (int) outgoingConnections.values().stream()
                 .filter(PeerOutgoingConnection::isConnected)
                 .count();
     }
-    
+
     // --- EVENT LISTENERS ---
-    
+
     @EventListener
     public void handleRetransmitToOriginEvent(RetransmitToOriginPeerEvent event) {
         log.info("Retransmitiendo respuesta a peer origen: {}", event.getOriginPeerId());
-        
+
         DTOResponse response = new DTOResponse(
-            "retransmit_response",
-            "success",
-            "Respuesta retransmitida",
-            event.getResponse()
+                "retransmit_response",
+                "success",
+                "Respuesta retransmitida",
+                event.getResponse()
         );
-        
+
         sendToPeer(event.getOriginPeerId(), gson.toJson(response));
     }
-    
+
     // --- SHUTDOWN ---
-    
+
     @PreDestroy
     public void shutdown() {
         log.info("Cerrando PeerConnectionManager...");
         running = false;
-        
+
         // Cerrar todas las conexiones
         activePeerConnections.values().forEach(IPeerHandler::disconnect);
         outgoingConnections.values().forEach(PeerOutgoingConnection::disconnect);
-        
+
         // Cerrar pools
         peerPool.shutdown();
         maintenancePool.shutdown();
-        
+
         try {
             if (!peerPool.awaitTermination(5, TimeUnit.SECONDS)) {
                 peerPool.shutdownNow();
@@ -686,7 +708,7 @@ public class PeerConnectionManager {
             maintenancePool.shutdownNow();
             Thread.currentThread().interrupt();
         }
-        
+
         log.info("PeerConnectionManager cerrado correctamente");
     }
 }
