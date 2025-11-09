@@ -153,12 +153,19 @@ public class PeerHandler implements IPeerHandler, Runnable {
                 this.peerPort = ((Number) data.get("port")).intValue();
             }
 
+            // Verificar si es la primera autenticación o un handshake repetido
+            boolean isFirstAuth = !this.authenticated;
+
             this.authenticated = true;
 
             log.info("✓ Handshake completado con peer {} ({}:{})", peerId, peerIp, peerPort);
 
-            // Notificar al manager que el peer está autenticado
-            connectionManager.onPeerAuthenticated(this);
+            // Notificar al manager SOLO si es la primera autenticación
+            if (isFirstAuth) {
+                connectionManager.onPeerAuthenticated(this);
+            } else {
+                log.debug("Handshake repetido de peer {} - no se notifica al manager", peerId);
+            }
 
             // Enviar respuesta de handshake
             var response = new com.arquitectura.DTO.Comunicacion.DTOResponse(

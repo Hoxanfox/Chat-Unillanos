@@ -459,4 +459,108 @@ public class PeerServiceImpl implements IPeerService {
             peer.getNombreServidor()
         );
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<PeerResponseDto> buscarPeerPorIpYPuerto(String ip, int puerto) {
+        System.out.println("→ [PeerService] Buscando peer por IP:Puerto: " + ip + ":" + puerto);
+        Optional<Peer> peerOpt = peerRepository.findByIpAndPuerto(ip, puerto);
+        return peerOpt.map(this::mapearAPeerResponseDto);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<PeerResponseDto> buscarPeerPorId(UUID peerId) {
+        System.out.println("→ [PeerService] Buscando peer por ID: " + peerId);
+        Optional<Peer> peerOpt = peerRepository.findById(peerId);
+        return peerOpt.map(this::mapearAPeerResponseDto);
+    }
+
+    @Override
+    @Transactional
+    public PeerResponseDto registrarPeerAutenticado(UUID peerId, String ip, Integer puerto) {
+        System.out.println("→ [PeerService] Registrando peer autenticado: " + peerId + " (" + ip + ":" + puerto + ")");
+
+        // Buscar primero por peerId
+        Optional<Peer> peerOpt = peerRepository.findById(peerId);
+
+        // Si no se encuentra por ID, buscar por IP y Puerto
+        if (!peerOpt.isPresent() && ip != null && puerto != null) {
+            peerOpt = peerRepository.findByIpAndPuerto(ip, puerto);
+            if (peerOpt.isPresent()) {
+                System.out.println("→ [PeerService] Peer encontrado por IP:Puerto pero con ID diferente. Actualizando ID.");
+            }
+        }
+
+        Peer peer;
+
+        if (peerOpt.isPresent()) {
+            // El peer ya existe, actualizar
+            peer = peerOpt.get();
+
+            // Si el peerId cambió, actualizarlo
+            if (!peer.getPeerId().equals(peerId)) {
+                System.out.println("→ [PeerService] PeerId cambió de " + peer.getPeerId() + " a " + peerId);
+                peer.setPeerId(peerId);
+            }
+
+            System.out.println("→ [PeerService] Actualizando peer existente");
+        } else {
+            // El peer NO existe, crearlo
+            System.out.println("→ [PeerService] Creando nuevo peer");
+            peer = new Peer();
+            peer.setPeerId(peerId);
+            peer.setIp(ip);
+            peer.setPuerto(puerto != null ? puerto : 0);
+        }
+
+        // Actualizar estado y latido
+        peer.setConectado(EstadoPeer.ONLINE);
+        peer.actualizarLatido();
+        Peer savedPeer = peerRepository.save(peer);
+
+        System.out.println("✓ [PeerService] Peer registrado: " + savedPeer.getPeerId());
+
+        return mapearAPeerResponseDto(savedPeer);
+    }
+
+    @Override
+    @Transactional
+    public void marcarPeerComoDesconectado(UUID peerId) {
+        System.out.println("→ [PeerService] Marcando peer como desconectado: " + peerId);
+
+        Optional<Peer> peerOpt = peerRepository.findById(peerId);
+        if (peerOpt.isPresent()) {
+            Peer peer = peerOpt.get();
+            peer.setConectado(EstadoPeer.OFFLINE);
+            peerRepository.save(peer);
+            System.out.println("✓ [PeerService] Peer marcado como OFFLINE");
+        } else {
+            System.out.println("⚠ [PeerService] Peer no encontrado: " + peerId);
+        }
+    }
+
+    @Override
+    @Transactional
+    public PeerResponseDto obtenerOCrearPeerLocal(String ip, int puerto) {
+        System.out.println("→ [PeerService] Obteniendo o creando peer local: " + ip + ":" + puerto);
+
+        Optional<Peer> peerOpt = peerRepository.findByIpAndPuerto(ip, puerto);
+
+        Peer peer;
+        if (peerOpt.isPresent()) {
+            peer = peerOpt.get();
+            System.out.println("✓ [PeerService] Peer local encontrado: " + peer.getPeerId());
+        } else {
+            peer = new Peer(ip, puerto, "ONLINE");
+            peer.setUltimoLatido(LocalDateTime.now());
+            peer = peerRepository.save(peer);
+            System.out.println("✓ [PeerService] Nuevo peer local creado: " + peer.getPeerId());
+        }
+
+        // Cachear el peer actual
+        this.peerActual = peer;
+
+        return mapearAPeerResponseDto(peer);
+    }
 }

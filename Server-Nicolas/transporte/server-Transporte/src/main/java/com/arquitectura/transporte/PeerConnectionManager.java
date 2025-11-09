@@ -3,10 +3,9 @@ package com.arquitectura.transporte;
 import com.arquitectura.controlador.IPeerHandler;
 import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.DTO.Comunicacion.DTOResponse;
-import com.arquitectura.domain.Peer;
-import com.arquitectura.domain.enums.EstadoPeer;
+import com.arquitectura.DTO.p2p.PeerResponseDto;
 import com.arquitectura.events.*;
-import com.arquitectura.persistence.repository.PeerRepository;
+import com.arquitectura.logicaPeers.IPeerService;
 import com.google.gson.Gson;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -14,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.context.event.EventListener;
@@ -23,10 +23,8 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Collectors;
 
 /**
  * Gestor del pool de conexiones P2P
@@ -63,7 +61,7 @@ public class PeerConnectionManager {
     private String bootstrapNodes;
 
     private final Gson gson;
-    private final PeerRepository peerRepository;
+    private final IPeerService peerService;
     private final ApplicationEventPublisher eventPublisher;
     
     // Pool de threads para manejar conexiones P2P entrantes
@@ -84,10 +82,12 @@ public class PeerConnectionManager {
     private volatile boolean running = false;
     
     @Autowired
-    public PeerConnectionManager(Gson gson, PeerRepository peerRepository, 
-                                 ApplicationEventPublisher eventPublisher) {
+    public PeerConnectionManager(
+            Gson gson,
+            @Qualifier("peerServiceP2P") IPeerService peerService,
+            ApplicationEventPublisher eventPublisher) {
         this.gson = gson;
-        this.peerRepository = peerRepository;
+        this.peerService = peerService;
         this.eventPublisher = eventPublisher;
     }
     
@@ -129,19 +129,17 @@ public class PeerConnectionManager {
                 String ip = parts[0].trim();
                 int puerto = Integer.parseInt(parts[1].trim());
                 
-                // Verificar si el peer ya está registrado
-                Optional<Peer> existingPeer = peerRepository.findByIpAndPuerto(ip, puerto);
+                // Verificar si el peer ya está registrado usando el servicio
+                Optional<PeerResponseDto> existingPeer = peerService.buscarPeerPorIpYPuerto(ip, puerto);
                 if (existingPeer.isPresent()) {
                     log.info("Peer bootstrap {} ya está registrado con ID: {}", 
                             peerAddress, existingPeer.get().getPeerId());
                     continue;
                 }
                 
-                // Registrar el peer bootstrap
-                Peer newPeer = new Peer(ip, puerto, "ONLINE");
-                newPeer.setUltimoLatido(LocalDateTime.now());
-                Peer savedPeer = peerRepository.save(newPeer);
-                
+                // Registrar el peer bootstrap usando el servicio
+                PeerResponseDto savedPeer = peerService.agregarPeer(ip, puerto);
+
                 log.info("✓ Peer bootstrap registrado exitosamente: {} (ID: {})", 
                         peerAddress, savedPeer.getPeerId());
                 
@@ -157,20 +155,10 @@ public class PeerConnectionManager {
     }
     
     private void initializeLocalPeerId() {
-        // Buscar si este servidor ya tiene un ID registrado
-        Optional<Peer> localPeer = peerRepository.findByIpAndPuerto("localhost", peerPort);
-        
-        if (localPeer.isPresent()) {
-            this.localPeerId = localPeer.get().getPeerId();
-            log.info("Local Peer ID recuperado de BD: {}", localPeerId);
-        } else {
-            // Crear nuevo peer local
-            Peer newLocalPeer = new Peer("localhost", peerPort, "ONLINE");
-            newLocalPeer.setUltimoLatido(LocalDateTime.now());
-            Peer saved = peerRepository.save(newLocalPeer);
-            this.localPeerId = saved.getPeerId();
-            log.info("Nuevo Local Peer ID creado: {}", localPeerId);
-        }
+        // Obtener o crear el peer local usando el servicio
+        PeerResponseDto localPeer = peerService.obtenerOCrearPeerLocal("localhost", peerPort);
+        this.localPeerId = localPeer.getPeerId();
+        log.info("Local Peer ID: {}", localPeerId);
     }
     
     /**
@@ -231,9 +219,26 @@ public class PeerConnectionManager {
             return;
         }
         
+        // Verificar si ya existe una conexión ENTRANTE activa con este peer
+        if (activePeerConnections.containsKey(peerId)) {
+            IPeerHandler handler = activePeerConnections.get(peerId);
+            if (handler != null && handler.isConnected()) {
+                log.debug("Ya existe una conexión entrante activa con peer {}", peerId);
+                return;
+            }
+        }
+
+        // Verificar si ya existe una conexión SALIENTE activa con este peer
         if (outgoingConnections.containsKey(peerId)) {
-            log.debug("Ya existe una conexión saliente con peer {}", peerId);
-            return;
+            PeerOutgoingConnection outgoing = outgoingConnections.get(peerId);
+            if (outgoing != null && outgoing.isConnected()) {
+                log.debug("Ya existe una conexión saliente activa con peer {}", peerId);
+                return;
+            } else {
+                // La conexión saliente existe pero no está conectada, removerla
+                outgoingConnections.remove(peerId);
+                log.debug("Removiendo conexión saliente inactiva con peer {}", peerId);
+            }
         }
         
         log.info("Iniciando conexión saliente a peer {} ({}:{})", peerId, ip, port);
@@ -249,8 +254,9 @@ public class PeerConnectionManager {
      * Conecta a todos los peers conocidos en la base de datos
      */
     public void connectToAllKnownPeers() {
-        List<Peer> peers = peerRepository.findAll();
-        
+        // Obtener peers usando el servicio
+        List<PeerResponseDto> peers = peerService.listarPeersDisponibles();
+
         log.info("Conectando a {} peers conocidos en BD...", peers.size());
 
         if (peers.isEmpty() || peers.size() == 1) {
@@ -263,7 +269,7 @@ public class PeerConnectionManager {
         int connectedCount = 0;
         int invalidCount = 0;
 
-        for (Peer peer : peers) {
+        for (PeerResponseDto peer : peers) {
             if (peer.getPeerId().equals(localPeerId)) {
                 continue; // No conectarse a sí mismo
             }
@@ -305,7 +311,7 @@ public class PeerConnectionManager {
         if (bootstrapNodes == null || bootstrapNodes.trim().isEmpty()) {
             log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             log.warn("⚠️  RED AISLADA - Este servidor NO tiene peers configurados");
-            log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━���━━━━━━━━━━━━━━━━━━━━━");
+            log.warn("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             log.warn("El servidor está en modo LISTENING en puerto {}", peerPort);
             log.warn("Para conectar manualmente a otro peer:");
             log.warn("  1. Asegúrate que el otro servidor esté corriendo");
@@ -333,18 +339,16 @@ public class PeerConnectionManager {
                 String ip = parts[0].trim();
                 int port = Integer.parseInt(parts[1].trim());
 
-                // Verificar si ya existe en BD
-                Optional<Peer> existingPeer = peerRepository.findByIpAndPuerto(ip, port);
+                // Verificar si ya existe en BD usando el servicio
+                Optional<PeerResponseDto> existingPeer = peerService.buscarPeerPorIpYPuerto(ip, port);
 
                 UUID peerId;
                 if (existingPeer.isPresent()) {
                     peerId = existingPeer.get().getPeerId();
                     log.info("Bootstrap peer {}:{} ya existe en BD con ID {}", ip, port, peerId);
                 } else {
-                    // Crear un peer temporal para conectar
-                    Peer newPeer = new Peer(ip, port, "CONNECTING");
-                    newPeer.setUltimoLatido(LocalDateTime.now());
-                    Peer saved = peerRepository.save(newPeer);
+                    // Crear un peer temporal para conectar usando el servicio
+                    PeerResponseDto saved = peerService.agregarPeer(ip, port);
                     peerId = saved.getPeerId();
                     log.info("Nuevo bootstrap peer {}:{} registrado con ID {}", ip, port, peerId);
                 }
@@ -435,47 +439,44 @@ public class PeerConnectionManager {
      * Intenta reconectar a peers que se desconectaron
      */
     private void attemptReconnections() {
-        List<Peer> offlinePeers = peerRepository.findAll().stream()
+        // Obtener peers usando el servicio
+        List<PeerResponseDto> allPeers = peerService.listarPeersDisponibles();
+
+        List<PeerResponseDto> offlinePeers = allPeers.stream()
             .filter(peer -> !peer.getPeerId().equals(localPeerId))
             .filter(peer -> !isConnectedToPeer(peer.getPeerId()))
-            .collect(Collectors.toList());
-        
+            .toList();
+
         if (!offlinePeers.isEmpty()) {
             log.debug("Intentando reconectar a {} peers desconectados", offlinePeers.size());
             
-            for (Peer peer : offlinePeers) {
+            for (PeerResponseDto peer : offlinePeers) {
                 connectToPeer(peer.getPeerId(), peer.getIp(), peer.getPuerto());
             }
         }
     }
     
-    /**
-     * Sincroniza el estado de los peers con la base de datos
-     */
     private void syncWithDatabase() {
         try {
             // Actualizar estado ONLINE para peers conectados
             Set<UUID> connectedPeerIds = getConnectedPeerIds();
             
             for (UUID peerId : connectedPeerIds) {
-                Optional<Peer> peerOpt = peerRepository.findById(peerId);
-                if (peerOpt.isPresent()) {
-                    Peer peer = peerOpt.get();
-                    peer.setConectado(EstadoPeer.ONLINE);
-                    peer.setUltimoLatido(LocalDateTime.now());
-                    peerRepository.save(peer);
+                try {
+                    peerService.reportarLatido(peerId);
+                } catch (Exception e) {
+                    log.warn("Error actualizando latido de peer {}: {}", peerId, e.getMessage());
                 }
             }
             
-            // Actualizar estado OFFLINE para peers desconectados
-            List<Peer> allPeers = peerRepository.findAll();
-            for (Peer peer : allPeers) {
-                if (!peer.getPeerId().equals(localPeerId) && 
+            // Marcar peers desconectados como OFFLINE
+            List<PeerResponseDto> allPeers = peerService.listarPeersDisponibles();
+            for (PeerResponseDto peer : allPeers) {
+                if (!peer.getPeerId().equals(localPeerId) &&
                     !connectedPeerIds.contains(peer.getPeerId())) {
                     
-                    if (EstadoPeer.ONLINE.equals(peer.getConectado())) {
-                        peer.setConectado(EstadoPeer.OFFLINE);
-                        peerRepository.save(peer);
+                    if ("ONLINE".equals(peer.getConectado())) {
+                        peerService.marcarPeerComoDesconectado(peer.getPeerId());
                         log.info("Peer {} marcado como OFFLINE en BD", peer.getPeerId());
                     }
                 }
@@ -493,6 +494,17 @@ public class PeerConnectionManager {
      */
     public void onPeerAuthenticated(IPeerHandler handler) {
         UUID peerId = handler.getPeerId();
+
+        // Verificar si este peer ya está conectado (evitar duplicados)
+        if (activePeerConnections.containsKey(peerId)) {
+            IPeerHandler existing = activePeerConnections.get(peerId);
+            if (existing != null && existing != handler && existing.isConnected()) {
+                log.warn("Ya existe una conexión activa para peer {}. Cerrando conexión duplicada.", peerId);
+                handler.forceDisconnect();
+                return;
+            }
+        }
+
         activePeerConnections.put(peerId, handler);
         
         log.info("Peer {} autenticado y agregado al pool. Total peers activos: {}", 
@@ -503,13 +515,18 @@ public class PeerConnectionManager {
             peerId, handler.getPeerIp(), handler.getPeerPort()
         ));
         
-        // Actualizar en BD
-        Optional<Peer> peerOpt = peerRepository.findById(peerId);
-        if (peerOpt.isPresent()) {
-            Peer peer = peerOpt.get();
-            peer.setConectado(EstadoPeer.ONLINE);
-            peer.actualizarLatido();
-            peerRepository.save(peer);
+        // Registrar o actualizar el peer usando el servicio de la capa de lógica
+        try {
+            PeerResponseDto peerDto = peerService.registrarPeerAutenticado(
+                peerId,
+                handler.getPeerIp(),
+                handler.getPeerPort()
+            );
+
+            log.info("✓ Peer {} guardado/actualizado en BD ({}:{})",
+                    peerId, peerDto.getIp(), peerDto.getPuerto());
+        } catch (Exception e) {
+            log.error("Error al registrar peer autenticado: {}", e.getMessage(), e);
         }
     }
     
@@ -526,13 +543,8 @@ public class PeerConnectionManager {
             // Publicar evento
             eventPublisher.publishEvent(new PeerDisconnectedEvent(peerId, "Conexión cerrada"));
             
-            // Actualizar en BD
-            Optional<Peer> peerOpt = peerRepository.findById(peerId);
-            if (peerOpt.isPresent()) {
-                Peer peer = peerOpt.get();
-                peer.setConectado(EstadoPeer.OFFLINE);
-                peerRepository.save(peer);
-            }
+            // Marcar como desconectado usando el servicio
+            peerService.marcarPeerComoDesconectado(peerId);
         }
     }
     
