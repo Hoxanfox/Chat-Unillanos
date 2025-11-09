@@ -5,12 +5,12 @@ import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.domain.Peer;
 import com.arquitectura.domain.User;
-import com.arquitectura.persistence.repository.PeerRepository;
+import com.arquitectura.logicaPeers.IPeerService;
 import com.arquitectura.utils.file.FileStorageService;
 import com.arquitectura.utils.mail.EmailService;
-import com.arquitectura.utils.network.NetworkUtils;
 import com.arquitectura.persistence.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,22 +27,20 @@ import java.util.stream.Collectors;
 public class UserServiceImpl implements IUserService {
 
     private final UserRepository userRepository;
-    private final PeerRepository peerRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final FileStorageService fileStorageService;
-    private final NetworkUtils networkUtils;
+    private final IPeerService peerService;
 
     @Autowired
     public UserServiceImpl(UserRepository userRepository, EmailService emailService,
-                          FileStorageService fileStorageService, PeerRepository peerRepository,
-                          NetworkUtils networkUtils) {
+                          FileStorageService fileStorageService,
+                          @Qualifier("peerServiceP2P") IPeerService peerService) {
         this.userRepository = userRepository;
         this.fileStorageService = fileStorageService;
         this.passwordEncoder = new BCryptPasswordEncoder();
         this.emailService = emailService;
-        this.peerRepository = peerRepository;
-        this.networkUtils = networkUtils;
+        this.peerService = peerService;
     }
 
     @Override
@@ -68,11 +66,9 @@ public class UserServiceImpl implements IUserService {
 
         String hashedPassword = passwordEncoder.encode(requestDto.getPassword());
 
-        // Obtener automáticamente la IP del servidor donde se ejecuta la aplicación
-        String serverPeerAddress = networkUtils.getServerIPAddress();
-
-        Peer currentPeer = peerRepository.findByIp(serverPeerAddress)
-                .orElseGet(() -> peerRepository.save(new Peer(serverPeerAddress, 9000, "ONLINE")));
+        // ✅ DELEGAR LA GESTIÓN DE PEERS A PeerService
+        // Obtener el peer actual del servidor (usa la configuración correcta del puerto)
+        Peer currentPeer = peerService.obtenerPeerActual();
 
         User newUserEntity = new User(
                 requestDto.getUsername(),
@@ -83,6 +79,7 @@ public class UserServiceImpl implements IUserService {
 
         // Asignamos la ruta de la foto guardada
         newUserEntity.setPhotoAddress(photoPath);
+        // Asignar el peer actual del servidor
         newUserEntity.setPeerId(currentPeer);
 
         User savedUser = userRepository.save(newUserEntity);
