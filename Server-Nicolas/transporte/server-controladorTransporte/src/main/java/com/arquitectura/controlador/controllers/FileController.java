@@ -79,7 +79,7 @@ public class FileController extends BaseController {
     private void handleStartUpload(DTORequest request, IClientHandler handler, String action) {
         try {
             DTOStartUpload payload = gson.fromJson(gson.toJsonTree(request.getPayload()), DTOStartUpload.class);
-            String uploadId = chatFachada.startUpload(payload);
+            String uploadId = chatFachada.archivos().startUpload(payload);
             sendJsonResponse(handler, action, true, "Upload iniciado", Map.of("uploadId", uploadId));
         } catch (Exception e) {
             System.err.println("Error al iniciar upload: " + e.getMessage());
@@ -91,7 +91,7 @@ public class FileController extends BaseController {
     private void handleUploadChunk(DTORequest request, IClientHandler handler) {
         try {
             DTOUploadChunk payload = gson.fromJson(gson.toJsonTree(request.getPayload()), DTOUploadChunk.class);
-            chatFachada.processChunk(payload);
+            chatFachada.archivos().processChunk(payload);
 
             // Respuesta PUSH (ack dinámico)
             String ackAction = "uploadFileChunk_" + payload.getUploadId() + "_" + payload.getChunkNumber();
@@ -118,7 +118,7 @@ public class FileController extends BaseController {
                 subDirectory = "user_photos";
             }
 
-            FileUploadResponse responseDataLocal = chatFachada.endUpload(payload, autorId, subDirectory);
+            FileUploadResponse responseDataLocal = chatFachada.archivos().endUpload(payload, autorId, subDirectory);
             sendJsonResponse(handler, action, true, "Archivo subido", responseDataLocal);
         } catch (Exception e) {
             System.err.println("Error al finalizar upload: " + e.getMessage());
@@ -132,7 +132,7 @@ public class FileController extends BaseController {
             JsonObject payloadJson = gson.toJsonTree(request.getPayload()).getAsJsonObject();
             String fileId = payloadJson.get("fileId").getAsString();
 
-            DTODownloadInfo info = chatFachada.startDownload(fileId);
+            DTODownloadInfo info = chatFachada.archivos().startDownload(fileId);
             sendJsonResponse(handler, action, true, "Descarga iniciada", info);
         } catch (Exception e) {
             System.err.println("Error al iniciar descarga: " + e.getMessage());
@@ -147,7 +147,7 @@ public class FileController extends BaseController {
             String downloadId = payloadJson.get("downloadId").getAsString();
             int chunkNumber = payloadJson.get("chunkNumber").getAsInt();
 
-            byte[] chunkBytes = chatFachada.getChunk(downloadId, chunkNumber);
+            byte[] chunkBytes = chatFachada.archivos().getChunk(downloadId, chunkNumber);
             String chunkBase64 = Base64.getEncoder().encodeToString(chunkBytes);
 
             Map<String, Object> chunkData = new HashMap<>();
@@ -173,7 +173,7 @@ public class FileController extends BaseController {
             System.out.println("→ [FileController] Iniciando descarga de archivo desde peer: " + peerDestinoId);
 
             // Descargar el archivo completo desde el peer usando la fachada
-            byte[] archivoCompleto = chatFachada.descargarArchivoDesdePeer(peerDestinoId, fileId);
+            byte[] archivoCompleto = chatFachada.p2p().descargarArchivoDesdePeer(peerDestinoId, fileId);
 
             // Convertir a Base64 para enviar al cliente
             String archivoBase64 = Base64.getEncoder().encodeToString(archivoCompleto);

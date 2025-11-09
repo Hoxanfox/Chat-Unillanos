@@ -118,7 +118,7 @@ public class ChannelController extends BaseController {
                 return;
             }
 
-            List<ChannelResponseDto> canales = chatFachada.obtenerCanalesPorUsuario(canalesUsuarioId);
+            List<ChannelResponseDto> canales = chatFachada.canales().obtenerCanalesPorUsuario(canalesUsuarioId);
 
             List<Map<String, Object>> canalesData = new ArrayList<>();
             for (ChannelResponseDto canal : canales) {
@@ -177,12 +177,12 @@ public class ChannelController extends BaseController {
                 return;
             }
 
-            System.out.println("→ [ChannelController] Llamando a chatFachada.crearCanalDirecto...");
-            ChannelResponseDto canalDirecto = chatFachada.crearCanalDirecto(user1Id, user2Id);
+            System.out.println("→ [ChannelController] Llamando a chatFachada.canales().crearCanalDirecto...");
+            ChannelResponseDto canalDirecto = chatFachada.canales().crearCanalDirecto(user1Id, user2Id);
             System.out.println("✓ [ChannelController] Canal obtenido: " + canalDirecto.getChannelId());
             
             UUID otherUserId = authenticatedUserId.equals(user1Id) ? user2Id : user1Id;
-            List<UserResponseDto> otherUsers = chatFachada.getUsersByIds(Set.of(otherUserId));
+            List<UserResponseDto> otherUsers = chatFachada.usuarios().getUsersByIds(Set.of(otherUserId));
 
             // Formato compatible con el cliente (similar a crearCanal)
             Map<String, Object> directResponseData = new HashMap<>();
@@ -253,10 +253,10 @@ public class ChannelController extends BaseController {
             UUID ownerId = handler.getAuthenticatedUser().getUserId();
 
             InviteMemberRequestDto inviteDto = new InviteMemberRequestDto(inviteChannelId, inviteUserId);
-            chatFachada.invitarMiembro(inviteDto, ownerId);
+            chatFachada.canales().invitarMiembro(inviteDto, ownerId);
 
-            List<UserResponseDto> invitedUsers = chatFachada.getUsersByIds(Set.of(inviteUserId));
-            
+            List<UserResponseDto> invitedUsers = chatFachada.usuarios().getUsersByIds(Set.of(inviteUserId));
+
             Map<String, Object> inviteResponseData = new HashMap<>();
             inviteResponseData.put("channelId", inviteChannelIdStr);
             inviteResponseData.put("invitedUserId", inviteUserIdStr);
@@ -316,7 +316,7 @@ public class ChannelController extends BaseController {
             UUID userId = handler.getAuthenticatedUser().getUserId();
 
             RespondToInviteRequestDto respondDto = new RespondToInviteRequestDto(respondChannelId, accepted);
-            chatFachada.responderInvitacion(respondDto, userId);
+            chatFachada.canales().responderInvitacion(respondDto, userId);
 
             Map<String, Object> respondResponseData = new HashMap<>();
             respondResponseData.put("channelId", respondChannelIdStr);
@@ -371,8 +371,8 @@ public class ChannelController extends BaseController {
                 return;
             }
 
-            List<ChannelResponseDto> invitaciones = chatFachada.getPendingInvitationsForUser(invitUsuarioId);
-            
+            List<ChannelResponseDto> invitaciones = chatFachada.canales().getPendingInvitationsForUser(invitUsuarioId);
+
             List<Map<String, Object>> invitacionesData = new ArrayList<>();
             for (ChannelResponseDto canal : invitaciones) {
                 Map<String, Object> canalMap = new HashMap<>();
@@ -443,8 +443,8 @@ public class ChannelController extends BaseController {
                 return;
             }
 
-            List<UserResponseDto> miembros = chatFachada.obtenerMiembrosDeCanal(miembrosCanalId, solicitanteId);
-            
+            List<UserResponseDto> miembros = chatFachada.canales().obtenerMiembrosDeCanal(miembrosCanalId, solicitanteId);
+
             List<Map<String, Object>> miembrosData = new ArrayList<>();
             for (UserResponseDto miembro : miembros) {
                 Map<String, Object> miembroMap = new HashMap<>();
@@ -503,7 +503,7 @@ public class ChannelController extends BaseController {
             UUID ownerId = handler.getAuthenticatedUser().getUserId();
             com.arquitectura.DTO.canales.CreateChannelRequestDto createDto = 
                 new com.arquitectura.DTO.canales.CreateChannelRequestDto(nombre, tipo);
-            ChannelResponseDto nuevoCanal = chatFachada.crearCanal(createDto, ownerId);
+            ChannelResponseDto nuevoCanal = chatFachada.canales().crearCanal(createDto, ownerId);
 
             // Formato compatible con el cliente
             Map<String, Object> canalData = new HashMap<>();

@@ -155,7 +155,7 @@ public class PeerHandler implements IPeerHandler, Runnable {
 
             // Verificar si es la primera autenticación o un handshake repetido
             boolean isFirstAuth = !this.authenticated;
-
+            
             this.authenticated = true;
 
             log.info("✓ Handshake completado con peer {} ({}:{})", peerId, peerIp, peerPort);

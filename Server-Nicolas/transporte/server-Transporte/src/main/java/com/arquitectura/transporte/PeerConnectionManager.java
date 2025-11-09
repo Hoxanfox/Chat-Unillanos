@@ -472,7 +472,7 @@ public class PeerConnectionManager {
             // Marcar peers desconectados como OFFLINE
             List<PeerResponseDto> allPeers = peerService.listarPeersDisponibles();
             for (PeerResponseDto peer : allPeers) {
-                if (!peer.getPeerId().equals(localPeerId) &&
+                if (!peer.getPeerId().equals(localPeerId) && 
                     !connectedPeerIds.contains(peer.getPeerId())) {
                     
                     if ("ONLINE".equals(peer.getConectado())) {

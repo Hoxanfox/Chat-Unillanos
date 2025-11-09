@@ -30,7 +30,7 @@ public class ServerViewController {
     // metodos registro y mensaje
 
     public List<UserResponseDto> obtenerUsuariosRegistrados() {
-        return chatFachada.obtenerTodosLosUsuarios();
+        return chatFachada.usuarios().obtenerTodosLosUsuarios();
     }
 
 //    public void enviarMensajeBroadcast(String contenido) {
@@ -44,36 +44,36 @@ public class ServerViewController {
 
     public void registrarNuevoUsuario(UserRegistrationRequestDto requestDto) throws Exception {
         // La IP para un registro desde el servidor puede ser "localhost"
-        chatFachada.registrarUsuario(requestDto, "127.0.0.1");
+        chatFachada.usuarios().registrarUsuario(requestDto, "127.0.0.1");
     }
     // MÉTODOS PARA LOS INFORMES
 
     public Map<ChannelResponseDto, List<UserResponseDto>> obtenerCanalesConMiembros() {
-        return chatFachada.obtenerCanalesConMiembros();
+        return chatFachada.canales().obtenerCanalesConMiembros();
     }
     public String getLogContents() {
         try {
-            return chatFachada.getLogContents();
+            return chatFachada.sistema().getLogContents();
         } catch (IOException e) {
             return "Error al acceder a los logs: " + e.getMessage();
         }
     }
     public List<TranscriptionResponseDto> obtenerTranscripciones() {
-        return chatFachada.obtenerTranscripciones();
+        return chatFachada.mensajes().obtenerTranscripciones();
     }
 
     public void disconnectUser(UUID userId) {
         eventPublisher.publishEvent(new ForceDisconnectEvent(this, userId));
     }
     public List<UserResponseDto> obtenerUsuariosConectados() {
-        return chatFachada.obtenerUsuariosConectados();
+        return chatFachada.usuarios().obtenerUsuariosConectados();
     }
 
     // MÉTODOS P2P
     
     public Map<String, Object> listarPeersDisponibles() {
         try {
-            List<com.arquitectura.DTO.p2p.PeerResponseDto> peers = chatFachada.listarPeersDisponibles();
+            List<com.arquitectura.DTO.p2p.PeerResponseDto> peers = chatFachada.p2p().listarPeersDisponibles();
             
             java.util.List<java.util.Map<String, Object>> peersData = new java.util.ArrayList<>();
             for (com.arquitectura.DTO.p2p.PeerResponseDto peer : peers) {
@@ -95,7 +95,7 @@ public class ServerViewController {
     public Map<String, Object> obtenerEstadoRed(boolean incluirDetalles) {
         try {
             // Obtener peers
-            List<com.arquitectura.DTO.p2p.PeerResponseDto> peers = chatFachada.listarPeersDisponibles();
+            List<com.arquitectura.DTO.p2p.PeerResponseDto> peers = chatFachada.p2p().listarPeersDisponibles();
             
             int peersOnline = 0;
             int peersOffline = 0;
@@ -128,7 +128,7 @@ public class ServerViewController {
             }
             
             // Obtener usuarios
-            List<UserResponseDto> usuarios = chatFachada.obtenerTodosLosUsuarios();
+            List<UserResponseDto> usuarios = chatFachada.usuarios().obtenerTodosLosUsuarios();
             int usuariosConectados = (int) usuarios.stream()
                 .filter(u -> "ONLINE".equalsIgnoreCase(u.getEstado()))
                 .count();
@@ -176,7 +176,7 @@ public class ServerViewController {
     
     public java.util.List<Map<String, Object>> pingAllPeers() {
         try {
-            List<com.arquitectura.DTO.p2p.PeerResponseDto> peers = chatFachada.listarPeersDisponibles();
+            List<com.arquitectura.DTO.p2p.PeerResponseDto> peers = chatFachada.p2p().listarPeersDisponibles();
             java.util.List<Map<String, Object>> results = new java.util.ArrayList<>();
             
             for (com.arquitectura.DTO.p2p.PeerResponseDto peer : peers) {
@@ -195,7 +195,7 @@ public class ServerViewController {
     
     public Map<String, Object> sincronizarUsuarios() {
         try {
-            List<UserResponseDto> usuarios = chatFachada.obtenerTodosLosUsuarios();
+            List<UserResponseDto> usuarios = chatFachada.usuarios().obtenerTodosLosUsuarios();
             
             java.util.List<java.util.Map<String, Object>> usuariosData = new java.util.ArrayList<>();
             int usuariosConectados = 0;
@@ -212,7 +212,7 @@ public class ServerViewController {
                     usuariosConectados++;
                     try {
                         com.arquitectura.DTO.p2p.UserLocationResponseDto ubicacion = 
-                            chatFachada.buscarUsuario(usuario.getUserId());
+                            chatFachada.p2p().buscarUsuario(usuario.getUserId());
                         
                         if (ubicacion.getPeerId() != null) {
                             usuarioMap.put("peerId", ubicacion.getPeerId().toString());

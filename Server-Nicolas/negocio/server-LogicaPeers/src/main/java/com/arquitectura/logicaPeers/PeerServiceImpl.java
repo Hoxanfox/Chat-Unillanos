@@ -480,10 +480,10 @@ public class PeerServiceImpl implements IPeerService {
     @Transactional
     public PeerResponseDto registrarPeerAutenticado(UUID peerId, String ip, Integer puerto) {
         System.out.println("→ [PeerService] Registrando peer autenticado: " + peerId + " (" + ip + ":" + puerto + ")");
-
+        
         // Buscar primero por peerId
         Optional<Peer> peerOpt = peerRepository.findById(peerId);
-
+        
         // Si no se encuentra por ID, buscar por IP y Puerto
         if (!peerOpt.isPresent() && ip != null && puerto != null) {
             peerOpt = peerRepository.findByIpAndPuerto(ip, puerto);
@@ -491,19 +491,19 @@ public class PeerServiceImpl implements IPeerService {
                 System.out.println("→ [PeerService] Peer encontrado por IP:Puerto pero con ID diferente. Actualizando ID.");
             }
         }
-
+        
         Peer peer;
-
+        
         if (peerOpt.isPresent()) {
             // El peer ya existe, actualizar
             peer = peerOpt.get();
-
+            
             // Si el peerId cambió, actualizarlo
             if (!peer.getPeerId().equals(peerId)) {
                 System.out.println("→ [PeerService] PeerId cambió de " + peer.getPeerId() + " a " + peerId);
                 peer.setPeerId(peerId);
             }
-
+            
             System.out.println("→ [PeerService] Actualizando peer existente");
         } else {
             // El peer NO existe, crearlo
@@ -513,14 +513,14 @@ public class PeerServiceImpl implements IPeerService {
             peer.setIp(ip);
             peer.setPuerto(puerto != null ? puerto : 0);
         }
-
+        
         // Actualizar estado y latido
         peer.setConectado(EstadoPeer.ONLINE);
         peer.actualizarLatido();
         Peer savedPeer = peerRepository.save(peer);
-
+        
         System.out.println("✓ [PeerService] Peer registrado: " + savedPeer.getPeerId());
-
+        
         return mapearAPeerResponseDto(savedPeer);
     }
 
@@ -528,7 +528,7 @@ public class PeerServiceImpl implements IPeerService {
     @Transactional
     public void marcarPeerComoDesconectado(UUID peerId) {
         System.out.println("→ [PeerService] Marcando peer como desconectado: " + peerId);
-
+        
         Optional<Peer> peerOpt = peerRepository.findById(peerId);
         if (peerOpt.isPresent()) {
             Peer peer = peerOpt.get();
@@ -544,9 +544,9 @@ public class PeerServiceImpl implements IPeerService {
     @Transactional
     public PeerResponseDto obtenerOCrearPeerLocal(String ip, int puerto) {
         System.out.println("→ [PeerService] Obteniendo o creando peer local: " + ip + ":" + puerto);
-
+        
         Optional<Peer> peerOpt = peerRepository.findByIpAndPuerto(ip, puerto);
-
+        
         Peer peer;
         if (peerOpt.isPresent()) {
             peer = peerOpt.get();
@@ -557,10 +557,10 @@ public class PeerServiceImpl implements IPeerService {
             peer = peerRepository.save(peer);
             System.out.println("✓ [PeerService] Nuevo peer local creado: " + peer.getPeerId());
         }
-
+        
         // Cachear el peer actual
         this.peerActual = peer;
-
+        
         return mapearAPeerResponseDto(peer);
     }
 }

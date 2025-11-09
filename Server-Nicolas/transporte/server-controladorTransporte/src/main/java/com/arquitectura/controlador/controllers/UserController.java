@@ -88,7 +88,7 @@ public class UserController extends BaseController {
             }
 
             LoginRequestDto serverLoginDto = new LoginRequestDto(nombreUsuario, password);
-            UserResponseDto userDto = chatFachada.autenticarUsuario(serverLoginDto, handler.getClientIpAddress());
+            UserResponseDto userDto = chatFachada.usuarios().autenticarUsuario(serverLoginDto, handler.getClientIpAddress());
 
             handler.setAuthenticatedUser(userDto);
 
@@ -160,7 +160,7 @@ public class UserController extends BaseController {
                 regPhotoFileId
             );
 
-            chatFachada.registrarUsuario(registrationDto, handler.getClientIpAddress());
+            chatFachada.usuarios().registrarUsuario(registrationDto, handler.getClientIpAddress());
 
             Map<String, Object> registerResponseData = new HashMap<>();
             registerResponseData.put("username", regUsername);
@@ -210,7 +210,7 @@ public class UserController extends BaseController {
                 return;
             }
 
-            chatFachada.cambiarEstadoUsuario(userId, false);
+            chatFachada.usuarios().cambiarEstadoUsuario(userId, false);
             handler.clearAuthenticatedUser();
 
             sendJsonResponse(handler, "logoutUser", true, "Sesión cerrada exitosamente", null);
@@ -249,7 +249,7 @@ public class UserController extends BaseController {
                 return;
             }
 
-            List<UserResponseDto> contactos = chatFachada.listarContactos(usuarioId);
+            List<UserResponseDto> contactos = chatFachada.usuarios().listarContactos(usuarioId);
 
             // Construir lista plana con los campos esperados por el cliente
             List<Map<String, Object>> contactosData = new ArrayList<>();
@@ -307,7 +307,7 @@ public class UserController extends BaseController {
     private void broadcastContactListToAllClients() {
         try {
             // Obtener lista completa de usuarios (contactos) - sin excluir ninguno
-            List<UserResponseDto> contactos = chatFachada.obtenerTodosLosUsuarios();
+            List<UserResponseDto> contactos = chatFachada.usuarios().obtenerTodosLosUsuarios();
 
             // Construir lista de contactos en el formato esperado por el cliente
             List<Map<String, Object>> contactosData = new ArrayList<>();

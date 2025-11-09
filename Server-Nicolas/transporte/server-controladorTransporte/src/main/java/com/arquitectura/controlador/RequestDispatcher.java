@@ -104,7 +104,7 @@ public class RequestDispatcher {
     public MessageResponseDto enrichOutgoingMessage(MessageResponseDto originalDto) {
         if ("AUDIO".equals(originalDto.getMessageType())) {
             try {
-                String base64Content = chatFachada.getFileAsBase64(originalDto.getContent());
+                String base64Content = chatFachada.archivos().getFileAsBase64(originalDto.getContent());
 
                 return new MessageResponseDto(
                         originalDto.getMessageId(),

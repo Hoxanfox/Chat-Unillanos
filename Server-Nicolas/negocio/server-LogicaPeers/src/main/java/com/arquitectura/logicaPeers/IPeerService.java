@@ -41,49 +41,49 @@ public interface IPeerService {
     
     /**
      * Busca un peer por su IP y puerto.
-     *
+     * 
      * @param ip Dirección IP del peer
      * @param puerto Puerto del peer
      * @return Optional con el peer si existe
      */
     Optional<PeerResponseDto> buscarPeerPorIpYPuerto(String ip, int puerto);
-
+    
     /**
      * Busca un peer por su UUID.
-     *
+     * 
      * @param peerId ID del peer
      * @return Optional con el peer si existe
      */
     Optional<PeerResponseDto> buscarPeerPorId(UUID peerId);
-
+    
     /**
      * Registra o actualiza un peer cuando se autentica en la red.
      * Si el peer existe, actualiza su estado a ONLINE.
      * Si no existe, lo crea.
-     *
+     * 
      * @param peerId ID del peer
      * @param ip IP del peer
      * @param puerto Puerto del peer
      * @return DTO con la información del peer
      */
     PeerResponseDto registrarPeerAutenticado(UUID peerId, String ip, Integer puerto);
-
+    
     /**
      * Marca un peer como desconectado (OFFLINE).
-     *
+     * 
      * @param peerId ID del peer
      */
     void marcarPeerComoDesconectado(UUID peerId);
-
+    
     /**
      * Obtiene el peer local (este servidor).
-     *
+     * 
      * @param ip IP del servidor local
      * @param puerto Puerto del servidor local
      * @return DTO con información del peer local
      */
     PeerResponseDto obtenerOCrearPeerLocal(String ip, int puerto);
-
+    
     /**
      * Lista todos los peers disponibles en la red.
      * 

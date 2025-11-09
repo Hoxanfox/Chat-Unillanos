@@ -153,11 +153,11 @@ public class PeerController extends BaseController {
             }
             
             // Agregar peer usando la fachada
-            PeerResponseDto peerDto = chatFachada.agregarPeer(ip, puerto);
-            
+            PeerResponseDto peerDto = chatFachada.p2p().agregarPeer(ip, puerto);
+
             // Obtener lista completa de peers después de agregar
-            List<PeerResponseDto> todosLosPeers = chatFachada.listarPeersDisponibles();
-            
+            List<PeerResponseDto> todosLosPeers = chatFachada.p2p().listarPeersDisponibles();
+
             // Preparar respuesta con lista completa de peers
             List<Map<String, Object>> peersData = new ArrayList<>();
             for (PeerResponseDto peer : todosLosPeers) {
@@ -207,8 +207,8 @@ public class PeerController extends BaseController {
         
         try {
             // Obtener lista de todos los peers
-            List<PeerResponseDto> peers = chatFachada.listarPeersDisponibles();
-            
+            List<PeerResponseDto> peers = chatFachada.p2p().listarPeersDisponibles();
+
             // Preparar respuesta como array directo
             List<Map<String, Object>> peersData = new ArrayList<>();
             for (PeerResponseDto peer : peers) {
@@ -277,14 +277,14 @@ public class PeerController extends BaseController {
             if (payload.has("ip") && payload.has("puerto")) {
                 String ip = payload.get("ip").getAsString();
                 int puerto = payload.get("puerto").getAsInt();
-                chatFachada.reportarLatido(peerId, ip, puerto);
+                chatFachada.p2p().reportarLatido(peerId, ip, puerto);
             } else {
-                chatFachada.reportarLatido(peerId);
+                chatFachada.p2p().reportarLatido(peerId);
             }
             
             // Obtener intervalo de heartbeat
-            long intervaloHeartbeat = chatFachada.obtenerIntervaloHeartbeat();
-            
+            long intervaloHeartbeat = chatFachada.p2p().obtenerIntervaloHeartbeat();
+
             // Preparar respuesta
             Map<String, Object> responseData = new HashMap<>();
             responseData.put("proximoLatidoMs", intervaloHeartbeat);
@@ -376,8 +376,8 @@ public class PeerController extends BaseController {
                 peticionCliente.getAction() + "' al peer: " + peerDestinoId);
             
             // Retransmitir usando la fachada
-            DTOResponse respuestaPeer = chatFachada.retransmitirPeticion(peerDestinoId, peticionCliente);
-            
+            DTOResponse respuestaPeer = chatFachada.p2p().retransmitirPeticion(peerDestinoId, peticionCliente);
+
             // Preparar respuesta según el formato del documento
             Map<String, Object> responseData = new HashMap<>();
             
@@ -459,8 +459,8 @@ public class PeerController extends BaseController {
             
             // Buscar usuario usando la fachada
             com.arquitectura.DTO.p2p.UserLocationResponseDto userLocation = 
-                chatFachada.buscarUsuario(usuarioId);
-            
+                chatFachada.p2p().buscarUsuario(usuarioId);
+
             // Preparar respuesta
             Map<String, Object> responseData = new HashMap<>();
             responseData.put("usuarioId", userLocation.getUsuarioId().toString());
@@ -548,7 +548,7 @@ public class PeerController extends BaseController {
             
             // Buscar ubicación del destinatario
             com.arquitectura.DTO.p2p.UserLocationResponseDto userLocation = 
-                chatFachada.buscarUsuario(destinatarioId);
+                chatFachada.p2p().buscarUsuario(destinatarioId);
             
             // Verificar si el usuario está conectado
             if (!userLocation.isConectado() || userLocation.getPeerId() == null) {
@@ -574,7 +574,7 @@ public class PeerController extends BaseController {
             DTORequest peticionMensaje = new DTORequest("recibirMensajeDirecto", mensajeData);
             
             // Retransmitir mensaje al peer donde está conectado el destinatario
-            DTOResponse respuestaPeer = chatFachada.retransmitirPeticion(
+            DTOResponse respuestaPeer = chatFachada.p2p().retransmitirPeticion(
                 userLocation.getPeerId(), peticionMensaje);
             
             // Verificar si la entrega fue exitosa
@@ -685,7 +685,7 @@ public class PeerController extends BaseController {
                     peerSolicitanteId = UUID.fromString(peerIdStr);
                     
                     // Reportar latido para actualizar el peer existente
-                    chatFachada.reportarLatido(peerSolicitanteId, ip, puerto);
+                    chatFachada.p2p().reportarLatido(peerSolicitanteId, ip, puerto);
                     System.out.println("→ [PeerController] Peer existente actualizado: " + peerSolicitanteId);
                     
                 } catch (IllegalArgumentException e) {
@@ -696,15 +696,15 @@ public class PeerController extends BaseController {
             
             // Si no existe, crear un nuevo peer
             if (peerSolicitanteId == null) {
-                PeerResponseDto nuevoPeer = chatFachada.agregarPeer(ip, puerto);
+                PeerResponseDto nuevoPeer = chatFachada.p2p().agregarPeer(ip, puerto);
                 peerSolicitanteId = nuevoPeer.getPeerId();
                 esNuevo = true;
                 System.out.println("→ [PeerController] Nuevo peer registrado: " + peerSolicitanteId);
             }
             
             // Obtener lista de peers activos (excluyendo al solicitante)
-            List<PeerResponseDto> todosLosPeers = chatFachada.listarPeersActivos();
-            
+            List<PeerResponseDto> todosLosPeers = chatFachada.p2p().listarPeersActivos();
+
             // Filtrar para excluir al peer solicitante
             List<Map<String, Object>> peersDisponibles = new ArrayList<>();
             for (PeerResponseDto peer : todosLosPeers) {
@@ -782,8 +782,8 @@ public class PeerController extends BaseController {
             
             // Obtener todos los usuarios del sistema
             List<com.arquitectura.DTO.usuarios.UserResponseDto> todosLosUsuarios = 
-                chatFachada.obtenerTodosLosUsuarios();
-            
+                chatFachada.usuarios().obtenerTodosLosUsuarios();
+
             // Preparar lista de usuarios con su información de ubicación
             List<Map<String, Object>> usuariosData = new ArrayList<>();
             int usuariosConectados = 0;
@@ -802,7 +802,7 @@ public class PeerController extends BaseController {
                     usuariosConectados++;
                     try {
                         com.arquitectura.DTO.p2p.UserLocationResponseDto ubicacion = 
-                            chatFachada.buscarUsuario(usuario.getUserId());
+                            chatFachada.p2p().buscarUsuario(usuario.getUserId());
                         
                         if (ubicacion.getPeerId() != null) {
                             usuarioMap.put("peerId", ubicacion.getPeerId().toString());
@@ -909,12 +909,12 @@ public class PeerController extends BaseController {
             
             // Buscar usuario para obtener información actual
             com.arquitectura.DTO.usuarios.UserResponseDto usuario = 
-                chatFachada.buscarUsuarioPorUsername(null).orElse(null);
+                chatFachada.usuarios().buscarUsuarioPorUsername(null).orElse(null);
             
             // Obtener el usuario por ID usando la lista de todos los usuarios
             List<com.arquitectura.DTO.usuarios.UserResponseDto> todosUsuarios = 
-                chatFachada.obtenerTodosLosUsuarios();
-            
+                chatFachada.usuarios().obtenerTodosLosUsuarios();
+
             com.arquitectura.DTO.usuarios.UserResponseDto usuarioEncontrado = null;
             for (com.arquitectura.DTO.usuarios.UserResponseDto u : todosUsuarios) {
                 if (u.getUserId().equals(usuarioId)) {
@@ -936,7 +936,7 @@ public class PeerController extends BaseController {
             
             // Cambiar estado del usuario
             boolean nuevoEstadoBoolean = nuevoEstado.equals("ONLINE");
-            chatFachada.cambiarEstadoUsuario(usuarioId, nuevoEstadoBoolean);
+            chatFachada.usuarios().cambiarEstadoUsuario(usuarioId, nuevoEstadoBoolean);
             
             // Obtener timestamp del cambio
             String fechaCambio = java.time.LocalDateTime.now()
@@ -1062,7 +1062,7 @@ public class PeerController extends BaseController {
                     try {
                         // Obtener número de usuarios conectados
                         List<com.arquitectura.DTO.usuarios.UserResponseDto> usuariosConectados = 
-                            chatFachada.obtenerUsuariosConectados();
+                            chatFachada.usuarios().obtenerUsuariosConectados();
                         responseData.put("usuariosConectados", usuariosConectados.size());
                     } catch (Exception e) {
                         // Si hay error obteniendo estadísticas, continuar sin ellas
@@ -1118,7 +1118,7 @@ public class PeerController extends BaseController {
             }
             
             // Obtener todos los peers
-            List<PeerResponseDto> todosLosPeers = chatFachada.listarPeersDisponibles();
+            List<PeerResponseDto> todosLosPeers = chatFachada.p2p().listarPeersDisponibles();
             
             // Clasificar peers por estado
             int peersOnline = 0;
@@ -1145,13 +1145,13 @@ public class PeerController extends BaseController {
                     int usuariosEnPeer = 0;
                     try {
                         List<com.arquitectura.DTO.usuarios.UserResponseDto> todosUsuarios = 
-                            chatFachada.obtenerTodosLosUsuarios();
-                        
+                            chatFachada.usuarios().obtenerTodosLosUsuarios();
+
                         for (com.arquitectura.DTO.usuarios.UserResponseDto usuario : todosUsuarios) {
                             if ("ONLINE".equalsIgnoreCase(usuario.getEstado())) {
                                 try {
                                     com.arquitectura.DTO.p2p.UserLocationResponseDto ubicacion = 
-                                        chatFachada.buscarUsuario(usuario.getUserId());
+                                        chatFachada.p2p().buscarUsuario(usuario.getUserId());
                                     
                                     if (ubicacion.getPeerId() != null && 
                                         ubicacion.getPeerId().equals(peer.getPeerId())) {
@@ -1183,8 +1183,8 @@ public class PeerController extends BaseController {
             
             // Obtener información de usuarios
             List<com.arquitectura.DTO.usuarios.UserResponseDto> todosUsuarios = 
-                chatFachada.obtenerTodosLosUsuarios();
-            
+                chatFachada.usuarios().obtenerTodosLosUsuarios();
+
             int usuariosConectados = 0;
             Map<String, Integer> distribucionPorPeer = new HashMap<>();
             
@@ -1195,7 +1195,7 @@ public class PeerController extends BaseController {
                     if (incluirDetalles) {
                         try {
                             com.arquitectura.DTO.p2p.UserLocationResponseDto ubicacion = 
-                                chatFachada.buscarUsuario(usuario.getUserId());
+                                chatFachada.p2p().buscarUsuario(usuario.getUserId());
                             
                             if (ubicacion.getPeerId() != null) {
                                 String peerIdStr = ubicacion.getPeerId().toString();
@@ -1282,7 +1282,7 @@ public class PeerController extends BaseController {
             
             // Obtener todos los canales
             List<com.arquitectura.DTO.canales.ChannelResponseDto> todosLosCanales = 
-                chatFachada.obtenerTodosLosCanales();
+                chatFachada.canales().obtenerTodosLosCanales();
             
             // Clasificar canales y preparar información
             int canalesPublicos = 0;
@@ -1320,7 +1320,7 @@ public class PeerController extends BaseController {
                         UUID ownerId = canal.getOwner() != null ? canal.getOwner().getUserId() : null;
                         if (ownerId != null) {
                             List<com.arquitectura.DTO.usuarios.UserResponseDto> miembros = 
-                                chatFachada.obtenerMiembrosDeCanal(canal.getChannelId(), ownerId);
+                                chatFachada.canales().obtenerMiembrosDeCanal(canal.getChannelId(), ownerId);
                         
                         List<Map<String, Object>> miembrosData = new ArrayList<>();
                         for (com.arquitectura.DTO.usuarios.UserResponseDto miembro : miembros) {
@@ -1348,7 +1348,7 @@ public class PeerController extends BaseController {
                         UUID ownerId = canal.getOwner() != null ? canal.getOwner().getUserId() : null;
                         if (ownerId != null) {
                             List<com.arquitectura.DTO.usuarios.UserResponseDto> miembros = 
-                                chatFachada.obtenerMiembrosDeCanal(canal.getChannelId(), ownerId);
+                                chatFachada.canales().obtenerMiembrosDeCanal(canal.getChannelId(), ownerId);
                             canalMap.put("totalMiembros", miembros.size());
                         } else {
                             canalMap.put("totalMiembros", 0);

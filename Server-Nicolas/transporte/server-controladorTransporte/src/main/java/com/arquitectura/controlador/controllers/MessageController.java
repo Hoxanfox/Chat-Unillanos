@@ -122,7 +122,7 @@ public class MessageController extends BaseController {
                 contenido
             );
 
-            MessageResponseDto messageResponse = chatFachada.enviarMensajeTexto(sendMessageDto, autorId);
+            MessageResponseDto messageResponse = chatFachada.mensajes().enviarMensajeTexto(sendMessageDto, autorId);
 
             Map<String, Object> mensajeResponseData = new HashMap<>();
             mensajeResponseData.put("messageId", messageResponse.getMessageId().toString());
@@ -188,7 +188,7 @@ public class MessageController extends BaseController {
                 return;
             }
 
-            List<MessageResponseDto> mensajes = chatFachada.obtenerMensajesDeCanal(histCanalId, histUsuarioId);
+            List<MessageResponseDto> mensajes = chatFachada.mensajes().obtenerMensajesDeCanal(histCanalId, histUsuarioId);
 
             List<Map<String, Object>> mensajesEnriquecidos = new ArrayList<>();
             
@@ -205,7 +205,7 @@ public class MessageController extends BaseController {
                 
                 if ("AUDIO".equals(mensaje.getMessageType())) {
                     try {
-                        String base64Content = chatFachada.getFileAsBase64(mensaje.getContent());
+                        String base64Content = chatFachada.archivos().getFileAsBase64(mensaje.getContent());
                         mensajeMap.put("content", base64Content);
                     } catch (Exception e) {
                         System.err.println("Error al codificar audio a Base64: " + e.getMessage());
@@ -274,7 +274,7 @@ public class MessageController extends BaseController {
 
             // Guardar el archivo de audio usando el sistema de chunks
             String fileName = "audio_" + autorId + "_" + System.currentTimeMillis() + "." + format;
-            String audioFilePath = chatFachada.guardarArchivoDeAudio(fileName, audioBase64, autorId);
+            String audioFilePath = chatFachada.mensajes().guardarArchivoDeAudio(fileName, audioBase64, autorId);
 
             // Crear DTO de request con la ruta del archivo
             SendMessageRequestDto sendAudioDto = new SendMessageRequestDto(
@@ -284,7 +284,7 @@ public class MessageController extends BaseController {
             );
 
             // Llamar a la fachada para enviar el mensaje de audio
-            MessageResponseDto audioResponse = chatFachada.enviarMensajeAudio(sendAudioDto, autorId);
+            MessageResponseDto audioResponse = chatFachada.mensajes().enviarMensajeAudio(sendAudioDto, autorId);
 
             // Construir respuesta exitosa
             Map<String, Object> audioResponseData = new HashMap<>();
@@ -339,7 +339,7 @@ public class MessageController extends BaseController {
             }
 
             // Obtener todas las transcripciones
-            List<com.arquitectura.DTO.Mensajes.TranscriptionResponseDto> transcripciones = chatFachada.obtenerTranscripciones();
+            List<com.arquitectura.DTO.Mensajes.TranscriptionResponseDto> transcripciones = chatFachada.mensajes().obtenerTranscripciones();
 
             // Filtrar por messageId si se proporcionó
             if (messageIdFilter != null) {
@@ -445,7 +445,7 @@ public class MessageController extends BaseController {
             // Obtener o crear el canal directo entre remitente y destinatario
             com.arquitectura.DTO.canales.ChannelResponseDto canalDirecto;
             try {
-                canalDirecto = chatFachada.crearCanalDirecto(remitenteId, destinatarioId);
+                canalDirecto = chatFachada.canales().crearCanalDirecto(remitenteId, destinatarioId);
             } catch (Exception e) {
                 System.err.println("Error al crear/obtener canal directo: " + e.getMessage());
 
@@ -469,9 +469,9 @@ public class MessageController extends BaseController {
             // Enviar el mensaje según el tipo
             MessageResponseDto messageResponse;
             if (messageType.equals("AUDIO")) {
-                messageResponse = chatFachada.enviarMensajeAudio(sendMessageDto, remitenteId);
+                messageResponse = chatFachada.mensajes().enviarMensajeAudio(sendMessageDto, remitenteId);
             } else {
-                messageResponse = chatFachada.enviarMensajeTexto(sendMessageDto, remitenteId);
+                messageResponse = chatFachada.mensajes().enviarMensajeTexto(sendMessageDto, remitenteId);
             }
 
             // Construir respuesta exitosa en el formato solicitado
@@ -575,7 +575,7 @@ public class MessageController extends BaseController {
             // Obtener o crear el canal directo entre remitente y destinatario
             com.arquitectura.DTO.canales.ChannelResponseDto canalDirecto;
             try {
-                canalDirecto = chatFachada.crearCanalDirecto(remitenteId, destinatarioId);
+                canalDirecto = chatFachada.canales().crearCanalDirecto(remitenteId, destinatarioId);
             } catch (Exception e) {
                 System.err.println("Error al crear/obtener canal directo: " + e.getMessage());
 
@@ -600,7 +600,7 @@ public class MessageController extends BaseController {
             );
 
             // Llamar a la fachada para enviar el mensaje de audio
-            MessageResponseDto audioResponse = chatFachada.enviarMensajeAudio(sendAudioDto, remitenteId);
+            MessageResponseDto audioResponse = chatFachada.mensajes().enviarMensajeAudio(sendAudioDto, remitenteId);
 
             // Construir respuesta exitosa en el formato solicitado
             Map<String, Object> responseData = new HashMap<>();
@@ -688,7 +688,7 @@ public class MessageController extends BaseController {
             }
 
             // Obtener el historial privado de la fachada
-            List<MessageResponseDto> mensajes = chatFachada.obtenerHistorialPrivado(remitenteId, destinatarioId);
+            List<MessageResponseDto> mensajes = chatFachada.mensajes().obtenerHistorialPrivado(remitenteId, destinatarioId);
 
             // Construir la lista de mensajes en el formato solicitado
             List<Map<String, Object>> mensajesData = new ArrayList<>();
