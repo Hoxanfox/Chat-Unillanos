@@ -366,6 +366,14 @@ public class GestionArchivosImpl implements IGestionArchivos {
                                         // Archivo completo en BD, crear archivo físico desde Base64
                                         try {
                                             File archivoFisico = new File(directorioDestino, archivo.getNombreArchivo());
+
+                                            // Asegurar que el directorio padre existe (compatible Linux/Windows)
+                                            File parentDir = archivoFisico.getParentFile();
+                                            if (parentDir != null && !parentDir.exists()) {
+                                                Files.createDirectories(parentDir.toPath());
+                                                System.out.println("[GestionArchivos] Directorio creado: " + parentDir.getAbsolutePath());
+                                            }
+
                                             byte[] contenido = Base64.getDecoder().decode(archivo.getContenidoBase64());
                                             Files.write(archivoFisico.toPath(), contenido);
 
