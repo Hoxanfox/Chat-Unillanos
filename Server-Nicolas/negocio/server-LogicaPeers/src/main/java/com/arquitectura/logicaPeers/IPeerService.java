@@ -254,4 +254,15 @@ public interface IPeerService {
         String peerIp, 
         Integer peerPuerto
     );
+
+    // ==================== SINCRONIZACIÓN DE USUARIOS ====================
+
+    /**
+     * Sincroniza usuarios de todos los peers activos en la red P2P.
+     * Consulta la ruta 'sincronizarUsuarios' en cada peer y agrega sus usuarios
+     * a la lista global, combinándolos con los usuarios locales.
+     *
+     * @return Lista de mapas con información de usuarios de todos los peers
+     */
+    List<java.util.Map<String, Object>> sincronizarUsuariosDeTodosLosPeers();
 }

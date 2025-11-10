@@ -96,4 +96,9 @@ public class P2PFachadaImpl implements IP2PFachada {
                 usuarioId, username, nuevoEstado, peerId, peerIp, peerPuerto
         );
     }
+
+    @Override
+    public List<java.util.Map<String, Object>> sincronizarUsuariosDeTodosLosPeers() {
+        return peerService.sincronizarUsuariosDeTodosLosPeers();
+    }
 }

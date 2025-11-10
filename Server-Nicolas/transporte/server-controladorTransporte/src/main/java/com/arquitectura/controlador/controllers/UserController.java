@@ -6,11 +6,13 @@ import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.controlador.IClientHandler;
 import com.arquitectura.controlador.IContactListBroadcaster;
+import com.arquitectura.events.ContactListUpdateEvent;
 import com.arquitectura.fachada.IChatFachada;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -343,49 +345,114 @@ public class UserController extends BaseController {
      * Obtiene la lista completa de contactos y la envía como notificación push a todos los clientes conectados
      */
     private void broadcastContactListToAllClients() {
+        System.out.println("━━━━━━━━━━━ BROADCAST DE LISTA DE CONTACTOS ━━━━━━━━━━━");
         try {
-            // Obtener lista completa de usuarios (contactos) - sin excluir ninguno
-            List<UserResponseDto> contactos = chatFachada.usuarios().obtenerTodosLosUsuarios();
+            // 🔄 PASO 1: Sincronizar usuarios de peers remotos
+            System.out.println("🔄 [UserController] Sincronizando usuarios de peers remotos...");
+            List<Map<String, Object>> usuariosDePeers = chatFachada.p2p().sincronizarUsuariosDeTodosLosPeers();
+            System.out.println("✓ [UserController] Obtenidos " + usuariosDePeers.size() + " usuarios de peers remotos");
 
-            // Construir lista de contactos en el formato esperado por el cliente
+            // 📋 PASO 2: Obtener usuarios locales
+            System.out.println("📋 [UserController] Obteniendo usuarios locales...");
+            List<UserResponseDto> contactosLocales = chatFachada.usuarios().obtenerTodosLosUsuarios();
+            System.out.println("✓ [UserController] Obtenidos " + contactosLocales.size() + " usuarios locales de BD");
+
+            // 🔗 PASO 3: Combinar usuarios locales con usuarios de peers (evitando duplicados)
             List<Map<String, Object>> contactosData = new ArrayList<>();
-            for (UserResponseDto contacto : contactos) {
-                Map<String, Object> contactoMap = new HashMap<>();
-                contactoMap.put("id", contacto.getUserId() != null ? contacto.getUserId().toString() : null);
-                contactoMap.put("peerid", contacto.getPeerId() != null ? contacto.getPeerId().toString() : null);
-                contactoMap.put("nombre", contacto.getUsername());
-                contactoMap.put("email", contacto.getEmail());
+            Set<String> usuariosYaAgregados = new HashSet<>();
 
-                // Determinar estado online/offline
-                String estadoRaw = contacto.getEstado();
-                String estado;
-                if (estadoRaw == null) {
-                    estado = "offline";
-                } else {
-                    String lower = estadoRaw.trim().toLowerCase();
-                    if (lower.equals("true") || lower.equals("online") || lower.equals("activo") || lower.equals("1")) {
-                        estado = "online";
-                    } else {
+            // Primero agregar usuarios locales
+            for (UserResponseDto contacto : contactosLocales) {
+                String usuarioId = contacto.getUserId().toString();
+
+                if (!usuariosYaAgregados.contains(usuarioId)) {
+                    Map<String, Object> contactoMap = new HashMap<>();
+                    contactoMap.put("id", usuarioId);
+                    contactoMap.put("peerid", contacto.getPeerId() != null ? contacto.getPeerId().toString() : null);
+                    contactoMap.put("nombre", contacto.getUsername());
+                    contactoMap.put("email", contacto.getEmail());
+
+                    // Determinar estado online/offline
+                    String estadoRaw = contacto.getEstado();
+                    String estado;
+                    if (estadoRaw == null) {
                         estado = "offline";
+                    } else {
+                        String lower = estadoRaw.trim().toLowerCase();
+                        if (lower.equals("true") || lower.equals("online") || lower.equals("activo") || lower.equals("1")) {
+                            estado = "online";
+                        } else {
+                            estado = "offline";
+                        }
                     }
+                    contactoMap.put("estado", estado);
+                    contactoMap.put("photoFileId", contacto.getPhotoAddress());
+
+                    contactosData.add(contactoMap);
+                    usuariosYaAgregados.add(usuarioId);
                 }
-                contactoMap.put("estado", estado);
-                contactoMap.put("photoFileId", contacto.getPhotoAddress());
-                contactosData.add(contactoMap);
             }
 
+            System.out.println("✓ [UserController] Procesados " + contactosData.size() + " usuarios locales");
+
+            // Luego agregar usuarios de peers remotos (solo si no están duplicados)
+            int usuariosDePeresAgregados = 0;
+            for (Map<String, Object> usuarioPeer : usuariosDePeers) {
+                String usuarioId = (String) usuarioPeer.get("usuarioId");
+
+                if (usuarioId != null && !usuariosYaAgregados.contains(usuarioId)) {
+                    // Transformar al formato esperado por el cliente
+                    Map<String, Object> contactoMap = new HashMap<>();
+                    contactoMap.put("id", usuarioId);
+                    contactoMap.put("peerid", usuarioPeer.get("peerId"));
+                    contactoMap.put("nombre", usuarioPeer.get("username"));
+                    contactoMap.put("email", null); // Los peers remotos no devuelven email por seguridad
+
+                    // Determinar estado basado en "conectado"
+                    Boolean conectado = (Boolean) usuarioPeer.get("conectado");
+                    String estado = (conectado != null && conectado) ? "online" : "offline";
+                    contactoMap.put("estado", estado);
+                    contactoMap.put("photoFileId", null); // Los archivos se descargan bajo demanda
+
+                    contactosData.add(contactoMap);
+                    usuariosYaAgregados.add(usuarioId);
+                    usuariosDePeresAgregados++;
+                }
+            }
+
+            System.out.println("✓ [UserController] Agregados " + usuariosDePeresAgregados + " usuarios de peers remotos");
+            System.out.println("📊 [UserController] Total usuarios combinados: " + contactosData.size());
+
+            // 📤 PASO 4: Preparar y enviar el broadcast
             Map<String, Object> data = new HashMap<>();
             data.put("contacts", contactosData);
             data.put("total", contactosData.size());
 
-            // Enviar notificación push a todos los clientes conectados
+            System.out.println("📡 [UserController] Enviando broadcast a todos los clientes conectados...");
             contactListBroadcaster.broadcastContactListUpdate(data);
 
-            System.out.println("✅ [UserController] Notificación de lista de contactos enviada a todos los clientes. Total contactos: " + contactosData.size());
+            System.out.println("✅ [UserController] Notificación enviada. Total contactos: " + contactosData.size() +
+                             " (Locales: " + (contactosData.size() - usuariosDePeresAgregados) +
+                             ", Peers remotos: " + usuariosDePeresAgregados + ")");
+            System.out.println("━━━━━━━━━━━ BROADCAST COMPLETADO ━━━━━━━━━━━");
 
         } catch (Exception e) {
+            System.err.println("━━━━━━━━━━━ ERROR EN BROADCAST ━━━━━━━━━━━");
             System.err.println("❌ [UserController] Error al enviar broadcast de lista de contactos: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Listener de eventos: Se activa cuando ocurre una actualización en la lista de contactos
+     * (por ejemplo, después de una sincronización P2P)
+     */
+    @EventListener
+    public void handleContactListUpdateEvent(ContactListUpdateEvent event) {
+        System.out.println("🔔 [UserController] Evento ContactListUpdateEvent recibido desde: " + event.getSource().getClass().getSimpleName());
+        System.out.println("→ [UserController] Activando broadcast automático de lista de contactos...");
+
+        // Llamar al método que hace el broadcast
+        broadcastContactListToAllClients();
     }
 }

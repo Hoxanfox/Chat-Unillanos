@@ -783,4 +783,102 @@ public class PeerServiceImpl implements IPeerService {
             e.printStackTrace();
         }
     }
+
+    // ==================== SINCRONIZACIÓN DE USUARIOS ====================
+
+    @Override
+    public List<java.util.Map<String, Object>> sincronizarUsuariosDeTodosLosPeers() {
+        System.out.println("🔄 [PeerService] Iniciando sincronización de usuarios de todos los peers...");
+
+        List<java.util.Map<String, Object>> todosLosUsuarios = new java.util.ArrayList<>();
+        java.util.Set<String> usuariosYaAgregados = new java.util.HashSet<>();
+
+        try {
+            // Obtener el peer actual para no consultarnos a nosotros mismos
+            UUID peerLocalId = obtenerPeerActualId();
+
+            // Obtener lista de peers activos
+            List<PeerResponseDto> peersActivos = listarPeersActivos();
+
+            // Filtrar el peer local
+            List<PeerResponseDto> peersRemotos = peersActivos.stream()
+                .filter(p -> !p.getPeerId().equals(peerLocalId))
+                .collect(java.util.stream.Collectors.toList());
+
+            System.out.println("→ [PeerService] Consultando usuarios de " + peersRemotos.size() + " peers remotos activos");
+
+            // Consultar cada peer
+            for (PeerResponseDto peer : peersRemotos) {
+                try {
+                    System.out.println("  ├─ Consultando peer: " + peer.getNombreServidor() +
+                                     " (" + peer.getIp() + ":" + peer.getPuerto() + ")");
+
+                    // Preparar la petición
+                    java.util.Map<String, Object> requestData = new java.util.HashMap<>();
+                    requestData.put("peerId", peerLocalId.toString());
+
+                    DTORequest request = new DTORequest("sincronizarUsuarios", requestData);
+
+                    // Usar PeerConnectionPool.enviarPeticion para hacer la petición
+                    DTOResponse response = peerConnectionPool.enviarPeticion(
+                        peer.getIp(),
+                        peer.getPuerto(),
+                        request
+                    );
+
+                    if (response != null && "success".equals(response.getStatus())) {
+                        // Extraer la lista de usuarios de la respuesta
+                        Object dataObj = response.getData();
+
+                        if (dataObj instanceof java.util.Map) {
+                            @SuppressWarnings("unchecked")
+                            java.util.Map<String, Object> dataMap = (java.util.Map<String, Object>) dataObj;
+
+                            if (dataMap.containsKey("usuarios")) {
+                                Object usuariosObj = dataMap.get("usuarios");
+
+                                if (usuariosObj instanceof java.util.List) {
+                                    @SuppressWarnings("unchecked")
+                                    java.util.List<java.util.Map<String, Object>> usuariosPeer =
+                                        (java.util.List<java.util.Map<String, Object>>) usuariosObj;
+
+                                    // Agregar usuarios que no estén duplicados
+                                    int usuariosAgregados = 0;
+                                    for (java.util.Map<String, Object> usuario : usuariosPeer) {
+                                        String usuarioId = (String) usuario.get("usuarioId");
+
+                                        // Solo agregar si no está duplicado
+                                        if (usuarioId != null && !usuariosYaAgregados.contains(usuarioId)) {
+                                            todosLosUsuarios.add(usuario);
+                                            usuariosYaAgregados.add(usuarioId);
+                                            usuariosAgregados++;
+                                        }
+                                    }
+
+                                    System.out.println("  └─ ✓ Agregados " + usuariosAgregados + " usuarios del peer " +
+                                                     peer.getNombreServidor());
+                                }
+                            }
+                        }
+                    } else {
+                        System.out.println("  └─ ⚠ Peer respondió con error o sin datos: " +
+                                         (response != null ? response.getMessage() : "null"));
+                    }
+
+                } catch (Exception e) {
+                    System.err.println("  └─ ✗ Error al consultar peer " + peer.getNombreServidor() +
+                                     ": " + e.getMessage());
+                }
+            }
+
+            System.out.println("✓ [PeerService] Sincronización completada. Total usuarios de peers remotos: " +
+                             todosLosUsuarios.size());
+
+        } catch (Exception e) {
+            System.err.println("✗ [PeerService] Error al sincronizar usuarios de peers: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return todosLosUsuarios;
+    }
 }

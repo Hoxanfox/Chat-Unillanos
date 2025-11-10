@@ -477,39 +477,119 @@ public class PeerConnectionManager {
     
     private void syncWithDatabase() {
         try {
+            log.debug("━━━━━━━━━━━ INICIANDO SINCRONIZACIÓN CON BD ━━━━━━━━━━━");
+
             // Actualizar estado ONLINE para peers conectados
             Set<UUID> connectedPeerIds = getConnectedPeerIds();
-            
+            log.debug("Peers conectados en memoria: {}", connectedPeerIds.size());
+            for (UUID id : connectedPeerIds) {
+                log.debug("  - Peer conectado: {}", id);
+            }
+
             // IMPORTANTE: Asegurar que el peer local SIEMPRE esté marcado como ONLINE
             connectedPeerIds.add(localPeerId);
+            log.debug("Peer local agregado: {}", localPeerId);
 
+            // Lista para rastrear peers que no existen en BD y deben ser limpiados
+            Set<UUID> peersToRemove = new HashSet<>();
+
+            log.debug("Reportando latidos para {} peers...", connectedPeerIds.size());
             for (UUID peerId : connectedPeerIds) {
                 try {
                     peerService.reportarLatido(peerId);
+                    log.trace("  ✓ Latido reportado para peer: {}", peerId);
                 } catch (Exception e) {
-                    log.warn("Error actualizando latido de peer {}: {}", peerId, e.getMessage());
+                    // Si el peer no existe en BD, marcarlo para limpieza
+                    if (e.getMessage() != null && e.getMessage().contains("Peer no encontrado")) {
+                        log.warn("  ✗ Peer {} NO EXISTE EN BD - Marcado para limpieza", peerId);
+                        log.debug("     └─ Mensaje de error: {}", e.getMessage());
+                        peersToRemove.add(peerId);
+                    } else {
+                        log.warn("  ⚠ Error actualizando latido de peer {}: {}", peerId, e.getMessage());
+                    }
                 }
             }
-            
+
+            // Limpiar peers inexistentes de las colecciones en memoria
+            if (!peersToRemove.isEmpty()) {
+                log.info("━━━━━━━━━━━ LIMPIANDO {} PEERS INEXISTENTES ━━━━━━━━━━━", peersToRemove.size());
+
+                for (UUID peerId : peersToRemove) {
+                    log.info("Limpiando peer inexistente: {}", peerId);
+
+                    // Remover de conexiones activas
+                    IPeerHandler handler = activePeerConnections.remove(peerId);
+                    if (handler != null) {
+                        try {
+                            log.debug("  ├─ Cerrando conexión ENTRANTE...");
+                            handler.disconnect();
+                            log.info("  ├─ ✓ Conexión entrante cerrada y removida");
+                        } catch (Exception e) {
+                            log.debug("  ├─ ⚠ Error cerrando conexión entrante: {}", e.getMessage());
+                        }
+                    } else {
+                        log.debug("  ├─ No hay conexión entrante activa");
+                    }
+
+                    // Remover de conexiones salientes
+                    PeerOutgoingConnection outgoing = outgoingConnections.remove(peerId);
+                    if (outgoing != null) {
+                        try {
+                            log.debug("  ├─ Cerrando conexión SALIENTE...");
+                            outgoing.disconnect();
+                            log.info("  └─ ✓ Conexión saliente cerrada y removida");
+                        } catch (Exception e) {
+                            log.debug("  └─ ⚠ Error cerrando conexión saliente: {}", e.getMessage());
+                        }
+                    } else {
+                        log.debug("  └─ No hay conexión saliente activa");
+                    }
+
+                    log.info("Peer inexistente {} completamente removido de memoria", peerId);
+                }
+
+                log.info("━━━━━━━━━━━ LIMPIEZA COMPLETADA ━━━━━━━━━━━");
+            } else {
+                log.trace("No hay peers inexistentes para limpiar");
+            }
+
             // Marcar peers desconectados como OFFLINE (excepto el local)
+            log.debug("Verificando peers en BD para marcar OFFLINE...");
             List<PeerResponseDto> allPeers = peerService.listarPeersDisponibles();
+            log.debug("Total peers en BD: {}", allPeers.size());
+
+            int offlineCount = 0;
             for (PeerResponseDto peer : allPeers) {
                 // NO marcar el peer local como offline
                 if (peer.getPeerId().equals(localPeerId)) {
+                    log.trace("  - Peer local {} - SKIP", peer.getPeerId());
                     continue;
                 }
 
                 if (!connectedPeerIds.contains(peer.getPeerId())) {
                     if ("ONLINE".equals(peer.getConectado())) {
+                        log.debug("  - Peer {} está ONLINE en BD pero desconectado - marcando OFFLINE", peer.getPeerId());
                         peerService.marcarPeerComoDesconectado(peer.getPeerId());
                         log.info("Peer {} marcado como OFFLINE en BD", peer.getPeerId());
+                        offlineCount++;
+                    } else {
+                        log.trace("  - Peer {} ya está OFFLINE", peer.getPeerId());
                     }
+                } else {
+                    log.trace("  - Peer {} está conectado y ONLINE", peer.getPeerId());
                 }
             }
-            
-            log.debug("Sincronización con BD completada. Peers conectados: {}", connectedPeerIds.size());
-            
+
+            if (offlineCount > 0) {
+                log.info("Total peers marcados como OFFLINE: {}", offlineCount);
+            }
+
+            log.debug("━━━━━━━━━━━ SINCRONIZACIÓN COMPLETADA ━━━━━━━━━━━");
+            log.info("Resumen: {} peers conectados, {} limpiados, {} marcados offline",
+                    connectedPeerIds.size() - 1, peersToRemove.size(), offlineCount); // -1 para excluir local
+
         } catch (Exception e) {
+            log.error("━━━━━━━━━━━ ERROR EN SINCRONIZACIÓN ━━━━━━━━━━━");
             log.error("Error sincronizando con base de datos: {}", e.getMessage(), e);
         }
     }

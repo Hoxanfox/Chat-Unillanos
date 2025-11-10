@@ -312,6 +312,15 @@ public class ServerViewController {
                 usuariosData.size() + " usuarios totales (" + usuariosConectados + " conectados) de " + 
                 peersDisponibles.size() + " peers");
 
+            // 🔔 PUBLICAR EVENTO para que se notifique a todos los clientes conectados
+            System.out.println("🔔 [ServerViewController] Publicando evento de actualización de contactos...");
+            try {
+                eventPublisher.publishEvent(new com.arquitectura.events.ContactListUpdateEvent(this));
+                System.out.println("✓ [ServerViewController] Evento de actualización de contactos publicado");
+            } catch (Exception eventEx) {
+                System.err.println("⚠ [ServerViewController] Error al publicar evento de actualización: " + eventEx.getMessage());
+            }
+
             return result;
         } catch (Exception e) {
             System.err.println("✗ [ServerViewController] Error al sincronizar usuarios P2P: " + e.getMessage());
