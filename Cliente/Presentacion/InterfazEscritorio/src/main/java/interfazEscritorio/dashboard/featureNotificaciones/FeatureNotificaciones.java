@@ -149,9 +149,9 @@ public class FeatureNotificaciones extends VBox implements IObservador {
         Button btnRechazar = new Button("✗ Rechazar");
         btnRechazar.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;");
         btnRechazar.setOnAction(e -> {
-            System.out.println("❌ [FeatureNotificaciones]: Rechazando invitación: " + notificacion.getId());
+            System.out.println("❌ [FeatureNotificaciones]: Rechazando invitación: " + notificacion.getId() + " para canal: " + notificacion.getOrigenId());
             btnRechazar.setDisable(true);
-            controlador.rechazarInvitacionCanal(notificacion.getId())
+            controlador.rechazarInvitacionCanal(notificacion.getId(), notificacion.getOrigenId()) // ✅ Pasar ambos IDs: notificationId y channelId
                     .thenRun(() -> System.out.println("✅ Invitación rechazada con éxito"))
                     .exceptionally(ex -> {
                         System.err.println("❌ Error al rechazar invitación: " + ex.getMessage());

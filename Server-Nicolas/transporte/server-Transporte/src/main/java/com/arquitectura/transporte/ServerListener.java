@@ -99,22 +99,42 @@ public class ServerListener implements IContactListBroadcaster {
         log.info("Nuevo mensaje en canal {}. Propagando a los miembros conectados.", originalDto.getChannelId());
         List<UUID> memberIds = event.getRecipientUserIds();
         
-        // Determinar el tipo de acción según el tipo de mensaje
-        String action = "TEXT".equals(originalDto.getMessageType()) ? "nuevoMensajeDirecto" : "nuevoMensajeDirectoAudio";
-        String message = "TEXT".equals(originalDto.getMessageType()) ? "Nuevo mensaje recibido" : "Nuevo mensaje de audio recibido";
-        
+        // Determinar el tipo de acción según el tipo de canal y tipo de mensaje
+        String channelType = originalDto.getChannelType() != null ? originalDto.getChannelType() : "GRUPO";
+        String action;
+        String message;
+
+        if ("DIRECTO".equals(channelType)) {
+            // Canal directo (chat privado entre dos usuarios)
+            action = "TEXT".equals(originalDto.getMessageType()) ? "nuevoMensajeDirecto" : "nuevoMensajeDirectoAudio";
+            message = "TEXT".equals(originalDto.getMessageType()) ? "Nuevo mensaje recibido" : "Nuevo mensaje de audio recibido";
+        } else {
+            // Canal grupal o broadcast
+            action = "TEXT".equals(originalDto.getMessageType()) ? "nuevoMensajeCanal" : "nuevoMensajeCanalAudio";
+            message = "TEXT".equals(originalDto.getMessageType()) ? "Nuevo mensaje en canal" : "Nuevo mensaje de audio en canal";
+        }
+
         // Enriquecer el mensaje (convertir audio a base64 si es necesario)
         MessageResponseDto dtoParaPropagar = requestDispatcher.enrichOutgoingMessage(originalDto);
         if (dtoParaPropagar != originalDto) {
             log.info("Mensaje de audio ID {} codificado a Base64 para su propagación.", originalDto.getMessageId());
         }
 
-        // Construir el objeto de datos de la notificación en el formato solicitado
+        // Construir el objeto de datos de la notificación
         Map<String, Object> notificationData = new HashMap<>();
         notificationData.put("mensajeId", dtoParaPropagar.getMessageId().toString());
+        notificationData.put("messageId", dtoParaPropagar.getMessageId().toString()); // Compatibilidad
+        notificationData.put("channelId", dtoParaPropagar.getChannelId().toString()); // Para identificar el canal
+        notificationData.put("canalId", dtoParaPropagar.getChannelId().toString()); // Compatibilidad
         notificationData.put("remitenteId", dtoParaPropagar.getAuthor().getUserId().toString());
         notificationData.put("remitenteNombre", dtoParaPropagar.getAuthor().getUsername());
         
+        // Información del autor (objeto completo para compatibilidad con cliente)
+        Map<String, Object> authorData = new HashMap<>();
+        authorData.put("userId", dtoParaPropagar.getAuthor().getUserId().toString());
+        authorData.put("username", dtoParaPropagar.getAuthor().getUsername());
+        notificationData.put("author", authorData);
+
         // Peer IDs (si están disponibles)
         if (dtoParaPropagar.getAuthor().getPeerId() != null) {
             notificationData.put("peerRemitenteId", dtoParaPropagar.getAuthor().getPeerId().toString());
@@ -126,8 +146,11 @@ public class ServerListener implements IContactListBroadcaster {
         // Tipo y contenido
         String tipo = "TEXT".equals(dtoParaPropagar.getMessageType()) ? "texto" : "audio";
         notificationData.put("tipo", tipo);
+        notificationData.put("messageType", dtoParaPropagar.getMessageType()); // Compatibilidad
         notificationData.put("contenido", dtoParaPropagar.getContent());
+        notificationData.put("content", dtoParaPropagar.getContent()); // Compatibilidad
         notificationData.put("fechaEnvio", dtoParaPropagar.getTimestamp().toString());
+        notificationData.put("timestamp", dtoParaPropagar.getTimestamp().toString()); // Compatibilidad
 
         DTOResponse response = new DTOResponse(action, "success", message, notificationData);
         String notification = gson.toJson(response);

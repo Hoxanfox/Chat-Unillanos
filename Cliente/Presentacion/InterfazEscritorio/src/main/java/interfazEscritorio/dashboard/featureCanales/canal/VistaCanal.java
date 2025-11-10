@@ -421,11 +421,12 @@ public class VistaCanal extends BorderPane implements IObservador {
                     break;
 
                 case "MENSAJE_CANAL_RECIBIDO":
+                case "MENSAJE_CANAL_ENVIADO":
                 case "NUEVO_MENSAJE_CANAL":
                     if (datos instanceof DTOMensajeCanal) {
                         DTOMensajeCanal mensaje = (DTOMensajeCanal) datos;
                         if (mensaje.getCanalId().equals(canal.getId())) {
-                            System.out.println("💬 [VistaCanal]: Nuevo mensaje recibido");
+                            System.out.println("💬 [VistaCanal]: Nuevo mensaje " + (tipoDeDato.equals("MENSAJE_CANAL_ENVIADO") ? "enviado" : "recibido"));
                             System.out.println("   → De: " + mensaje.getNombreRemitente());
                             System.out.println("   → Tipo: " + mensaje.getTipo());
                             agregarMensaje(mensaje);
@@ -526,33 +527,57 @@ public class VistaCanal extends BorderPane implements IObservador {
             Button btnPlay = new Button("▶️");
             btnPlay.setStyle("-fx-font-size: 16px;");
             btnPlay.setOnAction(e -> {
-                System.out.println("🎵 [VistaCanal]: Reproducir audio - FileId: " + mensaje.getFileId());
-                // TODO: Implementar reproducción de audio
-                btnPlay.setText("⏳");
-                btnPlay.setDisable(true);
+                // Obtener el fileId del mensaje (puede estar en fileId o content)
+                String audioFileId = mensaje.getFileId() != null ? mensaje.getFileId() : mensaje.getContenido();
 
-                // Simulación - en producción usar controlador.reproducirAudio()
-                new Thread(() -> {
-                    try {
-                        Thread.sleep(2000);
-                    } catch (InterruptedException ex) {
-                        ex.printStackTrace();
-                    }
-                    Platform.runLater(() -> {
-                        btnPlay.setText("✅");
-                        new Thread(() -> {
-                            try {
-                                Thread.sleep(1000);
-                            } catch (InterruptedException ex) {
-                                ex.printStackTrace();
-                            }
+                if (audioFileId != null && !audioFileId.isEmpty()) {
+                    System.out.println("🎵 [VistaCanal]: Reproduciendo audio - FileId: " + audioFileId);
+                    btnPlay.setText("⏳");
+                    btnPlay.setDisable(true);
+
+                    controlador.reproducirAudio(audioFileId)
+                        .thenRun(() -> Platform.runLater(() -> {
+                            btnPlay.setText("✅");
+                            System.out.println("✅ [VistaCanal]: Audio reproducido correctamente");
+
+                            // Volver al estado original después de 1 segundo
+                            new Thread(() -> {
+                                try {
+                                    Thread.sleep(1000);
+                                } catch (InterruptedException ex) {
+                                    Thread.currentThread().interrupt();
+                                }
+                                Platform.runLater(() -> {
+                                    btnPlay.setText("▶️");
+                                    btnPlay.setDisable(false);
+                                });
+                            }).start();
+                        }))
+                        .exceptionally(ex -> {
                             Platform.runLater(() -> {
-                                btnPlay.setText("▶️");
-                                btnPlay.setDisable(false);
+                                btnPlay.setText("❌");
+                                System.err.println("❌ [VistaCanal]: Error al reproducir audio: " + ex.getMessage());
+                                mostrarError("Error al reproducir audio: " + ex.getMessage());
+
+                                // Volver al estado original después de 2 segundos
+                                new Thread(() -> {
+                                    try {
+                                        Thread.sleep(2000);
+                                    } catch (InterruptedException e2) {
+                                        Thread.currentThread().interrupt();
+                                    }
+                                    Platform.runLater(() -> {
+                                        btnPlay.setText("▶️");
+                                        btnPlay.setDisable(false);
+                                    });
+                                }).start();
                             });
-                        }).start();
-                    });
-                }).start();
+                            return null;
+                        });
+                } else {
+                    System.err.println("❌ [VistaCanal]: No se pudo obtener el fileId del audio");
+                    mostrarError("No se pudo obtener el ID del archivo de audio");
+                }
             });
 
             Label audioLabel = new Label("🎤 Mensaje de audio");

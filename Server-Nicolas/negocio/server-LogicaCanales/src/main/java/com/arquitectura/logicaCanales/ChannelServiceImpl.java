@@ -152,11 +152,11 @@ public class ChannelServiceImpl implements IChannelService {
         return savedChannel;
 
     }
-    
+
     @Override
     @Transactional
     public void invitarMiembro(InviteMemberRequestDto inviteMemberRequestDto, UUID ownerId) throws Exception {
-        Channel channel = channelRepository.findById(inviteMemberRequestDto.getChannelId())
+        Channel channel = channelRepository.findByIdWithOwner(inviteMemberRequestDto.getChannelId())
                 .orElseThrow(() -> new Exception("Canal no encontrado."));
 
         if (!channel.getOwner().getUserId().equals(ownerId)) {
@@ -172,9 +172,17 @@ public class ChannelServiceImpl implements IChannelService {
 
         MembresiaCanalId membresiaId = new MembresiaCanalId(channel.getChannelId(), userToInvite.getUserId());
 
-        // Verificar si ya existe una membresía
-        if(membresiaCanalRepository.existsById(membresiaId)){
-            throw new Exception("El usuario ya es miembro o tiene una invitación pendiente.");
+        Optional<MembresiaCanal> existing = membresiaCanalRepository.findById(membresiaId);
+        if (existing.isPresent()) {
+            EstadoMembresia estado = existing.get().getEstado();
+            System.out.println("Invite attempt: existing membership found for user=" + userToInvite.getUserId() + " channel=" + channel.getChannelId() + " estado=" + estado);
+            if (estado == EstadoMembresia.PENDIENTE) {
+                throw new Exception("El usuario ya tiene una invitación pendiente.");
+            } else if (estado == EstadoMembresia.ACTIVO) {
+                throw new Exception("El usuario ya es miembro del canal.");
+            } else {
+                throw new Exception("El usuario ya tiene una membresía con estado: " + estado);
+            }
         }
 
         MembresiaCanal nuevaInvitacion = new MembresiaCanal(membresiaId, userToInvite, channel, EstadoMembresia.PENDIENTE);
@@ -187,21 +195,58 @@ public class ChannelServiceImpl implements IChannelService {
     @Override
     @Transactional
     public void responderInvitacion(RespondToInviteRequestDto requestDto, UUID userId) throws Exception {
+        System.out.println("=== RESPOND INVITATION DEBUG ===");
+        System.out.println("Channel ID: " + requestDto.getChannelId());
+        System.out.println("User ID: " + userId);
+        System.out.println("Accepted: " + requestDto.isAccepted());
+
         MembresiaCanalId membresiaId = new MembresiaCanalId(requestDto.getChannelId(), userId);
 
-        MembresiaCanal invitacion = membresiaCanalRepository.findById(membresiaId)
-                .orElseThrow(() -> new Exception("No se encontró una invitación para este usuario en este canal."));
+        // Verificar si existe alguna membresía para este usuario en este canal
+        Optional<MembresiaCanal> invitacionOpt = membresiaCanalRepository.findById(membresiaId);
+
+        if (!invitacionOpt.isPresent()) {
+            System.out.println("ERROR: No membership found for user " + userId + " in channel " + requestDto.getChannelId());
+
+            // Listar todas las invitaciones pendientes de este usuario para diagnóstico
+            List<MembresiaCanal> allPending = membresiaCanalRepository.findPendingMembresiasByUserIdWithDetails(userId, EstadoMembresia.PENDIENTE);
+            System.out.println("User has " + allPending.size() + " pending invitations:");
+
+            StringBuilder pendingChannels = new StringBuilder();
+            for (MembresiaCanal m : allPending) {
+                String channelInfo = m.getCanal().getChannelId() + " (" + m.getCanal().getName() + ")";
+                System.out.println("  - Channel: " + channelInfo);
+                if (pendingChannels.length() > 0) {
+                    pendingChannels.append(", ");
+                }
+                pendingChannels.append(m.getCanal().getName());
+            }
+
+            // Mensaje más útil para el cliente
+            if (allPending.isEmpty()) {
+                throw new Exception("No tienes invitaciones pendientes para responder.");
+            } else {
+                throw new Exception("No se encontró una invitación para este canal. Tus invitaciones pendientes son: " + pendingChannels.toString());
+            }
+        }
+
+        MembresiaCanal invitacion = invitacionOpt.get();
+        System.out.println("Found membership with estado: " + invitacion.getEstado());
 
         if (invitacion.getEstado() != EstadoMembresia.PENDIENTE) {
             throw new Exception("No hay una invitación pendiente que responder.");
         }
 
         if (requestDto.isAccepted()) {
+            System.out.println("Accepting invitation - setting estado to ACTIVO");
             invitacion.setEstado(EstadoMembresia.ACTIVO);
             membresiaCanalRepository.save(invitacion);
         } else {
+            System.out.println("Rejecting invitation - deleting membership");
             membresiaCanalRepository.delete(invitacion);
         }
+
+        System.out.println("=== RESPOND INVITATION SUCCESS ===");
     }
 
     @Override
@@ -329,4 +374,3 @@ public class ChannelServiceImpl implements IChannelService {
     }
 
 }
-

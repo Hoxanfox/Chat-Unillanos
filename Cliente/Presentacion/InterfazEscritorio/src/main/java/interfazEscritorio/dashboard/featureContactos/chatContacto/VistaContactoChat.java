@@ -223,6 +223,32 @@ public class VistaContactoChat extends BorderPane implements IObservador {
                 }
                 break;
 
+            case "NUEVO_MENSAJE_AUDIO_PRIVADO":
+                // ✅ NUEVO: Mensaje de audio PUSH (ya procesado por ServicioChat)
+                if (datos instanceof DTOMensaje) {
+                    DTOMensaje mensaje = (DTOMensaje) datos;
+
+                    // Validación null-safe
+                    if (mensaje.getRemitenteId() == null) {
+                        System.err.println("⚠️ [VistaContactoChat]: Audio PUSH con remitenteId null, ignorando...");
+                        break;
+                    }
+
+                    // Solo mostrar si es de nuestro contacto actual o si somos nosotros
+                    if (mensaje.getRemitenteId().equals(contacto.getId()) || mensaje.esMio()) {
+                        System.out.println("🎵 [VistaContactoChat]: Nuevo audio PUSH recibido");
+                        System.out.println("   → De: " + mensaje.getRemitenteNombre());
+                        System.out.println("   → FileId: " + mensaje.getFileId());
+
+                        // El ServicioChat ya procesó el Base64 y guardó el archivo
+                        // Solo necesitamos agregar el mensaje a la vista
+                        Platform.runLater(() -> agregarMensaje(mensaje));
+                    } else {
+                        System.out.println("⚠️ [VistaContactoChat]: Audio PUSH ignorado (no es del contacto actual)");
+                    }
+                }
+                break;
+
             case "MENSAJE_ENVIADO_EXITOSO":
             case "MENSAJE_AUDIO_ENVIADO_EXITOSO":
                 // Confirmación de que nuestro mensaje fue enviado

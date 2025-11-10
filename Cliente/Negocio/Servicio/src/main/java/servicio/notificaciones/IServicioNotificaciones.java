@@ -31,7 +31,7 @@ public interface IServicioNotificaciones {
     /**
      * Rechaza una invitación a un canal.
      */
-    CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId);
+    CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId, String canalId);
 
     /**
      * Registra un observador para recibir actualizaciones.

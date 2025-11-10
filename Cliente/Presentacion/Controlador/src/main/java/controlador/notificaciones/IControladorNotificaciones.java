@@ -38,7 +38,8 @@ public interface IControladorNotificaciones extends ISujeto {
     /**
      * Rechaza una invitación a un canal.
      * @param invitacionId ID de la invitación
+     * @param canalId ID del canal
      * @return CompletableFuture que se completa cuando se rechaza la invitación
      */
-    CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId);
+    CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId, String canalId);
 }

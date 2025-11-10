@@ -29,4 +29,8 @@ public interface ChannelRepository extends JpaRepository<Channel, UUID> {
     // Esta consulta ya estaba bien escrita, ¡usa la misma técnica!
     @Query("SELECT DISTINCT c FROM Channel c LEFT JOIN FETCH c.owner o LEFT JOIN FETCH c.membresias m LEFT JOIN FETCH m.usuario u")
     List<Channel> findAllWithMembresiasAndUsuarios();
+
+    // Método para buscar canal por ID con owner cargado (evita LazyInitializationException)
+    @Query("SELECT c FROM Channel c JOIN FETCH c.owner WHERE c.channelId = :channelId")
+    Optional<Channel> findByIdWithOwner(@Param("channelId") UUID channelId);
 }
