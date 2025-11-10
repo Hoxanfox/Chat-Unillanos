@@ -33,6 +33,7 @@ public class PeerController extends BaseController {
         "descubrirpeers",
         "sincronizarusuarios",
         "notificarcambioestado",
+        "notificacioncambiousuario",  // Nueva acción PUSH para sincronización automática
         "verificarconexion",
         "ping",
         "obtenerestadored",
@@ -52,13 +53,17 @@ public class PeerController extends BaseController {
             return false;
         }
         
-        System.out.println("→ [PeerController] Manejando acción: " + action);
-        
+        System.out.println("→ [PeerController] Manejando acción P2P: " + action);
+
+        // CRÍTICO: Reportar heartbeat del peer que envía la petición
+        // Esto asegura que las conexiones efímeras también actualicen el estado del peer
+        reportarHeartbeatDePeticion(request, handler);
+
         switch (actionLower) {
             // case "añadirpeer":  // DESHABILITADO: Auto-registro via bootstrap
             //     handleAñadirPeer(request, handler);
             //     break;
-            case "listarPeersDisponibles":
+            case "listarpeersdisponibles":
                 handleListarPeersDisponibles(request, handler);
                 break;
             case "reportarlatido":
@@ -81,6 +86,9 @@ public class PeerController extends BaseController {
                 break;
             case "notificarcambioestado":
                 handleNotificarCambioEstado(request, handler);
+                break;
+            case "notificacioncambiousuario":
+                handleNotificacionCambioUsuario(request, handler);
                 break;
             case "verificarconexion":
             case "ping":
@@ -759,74 +767,66 @@ public class PeerController extends BaseController {
      * }
      */
     private void handleSincronizarUsuarios(DTORequest request, IClientHandler handler) {
-        System.out.println("→ [PeerController] Procesando sincronizarUsuarios");
-        
+        System.out.println("→ [PeerController] Procesando sincronizarUsuarios (petición P2P entrante)");
+
         try {
-            // El payload es opcional para esta operación
+            // IMPORTANTE: Cuando esta petición viene de OTRO PEER (vía P2P),
+            // SOLO devolvemos usuarios LOCALES. NO consultamos otros peers para evitar bucles recursivos.
+            // El peer que hace la consulta es quien debe agregar los datos de múltiples peers.
+
             UUID peerSolicitanteId = null;
             
             if (request.getPayload() != null) {
                 JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
                 
-                // Verificar si se proporciona peerId (opcional)
                 if (payload.has("peerId") && !payload.get("peerId").isJsonNull()) {
                     try {
                         String peerIdStr = payload.get("peerId").getAsString();
                         peerSolicitanteId = UUID.fromString(peerIdStr);
                         System.out.println("→ [PeerController] Sincronización solicitada por peer: " + peerSolicitanteId);
                     } catch (IllegalArgumentException e) {
-                        System.out.println("→ [PeerController] PeerId inválido, continuando sin validación");
+                        System.out.println("⚠ [PeerController] PeerId inválido, continuando sin validación");
                     }
                 }
             }
             
-            // Obtener todos los usuarios del sistema
-            List<com.arquitectura.DTO.usuarios.UserResponseDto> todosLosUsuarios = 
+            // Obtener SOLO usuarios LOCALES (no consultar otros peers)
+            List<com.arquitectura.DTO.usuarios.UserResponseDto> usuariosLocales =
                 chatFachada.usuarios().obtenerTodosLosUsuarios();
 
-            // Preparar lista de usuarios con su información de ubicación
-            List<Map<String, Object>> usuariosData = new ArrayList<>();
+            Map<String, Map<String, Object>> mapaUsuarios = new HashMap<>();
             int usuariosConectados = 0;
             
-            for (com.arquitectura.DTO.usuarios.UserResponseDto usuario : todosLosUsuarios) {
+            // Obtener info del peer actual
+            UUID peerActualId = chatFachada.p2p().obtenerPeerActualId();
+            com.arquitectura.DTO.p2p.PeerResponseDto peerActual = chatFachada.p2p().obtenerPeer(peerActualId);
+            
+            System.out.println("→ [PeerController] Devolviendo " + usuariosLocales.size() + " usuarios locales (sin consultar otros peers)");
+
+            for (com.arquitectura.DTO.usuarios.UserResponseDto usuario : usuariosLocales) {
                 Map<String, Object> usuarioMap = new HashMap<>();
                 usuarioMap.put("usuarioId", usuario.getUserId().toString());
                 usuarioMap.put("username", usuario.getUsername());
                 
-                // Verificar si el usuario está conectado (estado == "ONLINE")
                 boolean conectado = "ONLINE".equalsIgnoreCase(usuario.getEstado());
                 usuarioMap.put("conectado", conectado);
                 
-                // Si el usuario está conectado, buscar en qué peer está
                 if (conectado) {
                     usuariosConectados++;
-                    try {
-                        com.arquitectura.DTO.p2p.UserLocationResponseDto ubicacion = 
-                            chatFachada.p2p().buscarUsuario(usuario.getUserId());
-                        
-                        if (ubicacion.getPeerId() != null) {
-                            usuarioMap.put("peerId", ubicacion.getPeerId().toString());
-                            usuarioMap.put("peerIp", ubicacion.getPeerIp());
-                            usuarioMap.put("peerPuerto", ubicacion.getPeerPuerto());
-                        } else {
-                            usuarioMap.put("peerId", null);
-                            usuarioMap.put("peerIp", null);
-                            usuarioMap.put("peerPuerto", null);
-                        }
-                    } catch (Exception e) {
-                        // Si no se puede obtener la ubicación, marcar como null
-                        usuarioMap.put("peerId", null);
-                        usuarioMap.put("peerIp", null);
-                        usuarioMap.put("peerPuerto", null);
-                    }
+                    usuarioMap.put("peerId", peerActual.getPeerId().toString());
+                    usuarioMap.put("peerIp", peerActual.getIp());
+                    usuarioMap.put("peerPuerto", peerActual.getPuerto());
                 } else {
                     usuarioMap.put("peerId", null);
                     usuarioMap.put("peerIp", null);
                     usuarioMap.put("peerPuerto", null);
                 }
                 
-                usuariosData.add(usuarioMap);
+                mapaUsuarios.put(usuario.getUserId().toString(), usuarioMap);
             }
+            
+            // Convertir el mapa a lista
+            List<Map<String, Object>> usuariosData = new ArrayList<>(mapaUsuarios.values());
             
             // Obtener timestamp de sincronización
             String fechaSincronizacion = java.time.LocalDateTime.now()
@@ -835,13 +835,14 @@ public class PeerController extends BaseController {
             // Preparar respuesta completa
             Map<String, Object> responseData = new HashMap<>();
             responseData.put("usuarios", usuariosData);
-            responseData.put("totalUsuarios", todosLosUsuarios.size());
+            responseData.put("totalUsuarios", usuariosData.size());
             responseData.put("usuariosConectados", usuariosConectados);
             responseData.put("fechaSincronizacion", fechaSincronizacion);
             
             System.out.println("✓ [PeerController] Sincronización completada: " + 
-                todosLosUsuarios.size() + " usuarios (" + usuariosConectados + " conectados)");
-            sendJsonResponse(handler, "sincronizarUsuarios", true, 
+                usuariosData.size() + " usuarios locales (" + usuariosConectados + " conectados)");
+
+            sendJsonResponse(handler, "sincronizarUsuarios", true,
                 "Usuarios sincronizados exitosamente", responseData);
             
         } catch (Exception e) {
@@ -1388,4 +1389,202 @@ public class PeerController extends BaseController {
         }
     }
     
+    /**
+     * Maneja la recepción de notificaciones PUSH de cambios de estado de usuario.
+     * Esta acción es llamada automáticamente por otros peers cuando un usuario cambia de estado.
+     * NO requiere autenticación ya que es una notificación entre servidores.
+     *
+     * Request data esperado:
+     * {
+     *   "usuarioId": "uuid-del-usuario",
+     *   "username": "nombre-usuario",
+     *   "nuevoEstado": "ONLINE",
+     *   "peerId": "uuid-del-peer" (null si OFFLINE),
+     *   "peerIp": "192.168.1.5" (null si OFFLINE),
+     *   "peerPuerto": 9000 (null si OFFLINE),
+     *   "timestamp": "2024-11-07T10:30:00"
+     * }
+     */
+    private void handleNotificacionCambioUsuario(DTORequest request, IClientHandler handler) {
+        System.out.println("🔔 [PeerController] Recibiendo notificación PUSH de cambio de usuario");
+
+        if (!validatePayload(request.getPayload(), handler, "notificacionCambioUsuario")) {
+            return;
+        }
+
+        try {
+            JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+
+            // Validar campos requeridos
+            if (!payload.has("usuarioId") || !payload.has("username") || !payload.has("nuevoEstado")) {
+                sendJsonResponse(handler, "notificacionCambioUsuario", false,
+                    "Faltan campos requeridos",
+                    Map.of("campo", "usuarioId/username/nuevoEstado", "motivo", "Campos requeridos"));
+                return;
+            }
+
+            String usuarioIdStr = payload.get("usuarioId").getAsString();
+            String username = payload.get("username").getAsString();
+            String nuevoEstado = payload.get("nuevoEstado").getAsString().toUpperCase();
+
+            // Parsear UUID
+            UUID usuarioId;
+            try {
+                usuarioId = UUID.fromString(usuarioIdStr);
+            } catch (IllegalArgumentException e) {
+                sendJsonResponse(handler, "notificacionCambioUsuario", false,
+                    "Formato de UUID inválido",
+                    Map.of("campo", "usuarioId", "motivo", "Formato UUID inválido"));
+                return;
+            }
+
+            // Validar estado
+            if (!nuevoEstado.equals("ONLINE") && !nuevoEstado.equals("OFFLINE")) {
+                sendJsonResponse(handler, "notificacionCambioUsuario", false,
+                    "Estado inválido",
+                    Map.of("campo", "nuevoEstado", "motivo", "El estado debe ser ONLINE u OFFLINE"));
+                return;
+            }
+
+            System.out.println("🔔 [PeerController] Usuario: " + username + " cambió a estado: " + nuevoEstado);
+
+            // Extraer información del peer (si está ONLINE)
+            UUID peerId = null;
+            String peerIp = null;
+            Integer peerPuerto = null;
+
+            if (nuevoEstado.equals("ONLINE")) {
+                if (payload.has("peerId") && !payload.get("peerId").isJsonNull()) {
+                    try {
+                        peerId = UUID.fromString(payload.get("peerId").getAsString());
+                    } catch (Exception e) {
+                        // Si el peerId es inválido, continuar sin él
+                    }
+                }
+                if (payload.has("peerIp") && !payload.get("peerIp").isJsonNull()) {
+                    peerIp = payload.get("peerIp").getAsString();
+                }
+                if (payload.has("peerPuerto") && !payload.get("peerPuerto").isJsonNull()) {
+                    peerPuerto = payload.get("peerPuerto").getAsInt();
+                }
+            }
+
+            // Obtener timestamp de la notificación
+            String timestamp = payload.has("timestamp") && !payload.get("timestamp").isJsonNull() ?
+                payload.get("timestamp").getAsString() :
+                java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+
+            // AQUÍ ES DONDE ACTUALIZAMOS NUESTRO SISTEMA CON LA INFORMACIÓN DEL OTRO PEER
+
+            // 1. Verificar si el usuario existe en nuestro sistema
+            List<com.arquitectura.DTO.usuarios.UserResponseDto> todosUsuarios =
+                chatFachada.usuarios().obtenerTodosLosUsuarios();
+
+            com.arquitectura.DTO.usuarios.UserResponseDto usuarioEncontrado = null;
+            for (com.arquitectura.DTO.usuarios.UserResponseDto u : todosUsuarios) {
+                if (u.getUserId().equals(usuarioId)) {
+                    usuarioEncontrado = u;
+                    break;
+                }
+            }
+
+            if (usuarioEncontrado != null) {
+                // El usuario existe en nuestro sistema, actualizar su estado
+                boolean estadoBoolean = nuevoEstado.equals("ONLINE");
+                chatFachada.usuarios().cambiarEstadoUsuario(usuarioId, estadoBoolean);
+
+                System.out.println("✓ [PeerController] Usuario actualizado en sistema local: " +
+                    username + " -> " + nuevoEstado);
+
+                // Si está ONLINE y tenemos información del peer, asociarlo
+                if (estadoBoolean && peerId != null) {
+                    System.out.println("  └─ Asociado al peer: " + peerId + " (" + peerIp + ":" + peerPuerto + ")");
+                }
+            } else {
+                // El usuario NO existe en nuestro sistema local
+                // Esto es normal en una red P2P, simplemente registramos la notificación
+                System.out.println("ℹ [PeerController] Usuario no existe en sistema local (normal en P2P): " + username);
+            }
+
+            // Preparar respuesta de confirmación
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("usuarioId", usuarioId.toString());
+            responseData.put("username", username);
+            responseData.put("nuevoEstado", nuevoEstado);
+            responseData.put("procesado", true);
+            responseData.put("timestampRecepcion", java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            responseData.put("timestampNotificacion", timestamp);
+
+            System.out.println("✓ [PeerController] Notificación PUSH procesada exitosamente");
+            sendJsonResponse(handler, "notificacionCambioUsuario", true,
+                "Notificación recibida y procesada", responseData);
+
+        } catch (Exception e) {
+            System.err.println("✗ [PeerController] Error al procesar notificación PUSH: " + e.getMessage());
+            e.printStackTrace();
+            sendJsonResponse(handler, "notificacionCambioUsuario", false,
+                "Error al procesar notificación: " + e.getMessage(), null);
+        }
+    }
+
+    /**
+     * Reporta el heartbeat del peer que envió la petición.
+     * Esto es CRÍTICO para mantener actualizado el estado de peers que usan conexiones efímeras.
+     */
+    private void reportarHeartbeatDePeticion(DTORequest request, IClientHandler handler) {
+        try {
+            // Intentar obtener el peerId del payload
+            UUID peerSolicitanteId = null;
+            String peerIp = null;
+            Integer peerPort = null;
+
+            if (request.getPayload() != null) {
+                JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+
+                // Buscar peerId en el payload
+                if (payload.has("peerId") && !payload.get("peerId").isJsonNull()) {
+                    try {
+                        String peerIdStr = payload.get("peerId").getAsString();
+                        peerSolicitanteId = UUID.fromString(peerIdStr);
+                    } catch (IllegalArgumentException e) {
+                        // ID inválido, continuar sin reportar
+                    }
+                }
+
+                // Buscar IP y puerto (si están disponibles)
+                if (payload.has("peerIp") && !payload.get("peerIp").isJsonNull()) {
+                    peerIp = payload.get("peerIp").getAsString();
+                }
+                if (payload.has("peerPort") && !payload.get("peerPort").isJsonNull()) {
+                    peerPort = payload.get("peerPort").getAsInt();
+                } else if (payload.has("peerPuerto") && !payload.get("peerPuerto").isJsonNull()) {
+                    peerPort = payload.get("peerPuerto").getAsInt();
+                }
+            }
+
+            // Si no hay peerId en el payload, intentar obtenerlo del handler
+            if (peerSolicitanteId == null && handler instanceof com.arquitectura.controlador.IPeerHandler) {
+                com.arquitectura.controlador.IPeerHandler peerHandler = (com.arquitectura.controlador.IPeerHandler) handler;
+                peerSolicitanteId = peerHandler.getPeerId();
+                peerIp = peerHandler.getPeerIp();
+                peerPort = peerHandler.getPeerPort();
+            }
+
+            // Reportar heartbeat si tenemos el peerId
+            if (peerSolicitanteId != null) {
+                if (peerIp != null && peerPort != null) {
+                    chatFachada.p2p().reportarLatido(peerSolicitanteId, peerIp, peerPort);
+                    System.out.println("✓ [PeerController] Heartbeat reportado para peer: " + peerSolicitanteId + " (conexión efímera)");
+                } else {
+                    chatFachada.p2p().reportarLatido(peerSolicitanteId);
+                    System.out.println("✓ [PeerController] Heartbeat reportado para peer: " + peerSolicitanteId);
+                }
+            }
+
+        } catch (Exception e) {
+            // No es crítico si falla, solo registrar el error
+            System.err.println("⚠ [PeerController] Error al reportar heartbeat de petición: " + e.getMessage());
+        }
+    }
 }

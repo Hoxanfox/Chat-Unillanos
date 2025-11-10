@@ -2,6 +2,7 @@ package com.arquitectura.transporte;
 
 import com.arquitectura.controlador.IPeerHandler;
 import com.arquitectura.DTO.Comunicacion.DTORequest;
+import com.arquitectura.controlador.RequestDispatcher;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import org.slf4j.Logger;
@@ -26,6 +27,7 @@ public class PeerHandler implements IPeerHandler, Runnable {
     private final Gson gson;
     private final PeerConnectionManager connectionManager;
     private final Consumer<IPeerHandler> onDisconnect;
+    private final RequestDispatcher requestDispatcher;
 
     private BufferedReader in;
     private PrintWriter out;
@@ -38,13 +40,14 @@ public class PeerHandler implements IPeerHandler, Runnable {
     private volatile long lastHeartbeat;
 
     public PeerHandler(Socket socket, Gson gson, PeerConnectionManager connectionManager,
-                       Consumer<IPeerHandler> onDisconnect) {
+                       Consumer<IPeerHandler> onDisconnect, RequestDispatcher requestDispatcher) {
         this.socket = socket;
         this.gson = gson;
         this.connectionManager = connectionManager;
         this.onDisconnect = onDisconnect;
         this.peerIp = socket.getInetAddress().getHostAddress();
         this.lastHeartbeat = System.currentTimeMillis();
+        this.requestDispatcher=requestDispatcher;
     }
 
     @Override
@@ -80,8 +83,6 @@ public class PeerHandler implements IPeerHandler, Runnable {
                 return;
             }
 
-            // --- INICIO DE LA SOLUCIÓN ---
-
             // Si el peer NO está autenticado, el ÚNICO mensaje que permitimos
             // es el "peer_handshake".
             if (!this.authenticated) {
@@ -98,11 +99,9 @@ public class PeerHandler implements IPeerHandler, Runnable {
                 return;
             }
 
-            // --- FIN DE LA SOLUCIÓN ---
 
             // Si llegamos aquí, es porque this.authenticated == true
             // y this.peerId NO es nulo.
-
             log.debug("Mensaje recibido de peer {}: action={}", peerId, request.getAction());
 
             switch (request.getAction()) {
@@ -256,10 +255,6 @@ public class PeerHandler implements IPeerHandler, Runnable {
         return connected && socket != null && !socket.isClosed();
     }
 
-    public boolean isAuthenticated() {
-        return authenticated;
-    }
-
     @Override
     public UUID getPeerId() {
         return peerId;
@@ -283,5 +278,37 @@ public class PeerHandler implements IPeerHandler, Runnable {
     @Override
     public void updateHeartbeat() {
         this.lastHeartbeat = System.currentTimeMillis();
+    }
+
+    // === Implementación de métodos de IClientHandler ===
+
+    @Override
+    public String getClientIpAddress() {
+        return peerIp;
+    }
+
+    @Override
+    public void setAuthenticatedUser(com.arquitectura.DTO.usuarios.UserResponseDto user) {
+        // Los peers no tienen usuarios autenticados, pero necesitamos implementar el método
+        // para cumplir con la interfaz IClientHandler
+        log.debug("setAuthenticatedUser llamado en PeerHandler - ignorado (peers no tienen usuarios)");
+    }
+
+    @Override
+    public com.arquitectura.DTO.usuarios.UserResponseDto getAuthenticatedUser() {
+        // Los peers no tienen usuarios autenticados
+        return null;
+    }
+
+    @Override
+    public boolean isAuthenticated() {
+        // Para peers, "autenticado" significa que completaron el handshake P2P
+        return authenticated;
+    }
+
+    @Override
+    public void clearAuthenticatedUser() {
+        // Los peers no tienen usuarios autenticados, pero necesitamos implementar el método
+        log.debug("clearAuthenticatedUser llamado en PeerHandler - ignorado (peers no tienen usuarios)");
     }
 }

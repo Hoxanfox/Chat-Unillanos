@@ -89,4 +89,38 @@ public interface IP2PFachada {
      * @throws Exception si el usuario no existe
      */
     com.arquitectura.DTO.p2p.UserLocationResponseDto buscarUsuario(UUID usuarioId) throws Exception;
+    
+    /**
+     * Obtiene el ID del peer actual (este servidor).
+     * @return UUID del peer actual
+     */
+    UUID obtenerPeerActualId();
+    
+    /**
+     * Obtiene la información del peer especificado.
+     * @param peerId ID del peer
+     * @return DTO con la información del peer
+     * @throws Exception si el peer no existe
+     */
+    com.arquitectura.DTO.p2p.PeerResponseDto obtenerPeer(UUID peerId) throws Exception;
+    
+    /**
+     * Notifica a todos los peers activos sobre un cambio de estado de usuario.
+     * Este método implementa el patrón PUSH para sincronización automática.
+     * 
+     * @param usuarioId ID del usuario que cambió de estado
+     * @param username Nombre del usuario
+     * @param nuevoEstado Estado del usuario ("ONLINE" o "OFFLINE")
+     * @param peerId ID del peer donde está el usuario (null si está OFFLINE)
+     * @param peerIp IP del peer (null si está OFFLINE)
+     * @param peerPuerto Puerto del peer (null si está OFFLINE)
+     */
+    void notificarCambioUsuarioATodosLosPeers(
+        UUID usuarioId, 
+        String username, 
+        String nuevoEstado,
+        UUID peerId, 
+        String peerIp, 
+        Integer peerPuerto
+    );
 }
