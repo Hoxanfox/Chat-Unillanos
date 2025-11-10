@@ -32,7 +32,7 @@ public interface PeerRepository extends JpaRepository<Peer, UUID> {
      * Busca un peer por su IP y puerto
      * Útil para evitar duplicados en la red
      */
-    Optional<Peer> findByIpAndPuerto(String ip, int puerto);
+    List<Peer> findByIpAndPuerto(String ip, int puerto);
 
     /**
      * Obtiene todos los peers con un estado específico
@@ -85,6 +85,6 @@ public interface PeerRepository extends JpaRepository<Peer, UUID> {
     @Query("SELECT COUNT(p) FROM Peer p WHERE p.conectado = 'ONLINE'")
     long contarPeersActivos();
 
-    Optional<Peer> findByIpAndPuerto(String ip, Integer puerto);
+
 
 }

@@ -28,6 +28,16 @@ public class NetworkUtils {
                     continue;
                 }
                 
+                // NUEVO: Ignorar interfaces de Docker y VirtualBox
+                String interfaceName = networkInterface.getName().toLowerCase();
+                String displayName = networkInterface.getDisplayName().toLowerCase();
+                if (interfaceName.contains("docker") || interfaceName.contains("veth") || 
+                    displayName.contains("docker") || displayName.contains("virtualbox") ||
+                    interfaceName.startsWith("vEthernet") || interfaceName.contains("wsl")) {
+                    System.out.println("[NetworkUtils] Ignorando interfaz virtual: " + networkInterface.getDisplayName());
+                    continue;
+                }
+                
                 Enumeration<InetAddress> inetAddresses = networkInterface.getInetAddresses();
                 
                 while (inetAddresses.hasMoreElements()) {
@@ -39,6 +49,14 @@ public class NetworkUtils {
                             && inetAddress.isSiteLocalAddress()) {
                         
                         String ipAddress = inetAddress.getHostAddress();
+                        
+                        // NUEVO: Ignorar redes de Docker (172.17-32.x.x) y otras virtuales
+                        if (ipAddress.startsWith("172.1") || ipAddress.startsWith("172.2") || 
+                            ipAddress.startsWith("172.3") || ipAddress.startsWith("169.254")) {
+                            System.out.println("[NetworkUtils] Ignorando IP de red virtual Docker/Link-local: " + ipAddress);
+                            continue;
+                        }
+                        
                         System.out.println("[NetworkUtils] Dirección IP del servidor detectada: " + ipAddress + 
                                          " en interfaz " + networkInterface.getDisplayName());
                         return ipAddress;

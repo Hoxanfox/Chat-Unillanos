@@ -1,12 +1,13 @@
 package com.arquitectura.controlador;
 
+import com.arquitectura.DTO.usuarios.UserResponseDto;
 import java.util.UUID;
 
 /**
  * Interfaz que define las operaciones para manejar una conexión P2P con otro servidor
- * Similar a IClientHandler pero para comunicación peer-to-peer
+ * Extiende IClientHandler para ser compatible con el RequestDispatcher
  */
-public interface IPeerHandler {
+public interface IPeerHandler extends IClientHandler {
     
     /**
      * Obtiene el ID único del peer conectado
@@ -26,27 +27,22 @@ public interface IPeerHandler {
      */
     Integer getPeerPort();
     
-    /**
-     * Envía un mensaje al peer
-     * @param message Mensaje en formato JSON
-     */
-    void sendMessage(String message);
+    // sendMessage() ya viene de IClientHandler
     
+    // isConnected() - método específico de peer
     /**
      * Verifica si la conexión está activa
      * @return true si está conectado, false en caso contrario
      */
     boolean isConnected();
     
+    // disconnect() - método de cierre
     /**
      * Cierra la conexión con el peer
      */
     void disconnect();
     
-    /**
-     * Fuerza el cierre de la conexión
-     */
-    void forceDisconnect();
+    // forceDisconnect() ya viene de IClientHandler
     
     /**
      * Obtiene el timestamp del último heartbeat recibido
@@ -59,4 +55,3 @@ public interface IPeerHandler {
      */
     void updateHeartbeat();
 }
-

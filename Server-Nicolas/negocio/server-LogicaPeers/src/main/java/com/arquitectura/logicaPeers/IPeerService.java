@@ -232,4 +232,26 @@ public interface IPeerService {
      * @return Número de peers inactivos
      */
     long contarPeersInactivos();
+    
+    // ==================== NOTIFICACIONES PUSH ====================
+    
+    /**
+     * Notifica a todos los peers activos sobre un cambio de estado de usuario.
+     * Este método implementa el patrón PUSH para sincronización automática.
+     * 
+     * @param usuarioId ID del usuario que cambió de estado
+     * @param username Nombre del usuario
+     * @param nuevoEstado Estado del usuario ("ONLINE" o "OFFLINE")
+     * @param peerId ID del peer donde está el usuario (null si está OFFLINE)
+     * @param peerIp IP del peer (null si está OFFLINE)
+     * @param peerPuerto Puerto del peer (null si está OFFLINE)
+     */
+    void notificarCambioUsuarioATodosLosPeers(
+        UUID usuarioId, 
+        String username, 
+        String nuevoEstado,
+        UUID peerId, 
+        String peerIp, 
+        Integer peerPuerto
+    );
 }

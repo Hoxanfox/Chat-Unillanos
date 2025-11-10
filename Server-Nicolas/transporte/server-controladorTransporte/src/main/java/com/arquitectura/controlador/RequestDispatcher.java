@@ -30,8 +30,21 @@ public class RequestDispatcher {
             "registeruser",
             "uploadfileforregistration",
             "uploadfilechunk",
-            "endfileupload"
-
+            "endfileupload",
+            // Acciones P2P que no requieren autenticación de usuario
+            "listarpeersdisponibles",
+            "reportarlatido",
+            "retransmitirpeticion",
+            "buscarusuario",
+            "enrutarmensaje",
+            "descubrirpeers",
+            "sincronizarusuarios",
+            "notificarcambioestado",
+            "notificacioncambiousuario",
+            "verificarconexion",
+            "ping",
+            "obtenerestadored",
+            "sincronizarcanales"
     );
     private IContactListBroadcaster contactListBroadcaster;
 

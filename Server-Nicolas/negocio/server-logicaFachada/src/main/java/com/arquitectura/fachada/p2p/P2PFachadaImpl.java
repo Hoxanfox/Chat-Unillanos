@@ -73,5 +73,27 @@ public class P2PFachadaImpl implements IP2PFachada {
     public com.arquitectura.DTO.p2p.UserLocationResponseDto buscarUsuario(UUID usuarioId) throws Exception {
         return peerService.buscarUsuario(usuarioId);
     }
-}
 
+    @Override
+    public UUID obtenerPeerActualId() {
+        return peerService.obtenerPeerActualId();
+    }
+
+    @Override
+    public com.arquitectura.DTO.p2p.PeerResponseDto obtenerPeer(UUID peerId) throws Exception {
+        return peerService.obtenerPeer(peerId);
+    }
+
+    @Override
+    public void notificarCambioUsuarioATodosLosPeers(
+            UUID usuarioId,
+            String username,
+            String nuevoEstado,
+            UUID peerId,
+            String peerIp,
+            Integer peerPuerto) {
+        peerService.notificarCambioUsuarioATodosLosPeers(
+                usuarioId, username, nuevoEstado, peerId, peerIp, peerPuerto
+        );
+    }
+}

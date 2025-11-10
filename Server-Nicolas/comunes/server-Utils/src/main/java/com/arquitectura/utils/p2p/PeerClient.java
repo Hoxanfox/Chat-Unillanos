@@ -17,13 +17,31 @@ public class PeerClient {
     private final Gson gson;
     private static final int DEFAULT_TIMEOUT = 10000; // 10 segundos
     private static final int BUFFER_SIZE = 8192;
+    
+    // NUEVO: Campos para el ID del peer local y puerto P2P
+    private final String localPeerId;
+    private final int localPeerPort;
 
     public PeerClient() {
         this.gson = new Gson();
+        this.localPeerId = null; // Modo legacy
+        this.localPeerPort = 0;
     }
 
     public PeerClient(Gson gson) {
         this.gson = gson;
+        this.localPeerId = null; // Modo legacy
+        this.localPeerPort = 0;
+    }
+    
+    /**
+     * Constructor que acepta el ID del peer local y puerto P2P.
+     * Este es el constructor recomendado para usar en el sistema P2P.
+     */
+    public PeerClient(Gson gson, String localPeerId, int localPeerPort) {
+        this.gson = gson;
+        this.localPeerId = localPeerId;
+        this.localPeerPort = localPeerPort;
     }
 
     /**
@@ -65,7 +83,11 @@ public class PeerClient {
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             writer = new PrintWriter(new OutputStreamWriter(socket.getOutputStream()), true);
 
-            // Serializar y enviar petición
+            // NUEVO: Enviar handshake primero
+            System.out.println("→ [PeerClient] Enviando handshake...");
+            enviarHandshake(writer, reader, socket);
+
+            // Serializar y enviar petición real
             String requestJson = gson.toJson(request);
             System.out.println("→ [PeerClient] Enviando petición: " + request.getAction());
             writer.println(requestJson);
@@ -97,6 +119,73 @@ public class PeerClient {
             // Cerrar recursos
             cerrarRecursos(reader, writer, socket);
         }
+    }
+
+    /**
+     * Envía el handshake P2P para autenticar la conexión.
+     */
+    private void enviarHandshake(PrintWriter writer, BufferedReader reader, Socket socket) throws IOException {
+        try {
+            // Crear petición de handshake con información del peer local
+            java.util.Map<String, Object> handshakeData = new java.util.HashMap<>();
+            handshakeData.put("peerId", obtenerPeerIdLocal());
+            handshakeData.put("port", obtenerPuertoP2PLocal()); // Usar puerto P2P real, no el efímero
+            
+            DTORequest handshakeRequest = new DTORequest("peer_handshake", handshakeData);
+            String handshakeJson = gson.toJson(handshakeRequest);
+            
+            // Enviar handshake
+            writer.println(handshakeJson);
+            writer.flush();
+            
+            // Esperar respuesta del handshake
+            String handshakeResponse = reader.readLine();
+            if (handshakeResponse == null || handshakeResponse.trim().isEmpty()) {
+                throw new IOException("No se recibió respuesta del handshake");
+            }
+            
+            DTOResponse response = gson.fromJson(handshakeResponse, DTOResponse.class);
+            if (!"success".equals(response.getStatus())) {
+                throw new IOException("Handshake rechazado: " + response.getMessage());
+            }
+            
+            System.out.println("✓ [PeerClient] Handshake completado con peerId=" + obtenerPeerIdLocal());
+            
+        } catch (IOException e) {
+            System.err.println("✗ [PeerClient] Error en handshake: " + e.getMessage());
+            throw e;
+        }
+    }
+    
+    /**
+     * Obtiene el ID del peer local.
+     * Si se proporcionó en el constructor, usa ese ID.
+     * Si no, genera uno temporal (modo legacy).
+     */
+    private String obtenerPeerIdLocal() {
+        if (localPeerId != null && !localPeerId.isEmpty()) {
+            return localPeerId;
+        }
+        
+        // Modo legacy: generar UUID temporal
+        // ADVERTENCIA: Esto causará que se registren múltiples peers duplicados
+        System.err.println("⚠ [PeerClient] Generando UUID temporal - esto puede causar duplicados!");
+        return java.util.UUID.randomUUID().toString();
+    }
+    
+    /**
+     * Obtiene el puerto P2P local del servidor.
+     * Este es el puerto en el que el servidor está escuchando conexiones P2P,
+     * NO el puerto efímero del socket cliente.
+     */
+    private int obtenerPuertoP2PLocal() {
+        if (localPeerPort > 0) {
+            return localPeerPort;
+        }
+        
+        // Modo legacy: usar puerto por defecto
+        System.err.println("⚠ [PeerClient] Puerto P2P no configurado, usando 22200 por defecto");
+        return 22200; // Puerto por defecto
     }
 
     /**

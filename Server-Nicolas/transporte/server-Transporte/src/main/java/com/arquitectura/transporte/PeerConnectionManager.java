@@ -1,9 +1,11 @@
 package com.arquitectura.transporte;
 
+import com.arquitectura.controlador.IClientHandler;
 import com.arquitectura.controlador.IPeerHandler;
 import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.p2p.PeerResponseDto;
+import com.arquitectura.controlador.RequestDispatcher;
 import com.arquitectura.events.*;
 import com.arquitectura.logicaPeers.IPeerService;
 import com.google.gson.Gson;
@@ -35,7 +37,7 @@ import java.util.concurrent.*;
 public class PeerConnectionManager {
     
     private static final Logger log = LoggerFactory.getLogger(PeerConnectionManager.class);
-    
+
     @Value("${peer.server.port:22200}")
     private int peerPort;
     
@@ -63,7 +65,10 @@ public class PeerConnectionManager {
     private final Gson gson;
     private final IPeerService peerService;
     private final ApplicationEventPublisher eventPublisher;
-    
+    private final com.arquitectura.utils.network.NetworkUtils networkUtils;
+    @Autowired
+    private RequestDispatcher requestDispatcher;
+
     // Pool de threads para manejar conexiones P2P entrantes
     private ExecutorService peerPool;
     
@@ -85,10 +90,12 @@ public class PeerConnectionManager {
     public PeerConnectionManager(
             Gson gson,
             @Qualifier("peerServiceP2P") IPeerService peerService,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            com.arquitectura.utils.network.NetworkUtils networkUtils) {
         this.gson = gson;
         this.peerService = peerService;
         this.eventPublisher = eventPublisher;
+        this.networkUtils = networkUtils;
     }
     
     @PostConstruct
@@ -155,8 +162,19 @@ public class PeerConnectionManager {
     }
     
     private void initializeLocalPeerId() {
+        // Obtener la IP real del servidor (no usar "localhost")
+        String localIp = networkUtils.getServerIPAddress();
+
+        // Si no se puede obtener la IP, usar "localhost" como fallback
+        if (localIp == null || localIp.isEmpty() || "127.0.0.1".equals(localIp)) {
+            log.warn("No se pudo obtener IP local, usando localhost");
+            localIp = "localhost";
+        }
+
+        log.info("Inicializando peer local con IP: {} y puerto: {}", localIp, peerPort);
+
         // Obtener o crear el peer local usando el servicio
-        PeerResponseDto localPeer = peerService.obtenerOCrearPeerLocal("localhost", peerPort);
+        PeerResponseDto localPeer = peerService.obtenerOCrearPeerLocal(localIp, peerPort);
         this.localPeerId = localPeer.getPeerId();
         log.info("Local Peer ID: {}", localPeerId);
     }
@@ -194,7 +212,8 @@ public class PeerConnectionManager {
                                 peerSocket.getInetAddress().getHostAddress());
                         
                         PeerHandler peerHandler = new PeerHandler(
-                            peerSocket, gson, this, this::removePeerConnection
+                            peerSocket, gson, this, this::removePeerConnection,
+                            requestDispatcher
                         );
                         peerPool.submit(peerHandler);
                         
@@ -416,7 +435,7 @@ public class PeerConnectionManager {
             long timeSinceLastHeartbeat = now - handler.getLastHeartbeat();
             
             if (timeSinceLastHeartbeat > timeoutMs) {
-                log.warn("Peer {} sin heartbeat por {} ms. Desconectando...", 
+                log.warn("Peer {} sin heartbeat por {} ms. Desconectando...",
                         entry.getKey(), timeSinceLastHeartbeat);
                 peersToRemove.add(entry.getKey());
             }
@@ -461,6 +480,9 @@ public class PeerConnectionManager {
             // Actualizar estado ONLINE para peers conectados
             Set<UUID> connectedPeerIds = getConnectedPeerIds();
             
+            // IMPORTANTE: Asegurar que el peer local SIEMPRE esté marcado como ONLINE
+            connectedPeerIds.add(localPeerId);
+
             for (UUID peerId : connectedPeerIds) {
                 try {
                     peerService.reportarLatido(peerId);
@@ -469,12 +491,15 @@ public class PeerConnectionManager {
                 }
             }
             
-            // Marcar peers desconectados como OFFLINE
+            // Marcar peers desconectados como OFFLINE (excepto el local)
             List<PeerResponseDto> allPeers = peerService.listarPeersDisponibles();
             for (PeerResponseDto peer : allPeers) {
-                if (!peer.getPeerId().equals(localPeerId) && 
-                    !connectedPeerIds.contains(peer.getPeerId())) {
-                    
+                // NO marcar el peer local como offline
+                if (peer.getPeerId().equals(localPeerId)) {
+                    continue;
+                }
+
+                if (!connectedPeerIds.contains(peer.getPeerId())) {
                     if ("ONLINE".equals(peer.getConectado())) {
                         peerService.marcarPeerComoDesconectado(peer.getPeerId());
                         log.info("Peer {} marcado como OFFLINE en BD", peer.getPeerId());
@@ -553,15 +578,24 @@ public class PeerConnectionManager {
     public void processPeerRequest(IPeerHandler handler, DTORequest request) {
         log.info("Procesando request P2P '{}' de peer {}", request.getAction(), handler.getPeerId());
         
-        // Aquí se puede integrar con el RequestDispatcher o manejar directamente
-        // Por ahora, enviar respuesta genérica
-        DTOResponse response = new DTOResponse(
-            request.getAction(),
-            "success",
-            "Request procesado por PeerConnectionManager",
-            null
-        );
-        handler.sendMessage(gson.toJson(response));
+        // Delegar al RequestDispatcher para procesar la petición
+        // El RequestDispatcher tiene todos los controladores (PeerController, UserController, etc.)
+        try {
+            String requestJson = gson.toJson(request);
+            // Cast explícito a IClientHandler ya que IPeerHandler extiende IClientHandler
+            requestDispatcher.dispatch(requestJson, (IClientHandler) handler);
+            log.debug("Request P2P '{}' procesado exitosamente", request.getAction());
+        } catch (Exception e) {
+            log.error("Error procesando request P2P '{}': {}", request.getAction(), e.getMessage(), e);
+            // Enviar respuesta de error
+            DTOResponse response = new DTOResponse(
+                request.getAction(),
+                "error",
+                "Error procesando request: " + e.getMessage(),
+                null
+            );
+            handler.sendMessage(gson.toJson(response));
+        }
     }
     
     public void handleRetransmitRequest(IPeerHandler handler, DTORequest request) {

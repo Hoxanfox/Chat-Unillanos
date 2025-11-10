@@ -21,6 +21,10 @@ public class PeerConnectionPool {
     private final ExecutorService executorService;
     private final Gson gson;
     private final int maxThreads;
+    
+    // NUEVO: ID y puerto del peer local para pasarlo a los clientes
+    private String localPeerId;
+    private int localPeerPort;
 
     /**
      * Constructor con configuración por defecto.
@@ -41,6 +45,19 @@ public class PeerConnectionPool {
         this.gson = new Gson();
         System.out.println("✓ [PeerConnectionPool] Inicializado con " + maxThreads + " threads");
     }
+    
+    /**
+     * Configura el ID del peer local y su puerto P2P.
+     * Debe llamarse después de que el PeerConnectionManager obtenga su ID.
+     */
+    public void configurarPeerLocal(String peerId, int peerPort) {
+        this.localPeerId = peerId;
+        this.localPeerPort = peerPort;
+        System.out.println("✓ [PeerConnectionPool] Configurado peer local: " + peerId + " en puerto " + peerPort);
+        
+        // Limpiar el pool para que se recreen los clientes con la nueva configuración
+        limpiarPool();
+    }
 
     /**
      * Obtiene o crea un cliente para un peer específico.
@@ -53,7 +70,15 @@ public class PeerConnectionPool {
         String key = crearClave(ip, puerto);
         return clientPool.computeIfAbsent(key, k -> {
             System.out.println("→ [PeerConnectionPool] Creando nuevo cliente para: " + ip + ":" + puerto);
-            return new PeerClient(gson);
+            
+            // Si tenemos el ID y puerto local configurados, usar el constructor completo
+            if (localPeerId != null && !localPeerId.isEmpty() && localPeerPort > 0) {
+                return new PeerClient(gson, localPeerId, localPeerPort);
+            } else {
+                // Modo legacy (mostrará advertencia en PeerClient)
+                System.err.println("⚠ [PeerConnectionPool] Peer local no configurado, usando modo legacy");
+                return new PeerClient(gson);
+            }
         });
     }
 

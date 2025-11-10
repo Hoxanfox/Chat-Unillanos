@@ -76,12 +76,22 @@ public class PeerServiceImpl implements IPeerService {
             throw new IllegalArgumentException("Puerto inválido: " + puerto);
         }
         
-        // Verificar si el peer ya existe
-        Optional<Peer> peerExistente = peerRepository.findByIpAndPuerto(ip, puerto);
+        // Verificar si el peer ya existe (ahora devuelve List)
+        List<Peer> peersExistentes = peerRepository.findByIpAndPuerto(ip, puerto);
         
-        if (peerExistente.isPresent()) {
-            Peer peer = peerExistente.get();
+        if (!peersExistentes.isEmpty()) {
+            // Tomar el primero y eliminar duplicados si existen
+            Peer peer = peersExistentes.get(0);
             System.out.println("✓ [PeerService] Peer ya existe, actualizando: " + peer.getPeerId());
+            
+            // Eliminar duplicados si hay más de uno
+            if (peersExistentes.size() > 1) {
+                for (int i = 1; i < peersExistentes.size(); i++) {
+                    Peer duplicate = peersExistentes.get(i);
+                    System.out.println("!! [PeerService] Borrando peer duplicado: " + duplicate.getPeerId());
+                    peerRepository.delete(duplicate);
+                }
+            }
             
             // Actualizar información si es necesario
             if (nombreServidor != null && !nombreServidor.trim().isEmpty()) {
@@ -216,16 +226,30 @@ public class PeerServiceImpl implements IPeerService {
         
         List<Peer> peersInactivos = peerRepository.findPeersInactivos(limiteTimeout);
         
-        System.out.println("→ [PeerService] Se encontraron " + peersInactivos.size() + " peers inactivos");
-        
+        System.out.println("→ [PeerService] Se encontraron " + peersInactivos.size() + " peers potencialmente inactivos");
+        System.out.println("→ [PeerService] Timeout configurado: " + timeoutSegundos + " segundos");
+
+        int peersDesconectados = 0;
         for (Peer peer : peersInactivos) {
+            // Verificar que NO sea el peer local
+            if (peer.getPeerId().equals(obtenerPeerActualId())) {
+                System.out.println("  ⚠ Ignorando peer local en verificación de inactivos");
+                continue;
+            }
+
+            // Calcular tiempo desde último latido
+            long segundosSinLatido = java.time.Duration.between(peer.getUltimoLatido(), LocalDateTime.now()).getSeconds();
+            System.out.println("  → Peer " + peer.getIp() + ":" + peer.getPuerto() +
+                " sin latido por " + segundosSinLatido + " segundos");
+
             peer.marcarComoOffline();
             peerRepository.save(peer);
+            peersDesconectados++;
             System.out.println("  ✗ Peer marcado como OFFLINE: " + peer.getIp() + ":" + peer.getPuerto());
         }
         
-        System.out.println("✓ [PeerService] Verificación completada");
-        return peersInactivos.size();
+        System.out.println("✓ [PeerService] Verificación completada: " + peersDesconectados + " peers desconectados");
+        return peersDesconectados;
     }
 
     @Override
@@ -361,15 +385,25 @@ public class PeerServiceImpl implements IPeerService {
                 nombreServidor = "Servidor Local";
             }
             
-            // Buscar si ya existe un peer para este servidor
-            Optional<Peer> peerOpt = peerRepository.findByIpAndPuerto(ipServidor, puerto);
+            // Buscar si ya existe un peer para este servidor (ahora devuelve List)
+            List<Peer> peersExistentes = peerRepository.findByIpAndPuerto(ipServidor, puerto);
             
-            if (peerOpt.isPresent()) {
-                peerActual = peerOpt.get();
+            if (!peersExistentes.isEmpty()) {
+                // Tomar el primero como el peer actual
+                peerActual = peersExistentes.get(0);
                 peerActual.setNombreServidor(nombreServidor);
                 peerActual.marcarComoOnline();
                 peerRepository.save(peerActual);
                 System.out.println("✓ [PeerService] Peer actual recuperado: " + peerActual.getPeerId());
+
+                // Eliminar duplicados si existen
+                if (peersExistentes.size() > 1) {
+                    for (int i = 1; i < peersExistentes.size(); i++) {
+                        Peer duplicate = peersExistentes.get(i);
+                        System.out.println("!! [PeerService] Borrando peer duplicado del servidor local: " + duplicate.getPeerId());
+                        peerRepository.delete(duplicate);
+                    }
+                }
             } else {
                 // Crear nuevo peer para este servidor
                 peerActual = new Peer(ipServidor, puerto, nombreServidor);
@@ -377,6 +411,11 @@ public class PeerServiceImpl implements IPeerService {
                 peerActual = peerRepository.save(peerActual);
                 System.out.println("✓ [PeerService] Peer actual creado: " + peerActual.getPeerId());
             }
+
+            // NUEVO: Configurar el PeerConnectionPool con el ID y puerto del peer local
+            peerConnectionPool.configurarPeerLocal(peerActual.getPeerId().toString(), puerto);
+            System.out.println("✓ [PeerService] PeerConnectionPool configurado con peer local: " + peerActual.getPeerId());
+
         } catch (Exception e) {
             System.err.println("✗ [PeerService] Error al inicializar peer actual: " + e.getMessage());
             e.printStackTrace();
@@ -464,8 +503,15 @@ public class PeerServiceImpl implements IPeerService {
     @Transactional(readOnly = true)
     public Optional<PeerResponseDto> buscarPeerPorIpYPuerto(String ip, int puerto) {
         System.out.println("→ [PeerService] Buscando peer por IP:Puerto: " + ip + ":" + puerto);
-        Optional<Peer> peerOpt = peerRepository.findByIpAndPuerto(ip, puerto);
-        return peerOpt.map(this::mapearAPeerResponseDto);
+        List<Peer> peers = peerRepository.findByIpAndPuerto(ip, puerto);
+        
+        // Si hay duplicados, advertir
+        if (peers.size() > 1) {
+            System.out.println("⚠ [PeerService] Se encontraron " + peers.size() + " peers con la misma IP:Puerto");
+        }
+        
+        // Devolver el primero si existe
+        return peers.isEmpty() ? Optional.empty() : Optional.of(mapearAPeerResponseDto(peers.get(0)));
     }
 
     @Override
@@ -480,55 +526,127 @@ public class PeerServiceImpl implements IPeerService {
     @Transactional
     public PeerResponseDto registrarPeerAutenticado(UUID peerId, String ip, Integer puerto) {
         System.out.println("→ [PeerService] Registrando peer autenticado: " + peerId + " (" + ip + ":" + puerto + ")");
-        
-        // Buscar primero por peerId
-        Optional<Peer> peerOpt = peerRepository.findById(peerId);
-        
-        // Si no se encuentra por ID, buscar por IP y Puerto
-        if (!peerOpt.isPresent() && ip != null && puerto != null) {
-            peerOpt = peerRepository.findByIpAndPuerto(ip, puerto);
-            if (peerOpt.isPresent()) {
-                System.out.println("→ [PeerService] Peer encontrado por IP:Puerto pero con ID diferente. Actualizando ID.");
+
+        // PASO 1: Buscar por ID primero (es lo más confiable)
+        Optional<Peer> peerById = peerRepository.findById(peerId);
+
+        if (peerById.isPresent()) {
+            // El peer YA existe con este ID, solo actualizar IP y puerto si cambió
+            Peer peer = peerById.get();
+            System.out.println("→ [PeerService] Peer encontrado por ID: " + peerId);
+
+            // Verificar si cambió la IP o puerto
+            if (!peer.getIp().equals(ip) || peer.getPuerto() != puerto) {
+                System.out.println("→ [PeerService] Actualizando ubicación del peer de " +
+                    peer.getIp() + ":" + peer.getPuerto() + " a " + ip + ":" + puerto);
+                peer.setIp(ip);
+                peer.setPuerto(puerto);
             }
-        }
-        
-        Peer peer;
-        
-        if (peerOpt.isPresent()) {
-            // El peer ya existe, actualizar
-            peer = peerOpt.get();
-            
-            // Si el peerId cambió, actualizarlo
-            if (!peer.getPeerId().equals(peerId)) {
-                System.out.println("→ [PeerService] PeerId cambió de " + peer.getPeerId() + " a " + peerId);
-                peer.setPeerId(peerId);
+
+            // Limpiar duplicados por IP:Puerto si existen (pero sin borrar este)
+            List<Peer> duplicadosPorIp = peerRepository.findByIpAndPuerto(ip, puerto);
+            for (Peer dup : duplicadosPorIp) {
+                if (!dup.getPeerId().equals(peerId)) {
+                    // Hay un peer DIFERENTE con la misma IP:Puerto
+                    System.out.println("⚠ [PeerService] Peer duplicado detectado: " + dup.getPeerId() +
+                        " en la misma IP:Puerto que " + peerId);
+
+                    // Verificar si el duplicado tiene usuarios asociados
+                    long usuariosAsociados = userRepository.countByPeerId(dup);
+                    if (usuariosAsociados > 0) {
+                        System.out.println("⚠ [PeerService] Peer duplicado " + dup.getPeerId() +
+                            " tiene " + usuariosAsociados + " usuarios. Migrando usuarios al peer correcto...");
+                        // Migrar usuarios al peer correcto
+                        migrarUsuariosDePeerAPeer(dup, peer);
+                    }
+                    System.out.println("!! [PeerService] Eliminando peer duplicado: " + dup.getPeerId());
+                    peerRepository.delete(dup);
+                }
             }
-            
-            System.out.println("→ [PeerService] Actualizando peer existente");
-        } else {
-            // El peer NO existe, crearlo
-            System.out.println("→ [PeerService] Creando nuevo peer");
-            peer = new Peer();
-            peer.setPeerId(peerId);
-            peer.setIp(ip);
-            peer.setPuerto(puerto != null ? puerto : 0);
+
+            peer.setConectado(EstadoPeer.ONLINE);
+            peer.actualizarLatido();
+            Peer savedPeer = peerRepository.save(peer);
+            System.out.println("✓ [PeerService] Peer actualizado: " + savedPeer.getPeerId());
+            return mapearAPeerResponseDto(savedPeer);
         }
-        
-        // Actualizar estado y latido
-        peer.setConectado(EstadoPeer.ONLINE);
-        peer.actualizarLatido();
-        Peer savedPeer = peerRepository.save(peer);
-        
-        System.out.println("✓ [PeerService] Peer registrado: " + savedPeer.getPeerId());
-        
+
+        // PASO 2: El peer NO existe por ID, verificar si hay conflicto con IP:Puerto
+        List<Peer> peersPorIpPuerto = peerRepository.findByIpAndPuerto(ip, puerto);
+
+        if (!peersPorIpPuerto.isEmpty()) {
+            // Ya existe(n) peer(s) en esta IP:Puerto pero con ID diferente
+            System.out.println("⚠ [PeerService] Conflicto: Existen " + peersPorIpPuerto.size() +
+                " peer(s) en " + ip + ":" + puerto + " pero con IDs diferentes al recibido: " + peerId);
+
+            // IMPORTANTE: Esto significa que:
+            // - O el peer se reinició y generó un nuevo UUID (MAL)
+            // - O hay un peer diferente usando la misma IP:Puerto (CONFLICTO)
+
+            // Solución: Eliminar los peers antiguos sin usuarios y crear el nuevo
+            // Si tienen usuarios, migrarlos al nuevo peer
+
+            for (Peer peerAntiguo : peersPorIpPuerto) {
+                long usuariosAsociados = userRepository.countByPeerId(peerAntiguo);
+
+                if (usuariosAsociados > 0) {
+                    System.out.println("⚠ [PeerService] Peer antiguo " + peerAntiguo.getPeerId() +
+                        " tiene " + usuariosAsociados + " usuarios.");
+                    System.out.println("→ [PeerService] Estos usuarios quedarán huérfanos hasta que el peer correcto se conecte.");
+                    System.out.println("→ [PeerService] Marcando peer antiguo como OFFLINE");
+
+                    // NO eliminar, solo marcar como offline
+                    peerAntiguo.setConectado(EstadoPeer.OFFLINE);
+                    peerRepository.save(peerAntiguo);
+                } else {
+                    // No tiene usuarios, se puede eliminar
+                    System.out.println("!! [PeerService] Eliminando peer antiguo sin usuarios: " + peerAntiguo.getPeerId());
+                    peerRepository.delete(peerAntiguo);
+                }
+            }
+
+            peerRepository.flush();
+        }
+
+        // PASO 3: Crear el nuevo peer con el ID que nos envía el handshake
+        System.out.println("→ [PeerService] Creando nuevo peer con ID " + peerId);
+        Peer nuevoPeer = new Peer(ip, puerto);
+        nuevoPeer.setPeerId(peerId);
+        nuevoPeer.setConectado(EstadoPeer.ONLINE);
+        nuevoPeer.actualizarLatido();
+
+        Peer savedPeer = peerRepository.save(nuevoPeer);
+        System.out.println("✓ [PeerService] Nuevo peer registrado: " + savedPeer.getPeerId());
+
         return mapearAPeerResponseDto(savedPeer);
+    }
+
+    /**
+     * Migra todos los usuarios de un peer a otro.
+     * Útil cuando se detectan peers duplicados con usuarios asociados.
+     */
+    private void migrarUsuariosDePeerAPeer(Peer peerOrigen, Peer peerDestino) {
+        try {
+            List<com.arquitectura.domain.User> usuarios = userRepository.findByPeerId(peerOrigen);
+            System.out.println("→ [PeerService] Migrando " + usuarios.size() +
+                " usuarios de peer " + peerOrigen.getPeerId() + " a " + peerDestino.getPeerId());
+
+            for (com.arquitectura.domain.User user : usuarios) {
+                user.setPeerId(peerDestino);
+                userRepository.save(user);
+            }
+
+            System.out.println("✓ [PeerService] Migración de usuarios completada");
+        } catch (Exception e) {
+            System.err.println("✗ [PeerService] Error migrando usuarios: " + e.getMessage());
+        }
     }
 
     @Override
     @Transactional
     public void marcarPeerComoDesconectado(UUID peerId) {
         System.out.println("→ [PeerService] Marcando peer como desconectado: " + peerId);
-        
+
         Optional<Peer> peerOpt = peerRepository.findById(peerId);
         if (peerOpt.isPresent()) {
             Peer peer = peerOpt.get();
@@ -544,23 +662,125 @@ public class PeerServiceImpl implements IPeerService {
     @Transactional
     public PeerResponseDto obtenerOCrearPeerLocal(String ip, int puerto) {
         System.out.println("→ [PeerService] Obteniendo o creando peer local: " + ip + ":" + puerto);
-        
-        Optional<Peer> peerOpt = peerRepository.findByIpAndPuerto(ip, puerto);
-        
+
+        List<Peer> peersExistentes = peerRepository.findByIpAndPuerto(ip, puerto);
+
         Peer peer;
-        if (peerOpt.isPresent()) {
-            peer = peerOpt.get();
+        if (!peersExistentes.isEmpty()) {
+            peer = peersExistentes.get(0);
             System.out.println("✓ [PeerService] Peer local encontrado: " + peer.getPeerId());
+
+            // Eliminar duplicados si existen
+            if (peersExistentes.size() > 1) {
+                for (int i = 1; i < peersExistentes.size(); i++) {
+                    Peer duplicate = peersExistentes.get(i);
+                    System.out.println("!! [PeerService] Borrando peer local duplicado: " + duplicate.getPeerId());
+                    peerRepository.delete(duplicate);
+                }
+            }
         } else {
             peer = new Peer(ip, puerto, "ONLINE");
             peer.setUltimoLatido(LocalDateTime.now());
             peer = peerRepository.save(peer);
             System.out.println("✓ [PeerService] Nuevo peer local creado: " + peer.getPeerId());
         }
-        
+
         // Cachear el peer actual
         this.peerActual = peer;
         
+        // IMPORTANTE: Configurar el PeerConnectionPool con el ID y puerto del peer local
+        peerConnectionPool.configurarPeerLocal(peer.getPeerId().toString(), puerto);
+        System.out.println("✓ [PeerService] PeerConnectionPool configurado con peer local: " + peer.getPeerId());
+
         return mapearAPeerResponseDto(peer);
+    }
+
+    // ==================== NOTIFICACIONES PUSH ====================
+
+    @Override
+    public void notificarCambioUsuarioATodosLosPeers(
+            UUID usuarioId,
+            String username,
+            String nuevoEstado,
+            UUID peerId,
+            String peerIp,
+            Integer peerPuerto) {
+
+        System.out.println("🔔 [PeerService] Notificando cambio de usuario a todos los peers: " + username + " -> " + nuevoEstado);
+
+        try {
+            // Obtener todos los peers disponibles (no solo activos) porque usamos conexiones efímeras
+            List<PeerResponseDto> peersDisponibles = listarPeersDisponibles();
+            UUID peerLocalId = obtenerPeerActualId();
+
+            // Filtrar el peer local para no notificarnos a nosotros mismos
+            List<PeerResponseDto> peersRemotos = peersDisponibles.stream()
+                .filter(p -> !p.getPeerId().equals(peerLocalId))
+                .collect(java.util.stream.Collectors.toList());
+
+            if (peersRemotos.isEmpty()) {
+                System.out.println("ℹ [PeerService] No hay peers remotos disponibles para notificar");
+                return;
+            }
+
+            System.out.println("→ [PeerService] Enviando notificación PUSH a " + peersRemotos.size() + " peers remotos");
+
+            // Preparar el mapa de peers para broadcast
+            java.util.Map<UUID, String[]> peersParaBroadcast = new java.util.HashMap<>();
+            for (PeerResponseDto peer : peersRemotos) {
+                peersParaBroadcast.put(
+                    peer.getPeerId(),
+                    new String[]{peer.getIp(), String.valueOf(peer.getPuerto())}
+                );
+            }
+
+            // Preparar la notificación PUSH
+            java.util.Map<String, Object> notificationData = new java.util.HashMap<>();
+            notificationData.put("usuarioId", usuarioId.toString());
+            notificationData.put("username", username);
+            notificationData.put("nuevoEstado", nuevoEstado);
+            notificationData.put("peerId", peerId != null ? peerId.toString() : null);
+            notificationData.put("peerIp", peerIp);
+            notificationData.put("peerPuerto", peerPuerto);
+            notificationData.put("timestamp", LocalDateTime.now().toString());
+
+            DTORequest notificationRequest = new DTORequest(
+                "notificacionCambioUsuario",
+                notificationData
+            );
+
+            // Enviar broadcast a todos los peers
+            java.util.Map<String, java.util.concurrent.Future<DTOResponse>> futures =
+                peerConnectionPool.broadcast(peersParaBroadcast, notificationRequest);
+
+            // Esperar las respuestas de forma asíncrona (no bloqueante)
+            // Las respuestas se procesan en segundo plano
+            int exitosos = 0;
+            int fallidos = 0;
+
+            for (java.util.Map.Entry<String, java.util.concurrent.Future<DTOResponse>> entry : futures.entrySet()) {
+                try {
+                    DTOResponse response = entry.getValue().get(2, java.util.concurrent.TimeUnit.SECONDS);
+                    if ("success".equals(response.getStatus())) {
+                        exitosos++;
+                    } else {
+                        fallidos++;
+                        System.out.println("⚠ [PeerService] Peer " + entry.getKey() + " respondió con error: " + response.getMessage());
+                    }
+                } catch (java.util.concurrent.TimeoutException e) {
+                    fallidos++;
+                    System.out.println("⚠ [PeerService] Timeout al notificar peer " + entry.getKey());
+                } catch (Exception e) {
+                    fallidos++;
+                    System.out.println("⚠ [PeerService] Error al notificar peer " + entry.getKey() + ": " + e.getMessage());
+                }
+            }
+
+            System.out.println("✓ [PeerService] Notificación completada: " + exitosos + " exitosas, " + fallidos + " fallidas");
+
+        } catch (Exception e) {
+            System.err.println("✗ [PeerService] Error al enviar notificaciones push: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }

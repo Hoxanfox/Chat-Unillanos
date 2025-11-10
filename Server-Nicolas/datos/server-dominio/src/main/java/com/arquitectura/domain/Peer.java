@@ -14,7 +14,6 @@ import java.util.UUID;
 public class Peer {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
     @Column(name = "id", updatable = false, nullable = false)
     private UUID peerId;
 
@@ -40,20 +39,21 @@ public class Peer {
     // Constructores
 
     public Peer() {
+        this.peerId = UUID.randomUUID(); // Generar ID en el constructor
         this.conectado = EstadoPeer.DESCONOCIDO;
     }
 
     public Peer(String ip, Integer puerto, String conectado) {
+        this.peerId = UUID.randomUUID(); // Generar ID en el constructor
         this.ip = ip;
-
         this.conectado = EstadoPeer.DESCONOCIDO;
-
         this.puerto = puerto;
         this.ultimoLatido = LocalDateTime.now();
 
     }
 
     public Peer(String ip, int puerto) {
+        this.peerId = UUID.randomUUID(); // Generar ID en el constructor
         this.ip = ip;
         this.puerto = puerto;
         this.conectado = EstadoPeer.DESCONOCIDO;
@@ -61,6 +61,7 @@ public class Peer {
     }
 
     public Peer(String ip, int puerto, String nombreServidor) {
+        this.peerId = UUID.randomUUID(); // Generar ID en el constructor
         this.ip = ip;
         this.puerto = puerto;
         this.nombreServidor = nombreServidor;

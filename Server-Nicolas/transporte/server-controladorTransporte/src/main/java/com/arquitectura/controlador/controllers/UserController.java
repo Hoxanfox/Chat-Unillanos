@@ -100,9 +100,27 @@ public class UserController extends BaseController {
 
             sendJsonResponse(handler, "authenticateUser", true, "Autenticación exitosa", responseData);
 
-            // 🔔 NOTIFICAR A TODOS LOS CLIENTES que deben actualizar su lista de contactos
-            System.out.println("🔔 [UserController] Usuario autenticado: " + userDto.getUsername() + ". Enviando notificación push a todos los clientes...");
-            broadcastContactListToAllClients();
+            // 🔔 NOTIFICAR A TODOS LOS PEERS (PUSH) sobre el cambio de estado del usuario
+            System.out.println("🔔 [UserController] Usuario autenticado: " + userDto.getUsername() + ". Enviando notificación PUSH a todos los peers...");
+            try {
+                // Obtener información del peer actual
+                UUID peerActualId = chatFachada.p2p().obtenerPeerActualId();
+                com.arquitectura.DTO.p2p.PeerResponseDto peerActual = chatFachada.p2p().obtenerPeer(peerActualId);
+                
+                // Enviar notificación PUSH a todos los peers
+                chatFachada.p2p().notificarCambioUsuarioATodosLosPeers(
+                    userDto.getUserId(),
+                    userDto.getUsername(),
+                    "ONLINE",
+                    peerActualId,
+                    peerActual.getIp(),
+                    peerActual.getPuerto()
+                );
+                System.out.println("✓ [UserController] Notificación PUSH enviada a todos los peers");
+            } catch (Exception ex) {
+                System.err.println("⚠ [UserController] Error al enviar notificación PUSH: " + ex.getMessage());
+                // No fallar la autenticación por error en notificación
+            }
 
         } catch (Exception e) {
             System.err.println("Error en autenticación: " + e.getMessage());
@@ -211,13 +229,31 @@ public class UserController extends BaseController {
             }
 
             chatFachada.usuarios().cambiarEstadoUsuario(userId, false);
+            
+            // Obtener información del usuario antes de cerrar sesión
+            String username = handler.getAuthenticatedUser().getUsername();
+            
             handler.clearAuthenticatedUser();
 
             sendJsonResponse(handler, "logoutUser", true, "Sesión cerrada exitosamente", null);
 
-            // 🔔 NOTIFICAR A TODOS LOS CLIENTES que deben actualizar su lista de contactos
-            System.out.println("🔔 [UserController] Usuario desconectado: " + userId + ". Enviando notificación push a todos los clientes...");
-            broadcastContactListToAllClients();
+            // 🔔 NOTIFICAR A TODOS LOS PEERS (PUSH) sobre el cambio de estado del usuario
+            System.out.println("🔔 [UserController] Usuario desconectado: " + username + ". Enviando notificación PUSH a todos los peers...");
+            try {
+                // Enviar notificación PUSH a todos los peers (estado OFFLINE)
+                chatFachada.p2p().notificarCambioUsuarioATodosLosPeers(
+                    userId,
+                    username,
+                    "OFFLINE",
+                    null,  // Sin peer al desconectarse
+                    null,  // Sin IP
+                    null   // Sin puerto
+                );
+                System.out.println("✓ [UserController] Notificación PUSH de logout enviada a todos los peers");
+            } catch (Exception ex) {
+                System.err.println("⚠ [UserController] Error al enviar notificación PUSH: " + ex.getMessage());
+                // No fallar el logout por error en notificación
+            }
 
         } catch (IllegalArgumentException e) {
             sendJsonResponse(handler, "logoutUser", false, "Error al cerrar sesión: userId inválido", null);
