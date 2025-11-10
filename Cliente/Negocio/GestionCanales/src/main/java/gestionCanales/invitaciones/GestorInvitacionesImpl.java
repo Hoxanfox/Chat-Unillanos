@@ -7,14 +7,19 @@ import comunicacion.IGestorRespuesta;
 import dto.canales.DTOCanalCreado;
 import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
+import dto.featureNotificaciones.DTONotificacion;
 import gestionUsuario.sesion.GestorSesionUsuario;
 import observador.IObservador;
 import repositorio.canal.IRepositorioCanal;
+import repositorio.notificacion.IRepositorioNotificacion;
+import repositorio.notificacion.RepositorioNotificacionImpl;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -27,6 +32,7 @@ public class GestorInvitacionesImpl implements IGestorInvitaciones {
     private final IEnviadorPeticiones enviadorPeticiones;
     private final IGestorRespuesta gestorRespuesta;
     private final IRepositorioCanal repositorioCanal;
+    private final IRepositorioNotificacion repositorioNotificacion;
     private final List<IObservador> observadores;
 
     public GestorInvitacionesImpl(IRepositorioCanal repositorioCanal) {
@@ -34,6 +40,7 @@ public class GestorInvitacionesImpl implements IGestorInvitaciones {
         this.enviadorPeticiones = new EnviadorPeticiones();
         this.gestorRespuesta = GestorRespuesta.getInstancia();
         this.repositorioCanal = repositorioCanal;
+        this.repositorioNotificacion = new RepositorioNotificacionImpl();
         this.observadores = new ArrayList<>();
         
         // Inicializar manejadores de notificaciones push
@@ -62,20 +69,52 @@ public class GestorInvitacionesImpl implements IGestorInvitaciones {
                     invitacionData.get("channelId").toString() : null;
                 String channelName = invitacionData.get("channelName") != null ? 
                     invitacionData.get("channelName").toString() : null;
-                String inviterName = invitacionData.get("inviterName") != null ? 
-                    invitacionData.get("inviterName").toString() : null;
-                
+
+                // Extraer información del invitador (owner)
+                String inviterName = null;
+                if (invitacionData.get("owner") instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> ownerMap = (Map<String, Object>) invitacionData.get("owner");
+                    inviterName = ownerMap.get("username") != null ?
+                        ownerMap.get("username").toString() : null;
+                }
+
                 System.out.println("   → Canal: " + channelName);
                 System.out.println("   → Invitado por: " + inviterName);
                 
+                // Crear y guardar una DTONotificacion en el repositorio
+                String notificacionId = UUID.randomUUID().toString();
+                String titulo = "Invitación a canal";
+                String contenido = inviterName != null ?
+                    inviterName + " te ha invitado al canal '" + channelName + "'" :
+                    "Has sido invitado al canal '" + channelName + "'";
+
+                DTONotificacion notificacion = new DTONotificacion(
+                    notificacionId,
+                    "INVITACION_CANAL",
+                    titulo,
+                    contenido,
+                    LocalDateTime.now(),
+                    false,
+                    channelId
+                );
+
+                // Guardar en repositorio
+                repositorioNotificacion.guardar(notificacion);
+                System.out.println("💾 [GestorInvitaciones]: Notificación guardada en repositorio - ID: " + notificacionId);
+
                 // Convertir a mapa simple para los observadores
                 Map<String, String> notificationData = new HashMap<>();
+                notificationData.put("notificacionId", notificacionId);
                 notificationData.put("channelId", channelId);
                 notificationData.put("channelName", channelName);
-                notificationData.put("inviterName", inviterName);
-                
-                // Notificar a la UI
+                notificationData.put("inviterName", inviterName != null ? inviterName : "");
+
+                // Notificar a la UI sobre la nueva invitación
                 notificarObservadores("NUEVA_INVITACION_CANAL", notificationData);
+
+                // También notificar sobre la nueva notificación para que se actualice el contador
+                notificarObservadores("NUEVA_NOTIFICACION", notificacion);
             }
             
         } catch (Exception e) {

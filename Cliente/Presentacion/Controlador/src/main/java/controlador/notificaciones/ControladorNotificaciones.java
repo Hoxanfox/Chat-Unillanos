@@ -44,9 +44,9 @@ public class ControladorNotificaciones implements IControladorNotificaciones {
     }
 
     @Override
-    public CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId) {
+    public CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId, String canalId) {
         System.out.println("➡️ [ControladorNotificaciones]: Delegando rechazar invitación al servicio");
-        return servicioNotificaciones.rechazarInvitacionCanal(invitacionId);
+        return servicioNotificaciones.rechazarInvitacionCanal(invitacionId, canalId);
     }
 
     @Override

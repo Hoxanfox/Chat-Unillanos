@@ -11,14 +11,19 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Implementación del servicio de canales.
  * Delega las operaciones a la fachada correspondiente.
+ * Implementa IObservador para escuchar notificaciones de invitaciones aceptadas.
  */
-public class ServicioCanalesImpl implements IServicioCanales {
+public class ServicioCanalesImpl implements IServicioCanales, IObservador {
 
     private final IFachadaCanales fachadaCanales;
 
     public ServicioCanalesImpl() {
         this.fachadaCanales = FachadaGeneralImpl.getInstancia().getFachadaCanales();
-        System.out.println("✅ [ServicioCanales]: Inicializado con FachadaCanales");
+
+        // ✅ SOLUCIÓN: Registrarse como observador de notificaciones para escuchar invitaciones aceptadas
+        FachadaGeneralImpl.getInstancia().getFachadaNotificaciones().registrarObservador(this);
+
+        System.out.println("✅ [ServicioCanales]: Inicializado con FachadaCanales y registrado como observador de notificaciones");
     }
 
     @Override
@@ -120,5 +125,22 @@ public class ServicioCanalesImpl implements IServicioCanales {
     public void registrarObservadorInvitaciones(IObservador observador) {
         System.out.println("🔔 [ServicioCanales]: Registrando observador de invitaciones");
         fachadaCanales.registrarObservadorInvitaciones(observador);
+    }
+
+    @Override
+    public CompletableFuture<Void> reproducirAudio(String fileId) {
+        System.out.println("🎵 [ServicioCanales]: Reproduciendo audio - FileId: " + fileId);
+        return FachadaGeneralImpl.getInstancia().getFachadaArchivos().reproducirAudio(fileId);
+    }
+
+    @Override
+    public void actualizar(String tipoDeDato, Object datos) {
+        System.out.println("🔔 [ServicioCanales]: Notificación recibida - Tipo: " + tipoDeDato);
+
+        // ✅ Cuando se acepta una invitación, refrescar la lista de canales automáticamente
+        if ("INVITACION_CANAL_ACEPTADA".equals(tipoDeDato) || "CANAL_UNIDO".equals(tipoDeDato)) {
+            System.out.println("🔄 [ServicioCanales]: Invitación aceptada detectada, refrescando lista de canales...");
+            solicitarCanalesUsuario();
+        }
     }
 }

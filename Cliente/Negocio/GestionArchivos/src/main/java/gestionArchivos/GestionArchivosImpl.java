@@ -231,6 +231,7 @@ public class GestionArchivosImpl implements IGestionArchivos {
         return futuroTransferencia;
     }
 
+    // java
     private CompletableFuture<Void> enviarChunk(String uploadId, int chunkNumber, String chunkBase64) {
         final String ACCION_RESPUESTA = "uploadFileChunk_" + uploadId + "_" + chunkNumber;
         System.out.println("[GestionArchivos] Registrando manejador para chunk: " + ACCION_RESPUESTA);
@@ -249,11 +250,19 @@ public class GestionArchivosImpl implements IGestionArchivos {
         });
 
         DTOUploadChunk payload = new DTOUploadChunk(uploadId, chunkNumber, chunkBase64);
-        System.out.println("[GestionArchivos] Enviando chunk " + chunkNumber + " - UploadId: " + uploadId + ", Tamaño base64: " + chunkBase64.length());
+
+        // --- Safe logging: create a masked copy for logs to avoid printing Base64 data ---
+        DTOUploadChunk maskedForLog = new DTOUploadChunk(uploadId, chunkNumber, "[DATA_OMITTED]");
+        System.out.println("[GestionArchivos] Enviando chunk " + chunkNumber + " - UploadId: " + uploadId +
+                ", Tamaño base64: " + (chunkBase64 != null ? chunkBase64.length() : 0) +
+                ", Payload: " + gson.toJson(maskedForLog));
+        // ---------------------------------------------------------------------------------
+
         enviadorPeticiones.enviar(new DTORequest("uploadFileChunk", payload));
 
         return futuroChunk;
     }
+
 
     private CompletableFuture<String> finalizarSubida(String uploadId, String fileHash) {
         final String ACCION = "endFileUpload";

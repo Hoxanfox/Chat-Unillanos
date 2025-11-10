@@ -12,6 +12,7 @@ public class MessageResponseDto {
     private LocalDateTime timestamp;
     private String messageType;
     private String content;
+    private String channelType; // DIRECTO, GRUPO, BROADCAST
 
     // Constructor vacío
     public MessageResponseDto() {}
@@ -24,6 +25,17 @@ public class MessageResponseDto {
         this.timestamp = timestamp;
         this.messageType = messageType;
         this.content = content;
+    }
+
+    // Constructor completo con channelType
+    public MessageResponseDto(UUID messageId, UUID channelId, UserResponseDto author, LocalDateTime timestamp, String messageType, String content, String channelType) {
+        this.messageId = messageId;
+        this.channelId = channelId;
+        this.author = author;
+        this.timestamp = timestamp;
+        this.messageType = messageType;
+        this.content = content;
+        this.channelType = channelType;
     }
 
     // Getters y Setters
@@ -39,4 +51,6 @@ public class MessageResponseDto {
     public void setMessageType(String messageType) { this.messageType = messageType; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
+    public String getChannelType() { return channelType; }
+    public void setChannelType(String channelType) { this.channelType = channelType; }
 }

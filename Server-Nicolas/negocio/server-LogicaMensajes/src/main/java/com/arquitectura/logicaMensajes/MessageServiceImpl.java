@@ -260,7 +260,12 @@ public class MessageServiceImpl implements IMessageService {
             content = ((AudioMessage) message).getAudioUrl();
         }
 
-        return new MessageResponseDto(
+        // Obtener el tipo de canal
+        String channelType = message.getChannel().getTipo() != null
+                ? message.getChannel().getTipo().name()
+                : "GRUPO";
+
+        MessageResponseDto dto = new MessageResponseDto(
                 message.getIdMensaje(),
                 message.getChannel().getChannelId(),
                 authorDto,
@@ -268,6 +273,9 @@ public class MessageServiceImpl implements IMessageService {
                 messageType,
                 content
         );
+        dto.setChannelType(channelType);
+
+        return dto;
     }
 
 }

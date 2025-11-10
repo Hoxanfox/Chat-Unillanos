@@ -13,6 +13,8 @@ import gestionCanales.mensajes.GestorMensajesCanalImpl;
 import gestionCanales.mensajes.IGestorMensajesCanal;
 import gestionCanales.nuevoCanal.CreadorCanal;
 import gestionCanales.nuevoCanal.ICreadorCanal;
+import gestionArchivos.IGestionArchivos;
+import gestionArchivos.GestionArchivosImpl;
 import observador.IObservador;
 import repositorio.canal.IRepositorioCanal;
 import repositorio.canal.RepositorioCanalImpl;
@@ -42,9 +44,12 @@ public class FachadaCanalesImpl implements IFachadaCanales {
         IRepositorioCanal repositorioCanal = new RepositorioCanalImpl();
         IRepositorioMensajeCanal repositorioMensajes = new RepositorioMensajeCanalImpl();
 
+        // ✅ Inicializar IGestionArchivos para descarga automática de archivos
+        IGestionArchivos gestionArchivos = new GestionArchivosImpl();
+
         this.creadorCanal = new CreadorCanal(repositorioCanal);
         this.listadorCanales = new ListadorCanales(repositorioCanal);
-        this.gestorMensajes = new GestorMensajesCanalImpl(repositorioMensajes);
+        this.gestorMensajes = new GestorMensajesCanalImpl(repositorioMensajes, gestionArchivos);
         this.invitadorMiembro = new InvitadorMiembro(repositorioCanal);
         this.listadorMiembros = new ListadorMiembros(repositorioCanal);
         this.gestorInvitaciones = new GestorInvitacionesImpl(repositorioCanal);

@@ -1,6 +1,7 @@
 package fachada;
 
 import dto.featureNotificaciones.DTONotificacion;
+import observador.IObservador;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -46,7 +47,22 @@ public class Fachada implements IFachada {
     }
 
     @Override
-    public CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId) {
-        return fachadaGeneral.getFachadaNotificaciones().rechazarInvitacionCanal(invitacionId);
+    public CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId, String canalId) {
+        return fachadaGeneral.getFachadaNotificaciones().rechazarInvitacionCanal(invitacionId, canalId);
+    }
+
+    @Override
+    public List<DTONotificacion> obtenerNotificacionesCache() {
+        return fachadaGeneral.getFachadaNotificaciones().obtenerNotificacionesCache();
+    }
+
+    @Override
+    public void registrarObservadorNotificaciones(IObservador observador) {
+        fachadaGeneral.getFachadaNotificaciones().registrarObservador(observador);
+    }
+
+    @Override
+    public void removerObservadorNotificaciones(IObservador observador) {
+        fachadaGeneral.getFachadaNotificaciones().removerObservador(observador);
     }
 }

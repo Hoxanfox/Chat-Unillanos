@@ -14,6 +14,8 @@ import gestionCanales.nuevoCanal.CreadorCanal;
 import gestionCanales.nuevoCanal.ICreadorCanal;
 import gestionCanales.mensajes.IGestorMensajesCanal;
 import gestionCanales.mensajes.GestorMensajesCanalImpl;
+import gestionArchivos.IGestionArchivos;
+import gestionArchivos.GestionArchivosImpl;
 import repositorio.canal.IRepositorioCanal;
 import repositorio.canal.RepositorioCanalImpl;
 import repositorio.mensaje.IRepositorioMensajeCanal;
@@ -107,13 +109,17 @@ public class InicializadorGestionCanales {
     private void inicializarComponentesNegocio() {
         System.out.println("\n[2/3] Inicializando Componentes de Negocio...");
         
+        // ✅ Inicializar IGestionArchivos para descarga automática de archivos
+        IGestionArchivos gestionArchivos = new GestionArchivosImpl();
+        System.out.println("  ✓ GestionArchivos inicializado");
+
         creadorCanal = new CreadorCanal(repositorioCanal);
         System.out.println("  ✓ CreadorCanal inicializado");
         
         listadorCanales = new ListadorCanales(repositorioCanal);
         System.out.println("  ✓ ListadorCanales inicializado");
         
-        gestorMensajesCanal = new GestorMensajesCanalImpl(repositorioMensajeCanal);
+        gestorMensajesCanal = new GestorMensajesCanalImpl(repositorioMensajeCanal, gestionArchivos);
         System.out.println("  ✓ GestorMensajesCanal inicializado");
         
         gestorNotificacionesCanal = new GestorNotificacionesCanal();
