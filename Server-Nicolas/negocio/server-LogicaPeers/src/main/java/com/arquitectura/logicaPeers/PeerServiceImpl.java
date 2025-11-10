@@ -12,7 +12,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -428,37 +430,102 @@ public class PeerServiceImpl implements IPeerService {
     @Transactional(readOnly = true)
     public com.arquitectura.DTO.p2p.UserLocationResponseDto buscarUsuario(UUID usuarioId) throws Exception {
         System.out.println("→ [PeerService] Buscando ubicación del usuario: " + usuarioId);
-        
-        // Obtener el usuario con su peer asociado
-        com.arquitectura.domain.User usuario = userRepository.findByIdWithPeer(usuarioId)
-                .orElseThrow(() -> new Exception("Usuario no encontrado: " + usuarioId));
-        
-        // Obtener el peer asociado
-        Peer peerAsociado = usuario.getPeerId();
-        
-        if (peerAsociado == null) {
-            System.out.println("✗ [PeerService] Usuario no tiene peer asociado");
-            // Usuario existe pero no está asociado a ningún peer
+
+        // 1. PRIMERO: Buscar en la base de datos local
+        Optional<com.arquitectura.domain.User> usuarioLocalOpt = userRepository.findByIdWithPeer(usuarioId);
+
+        if (usuarioLocalOpt.isPresent()) {
+            // Usuario encontrado en BD local
+            com.arquitectura.domain.User usuario = usuarioLocalOpt.get();
+            Peer peerAsociado = usuario.getPeerId();
+
+            if (peerAsociado == null) {
+                System.out.println("✗ [PeerService] Usuario local sin peer asociado");
+                return new com.arquitectura.DTO.p2p.UserLocationResponseDto(
+                    usuario.getUserId(),
+                    usuario.getUsername(),
+                    null,
+                    null,
+                    null,
+                    usuario.getConectado()
+                );
+            }
+
+            System.out.println("✓ [PeerService] Usuario encontrado en BD local, peer: " + peerAsociado.getPeerId());
             return new com.arquitectura.DTO.p2p.UserLocationResponseDto(
                 usuario.getUserId(),
                 usuario.getUsername(),
-                null,
-                null,
-                null,
+                peerAsociado.getPeerId(),
+                peerAsociado.getIp(),
+                peerAsociado.getPuerto(),
                 usuario.getConectado()
             );
         }
-        
-        System.out.println("✓ [PeerService] Usuario encontrado en peer: " + peerAsociado.getPeerId());
-        
-        return new com.arquitectura.DTO.p2p.UserLocationResponseDto(
-            usuario.getUserId(),
-            usuario.getUsername(),
-            peerAsociado.getPeerId(),
-            peerAsociado.getIp(),
-            peerAsociado.getPuerto(),
-            usuario.getConectado()
-        );
+
+        // 2. NO está en BD local, buscar en PEERS REMOTOS
+        System.out.println("⚠ [PeerService] Usuario NO encontrado en BD local, consultando peers remotos...");
+
+        List<Peer> peersActivos = peerRepository.findByConectado(EstadoPeer.ONLINE);
+        Peer peerActual = obtenerPeerActual();
+
+        for (Peer peerRemoto : peersActivos) {
+            // Saltar el peer actual (nosotros mismos)
+            if (peerRemoto.getPeerId().equals(peerActual.getPeerId())) {
+                continue;
+            }
+
+            try {
+                System.out.println("  ├─ Consultando peer: " + peerRemoto.getPeerId() + " (" + peerRemoto.getIp() + ":" + peerRemoto.getPuerto() + ")");
+
+                // Crear petición para buscar usuario en peer remoto
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("usuarioId", usuarioId.toString());
+
+                com.arquitectura.DTO.Comunicacion.DTORequest request = new com.arquitectura.DTO.Comunicacion.DTORequest("buscarusuario", payload);
+
+                // Enviar petición al peer remoto
+                com.arquitectura.DTO.Comunicacion.DTOResponse response = peerConnectionPool.enviarPeticion(
+                    peerRemoto.getIp(),
+                    peerRemoto.getPuerto(),
+                    request
+                );
+
+                if ("success".equals(response.getStatus()) && response.getData() != null) {
+                    // Usuario encontrado en peer remoto
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> userData = (Map<String, Object>) response.getData();
+
+                    String userIdStr = (String) userData.get("usuarioId");
+                    String username = (String) userData.get("username");
+                    String peerIdStr = (String) userData.get("peerId");
+                    String peerIp = (String) userData.get("peerIp");
+                    Integer peerPuerto = userData.get("peerPuerto") != null ?
+                        ((Number) userData.get("peerPuerto")).intValue() : null;
+                    Boolean conectado = (Boolean) userData.get("conectado");
+
+                    if (userIdStr != null && username != null) {
+                        System.out.println("  └─ ✅ Usuario encontrado en peer remoto: " + peerRemoto.getPeerId());
+
+                        return new com.arquitectura.DTO.p2p.UserLocationResponseDto(
+                            UUID.fromString(userIdStr),
+                            username,
+                            peerIdStr != null ? UUID.fromString(peerIdStr) : null,
+                            peerIp,
+                            peerPuerto,
+                            conectado != null ? conectado : false
+                        );
+                    }
+                }
+
+            } catch (Exception e) {
+                System.err.println("  └─ ⚠ Error al consultar peer " + peerRemoto.getPeerId() + ": " + e.getMessage());
+                // Continuar con el siguiente peer
+            }
+        }
+
+        // 3. No encontrado en ningún peer
+        System.out.println("❌ [PeerService] Usuario no encontrado en ningún peer de la red P2P");
+        throw new Exception("Usuario no encontrado: " + usuarioId);
     }
 
     // ==================== ESTADÍSTICAS ====================

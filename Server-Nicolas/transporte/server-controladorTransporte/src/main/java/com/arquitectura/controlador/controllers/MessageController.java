@@ -1,9 +1,11 @@
 package com.arquitectura.controlador.controllers;
 
 import com.arquitectura.DTO.Comunicacion.DTORequest;
+import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 import com.arquitectura.DTO.Mensajes.SendMessageRequestDto;
 import com.arquitectura.controlador.IClientHandler;
+import com.arquitectura.controlador.routing.P2PRoutingHelper;
 import com.arquitectura.fachada.IChatFachada;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -18,6 +20,9 @@ import java.util.*;
  * - Enviar mensajes de audio
  * - Obtener historial de canal
  * - Obtener transcripciones de audio
+ *
+ * ENRUTAMIENTO AUTOMÁTICO P2P:
+ * Detecta automáticamente cuando el destinatario está en otro peer y enruta transparentemente.
  */
 @Component
 public class MessageController extends BaseController {
@@ -36,9 +41,12 @@ public class MessageController extends BaseController {
         "solicitarhistorialprivado"
     );
     
+    private final P2PRoutingHelper routingHelper;
+
     @Autowired
-    public MessageController(IChatFachada chatFachada, Gson gson) {
+    public MessageController(IChatFachada chatFachada, Gson gson, P2PRoutingHelper routingHelper) {
         super(chatFachada, gson);
+        this.routingHelper = routingHelper;
     }
     
     @Override
@@ -388,6 +396,9 @@ public class MessageController extends BaseController {
     /**
      * Maneja el envío de mensajes directos entre usuarios.
      * Crea o recupera un canal directo y envía el mensaje.
+     *
+     * ENRUTAMIENTO AUTOMÁTICO P2P:
+     * Detecta automáticamente si el destinatario está en otro peer y enruta transparentemente.
      */
     private void handleSendDirectMessage(DTORequest request, IClientHandler handler) {
         if (!validatePayload(request.getPayload(), handler, "enviarMensajeDirecto")) {
@@ -441,6 +452,50 @@ public class MessageController extends BaseController {
                     createErrorData("remitenteId", "No tienes permiso para enviar como este usuario"));
                 return;
             }
+
+            // ===== ENRUTAMIENTO AUTOMÁTICO P2P =====
+            // Verificar si la petición ya fue enrutada (viene de otro peer)
+            boolean yaEnrutado = mensajeJson.has("_yaEnrutado") && mensajeJson.get("_yaEnrutado").getAsBoolean();
+
+            if (!yaEnrutado) {
+                // Detectar si el destinatario está en otro peer
+                System.out.println("🔍 [MessageController] Verificando ubicación del destinatario...");
+
+                // Convertir payload a Map
+                @SuppressWarnings("unchecked")
+                Map<String, Object> payloadMap = (Map<String, Object>) request.getPayload();
+
+                Optional<DTOResponse> respuestaEnrutada = routingHelper.enrutarSiEsNecesario(
+                    destinatarioId,
+                    "enviarMensajeDirecto",
+                    payloadMap,
+                    handler
+                );
+
+                // Si la petición fue enrutada a otro peer, devolver la respuesta
+                if (respuestaEnrutada.isPresent()) {
+                    DTOResponse respuesta = respuestaEnrutada.get();
+                    System.out.println("✅ [MessageController] Mensaje enrutado a peer remoto exitosamente");
+
+                    // Extraer la respuesta del peer remoto
+                    if ("success".equals(respuesta.getStatus())) {
+                        sendJsonResponse(handler, "enviarMensajeDirecto", true,
+                            respuesta.getMessage() != null ? respuesta.getMessage() : "Mensaje enviado a peer remoto",
+                            respuesta.getData());
+                    } else {
+                        sendJsonResponse(handler, "enviarMensajeDirecto", false,
+                            respuesta.getMessage() != null ? respuesta.getMessage() : "Error al enviar al peer remoto",
+                            respuesta.getData());
+                    }
+                    return;
+                }
+            } else {
+                System.out.println("📍 [MessageController] Petición ya enrutada desde otro peer, procesando localmente...");
+            }
+
+            // ===== PROCESAMIENTO LOCAL =====
+            // El destinatario está en este peer, procesar localmente
+            System.out.println("📍 [MessageController] Destinatario es local, procesando mensaje...");
 
             // Obtener o crear el canal directo entre remitente y destinatario
             com.arquitectura.DTO.canales.ChannelResponseDto canalDirecto;

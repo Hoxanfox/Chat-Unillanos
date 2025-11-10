@@ -322,22 +322,27 @@ public class PeerController extends BaseController {
     /**
      * Maneja la acción de retransmitir una petición a otro peer.
      * 
+     * FASE 1: CARTERO PURO - Diseño Limpio
+     *
+     * El peerDestinoId ahora viene en el primer nivel del payload.
+     * No necesitamos abrir el paquete (peticionCliente) para saber a dónde enviarlo.
+     *
      * Request data esperado:
      * {
      *   "peerOrigen": {
      *     "peerId": "uuid-servidor-A",
-     *     "ip": "192.168.1.10",
-     *     "puerto": 9000
+     *     "nombreServidor": "Servidor-1"
      *   },
+     *   "peerDestinoId": "uuid-peer-B",  // <-- CLAVE: Destino en primer nivel
      *   "peticionCliente": {
      *     "action": "enviarMensajeDirecto",
-     *     "data": { ... }
+     *     "payload": { ... }  // <-- Paquete sellado, el cartero no lo abre
      *   }
      * }
      */
     private void handleRetransmitirPeticion(DTORequest request, IClientHandler handler) {
-        System.out.println("→ [PeerController] Procesando retransmitirPeticion");
-        
+        System.out.println("→ [PeerController] Procesando retransmitirPeticion (Fase 1: Cartero Puro)");
+
         if (!validatePayload(request.getPayload(), handler, "retransmitirPeticion")) {
             return;
         }
@@ -345,18 +350,27 @@ public class PeerController extends BaseController {
         try {
             JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
             
-            // Validar campos requeridos
-            if (!payload.has("peerOrigen") || !payload.has("peticionCliente")) {
-                sendJsonResponse(handler, "retransmitirPeticion", false, 
-                    "Faltan campos requeridos: peerOrigen y peticionCliente", null);
+            // Validar campos requeridos (FASE 1: peerDestinoId en primer nivel)
+            if (!payload.has("peerDestinoId") || !payload.has("peticionCliente")) {
+                sendJsonResponse(handler, "retransmitirPeticion", false,
+                    "Faltan campos requeridos: peerDestinoId y peticionCliente", null);
                 return;
             }
             
-            // Extraer información del peer origen
-            JsonObject peerOrigenJson = payload.get("peerOrigen").getAsJsonObject();
-            String peerOrigenId = peerOrigenJson.has("peerId") ? peerOrigenJson.get("peerId").getAsString() : null;
-            
-            // Parsear la petición del cliente
+            // FASE 1: Leer destino del primer nivel (diseño limpio)
+            String peerDestinoIdStr = payload.get("peerDestinoId").getAsString();
+            UUID peerDestinoId = UUID.fromString(peerDestinoIdStr);
+
+            // Extraer información del peer origen (opcional, para logs)
+            String peerOrigenInfo = "DESCONOCIDO";
+            if (payload.has("peerOrigen")) {
+                JsonObject peerOrigenJson = payload.get("peerOrigen").getAsJsonObject();
+                peerOrigenInfo = peerOrigenJson.has("nombreServidor") ?
+                    peerOrigenJson.get("nombreServidor").getAsString() :
+                    peerOrigenJson.get("peerId").getAsString();
+            }
+
+            // Parsear la petición del cliente (paquete sellado)
             JsonObject peticionClienteJson = payload.get("peticionCliente").getAsJsonObject();
             DTORequest peticionCliente = gson.fromJson(peticionClienteJson, DTORequest.class);
             
@@ -367,26 +381,15 @@ public class PeerController extends BaseController {
                 return;
             }
             
-            // Extraer peerDestinoId del payload de la petición del cliente
-            JsonObject peticionPayload = gson.toJsonTree(peticionCliente.getPayload()).getAsJsonObject();
-            String peerDestinoIdStr = peticionPayload.has("peerDestinoId") ? 
-                peticionPayload.get("peerDestinoId").getAsString() : null;
-            
-            if (peerDestinoIdStr == null) {
-                sendJsonResponse(handler, "retransmitirPeticion", false, 
-                    "La petición del cliente debe incluir peerDestinoId", null);
-                return;
-            }
-            
-            UUID peerDestinoId = UUID.fromString(peerDestinoIdStr);
-            
-            System.out.println("→ [PeerController] Retransmitiendo acción '" + 
-                peticionCliente.getAction() + "' al peer: " + peerDestinoId);
-            
-            // Retransmitir usando la fachada
+            System.out.println("📨 [PeerController] Cartero: Entregando paquete");
+            System.out.println("   ├─ Origen: " + peerOrigenInfo);
+            System.out.println("   ├─ Destino: " + peerDestinoId);
+            System.out.println("   └─ Acción: " + peticionCliente.getAction());
+
+            // FASE 1: Simplemente entregar el paquete y devolver la respuesta
             DTOResponse respuestaPeer = chatFachada.p2p().retransmitirPeticion(peerDestinoId, peticionCliente);
 
-            // Preparar respuesta según el formato del documento
+            // Preparar respuesta
             Map<String, Object> responseData = new HashMap<>();
             
             // Crear objeto respuestaCliente con la respuesta del peer
@@ -398,8 +401,8 @@ public class PeerController extends BaseController {
             
             responseData.put("respuestaCliente", respuestaCliente);
             
-            System.out.println("✓ [PeerController] Petición retransmitida exitosamente");
-            sendJsonResponse(handler, "retransmitirPeticion", true, 
+            System.out.println("✅ [PeerController] Cartero: Paquete entregado y respuesta recibida");
+            sendJsonResponse(handler, "retransmitirPeticion", true,
                 "Petición del cliente procesada exitosamente.", responseData);
             
         } catch (IllegalArgumentException e) {
@@ -1445,8 +1448,6 @@ public class PeerController extends BaseController {
                     Map.of("campo", "nuevoEstado", "motivo", "El estado debe ser ONLINE u OFFLINE"));
                 return;
             }
-
-            System.out.println("🔔 [PeerController] Usuario: " + username + " cambió a estado: " + nuevoEstado);
 
             // Extraer información del peer (si está ONLINE)
             UUID peerId = null;
