@@ -60,4 +60,17 @@ public interface IUserService {
      */
     List<UserResponseDto> listarContactos(UUID excludeUserId);
 
+    /**
+     * Sincroniza un usuario remoto en la base de datos local.
+     * Si el usuario no existe, lo crea. Si existe, actualiza su información.
+     *
+     * @param usuarioId El ID del usuario remoto
+     * @param username El nombre del usuario remoto
+     * @param email El email del usuario remoto (opcional)
+     * @param peerId El ID del peer donde está el usuario
+     * @param estado El estado del usuario ("ONLINE" o "OFFLINE")
+     * @return El DTO del usuario sincronizado
+     */
+    UserResponseDto sincronizarUsuarioRemoto(UUID usuarioId, String username, String email, UUID peerId, String estado);
+
 }

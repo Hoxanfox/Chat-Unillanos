@@ -3,6 +3,7 @@ package com.arquitectura.logicaUsuarios;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
+import com.arquitectura.DTO.p2p.PeerResponseDto;
 import com.arquitectura.domain.Peer;
 import com.arquitectura.domain.User;
 import com.arquitectura.logicaPeers.IPeerService;
@@ -214,6 +215,105 @@ public class UserServiceImpl implements IUserService {
                     return dto;
                 })
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public UserResponseDto sincronizarUsuarioRemoto(UUID usuarioId, String username, String email, UUID peerId, String estado) {
+        System.out.println("→ [UserService] Sincronizando usuario remoto: " + username + " (" + usuarioId + ")");
+
+        // Buscar si el usuario ya existe en la BD local
+        Optional<User> usuarioExistente = userRepository.findById(usuarioId);
+
+        User usuario;
+        boolean esNuevo = false;
+
+        if (usuarioExistente.isPresent()) {
+            // El usuario ya existe, actualizarlo
+            usuario = usuarioExistente.get();
+            System.out.println("  → Usuario existente encontrado, actualizando...");
+
+            // Actualizar peer si cambió
+            if (peerId != null) {
+                try {
+                    Optional<PeerResponseDto> peerDto = peerService.buscarPeerPorId(peerId);
+                    if (peerDto.isPresent()) {
+                        // Convertir el DTO a entidad Peer
+                        Peer peer = new Peer(peerDto.get().getIp(), peerDto.get().getPuerto());
+                        peer.setPeerId(peerDto.get().getPeerId());
+                        usuario.setPeerId(peer);
+                    }
+                } catch (Exception e) {
+                    System.err.println("  ✗ Error al obtener peer " + peerId + ": " + e.getMessage());
+                }
+            }
+
+            // Actualizar estado
+            boolean conectado = "ONLINE".equalsIgnoreCase(estado);
+            usuario.setConectado(conectado);
+
+        } else {
+            // El usuario no existe, crearlo
+            esNuevo = true;
+            System.out.println("  → Usuario nuevo, creando en BD local...");
+
+            usuario = new User();
+            usuario.setUserId(usuarioId);
+            usuario.setUsername(username);
+            usuario.setEmail(email != null ? email : username + "@peer.remote");
+
+            // Generar una contraseña temporal (no se usará para login local)
+            usuario.setHashedPassword(passwordEncoder.encode("REMOTE_USER_" + UUID.randomUUID()));
+
+            // Asignar el peer de origen
+            if (peerId != null) {
+                try {
+                    Optional<PeerResponseDto> peerDto = peerService.buscarPeerPorId(peerId);
+                    if (peerDto.isPresent()) {
+                        // Convertir el DTO a entidad Peer
+                        Peer peer = new Peer(peerDto.get().getIp(), peerDto.get().getPuerto());
+                        peer.setPeerId(peerDto.get().getPeerId());
+                        usuario.setPeerId(peer);
+                    }
+                } catch (Exception e) {
+                    System.err.println("  ✗ Error al obtener peer " + peerId + ": " + e.getMessage());
+                }
+            }
+
+            // Establecer estado
+            boolean conectado = "ONLINE".equalsIgnoreCase(estado);
+            usuario.setConectado(conectado);
+
+            // IP ficticia para usuarios remotos
+            usuario.setIpAddress("REMOTE");
+        }
+
+        // Guardar/actualizar en BD
+        usuario = userRepository.save(usuario);
+
+        if (esNuevo) {
+            System.out.println("  ✓ Usuario remoto creado en BD local: " + username);
+        } else {
+            System.out.println("  ✓ Usuario remoto actualizado en BD local: " + username);
+        }
+
+        // Convertir a DTO y devolver
+        UserResponseDto dto = new UserResponseDto(
+            usuario.getUserId(),
+            usuario.getUsername(),
+            usuario.getEmail(),
+            usuario.getPhotoAddress(),
+            null,
+            usuario.getFechaRegistro(),
+            usuario.getConectado() ? "ONLINE" : "OFFLINE"
+        );
+
+        // Establecer el peerId
+        if (usuario.getPeerId() != null) {
+            dto.setPeerId(usuario.getPeerId().getPeerId());
+        }
+
+        return dto;
     }
 
 }

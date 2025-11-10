@@ -21,6 +21,11 @@ public class ServerViewController {
     private final IChatFachada chatFachada;
     private final ApplicationEventPublisher eventPublisher;
 
+    // Caché para evitar sincronizaciones excesivas
+    private Map<String, Object> cachedSyncData = null;
+    private long lastSyncTimestamp = 0;
+    private static final long SYNC_CACHE_DURATION_MS = 10000; // 10 segundos
+
     @Autowired
     public ServerViewController(IChatFachada chatFachada, ApplicationEventPublisher eventPublisher) {
         this.chatFachada = chatFachada;
@@ -195,6 +200,13 @@ public class ServerViewController {
     
     public Map<String, Object> sincronizarUsuarios() {
         try {
+            // Verificar caché
+            long currentTime = System.currentTimeMillis();
+            if (cachedSyncData != null && (currentTime - lastSyncTimestamp) < SYNC_CACHE_DURATION_MS) {
+                System.out.println("→ [ServerViewController] Usando datos de sincronización en caché");
+                return cachedSyncData;
+            }
+
             System.out.println("→ [ServerViewController] Iniciando sincronización P2P de usuarios...");
             
             // PASO 1: Obtener usuarios LOCALES
@@ -202,8 +214,7 @@ public class ServerViewController {
             
             // Usar un Map para evitar duplicados (por usuarioId)
             Map<String, Map<String, Object>> mapaUsuarios = new java.util.HashMap<>();
-            int usuariosConectados = 0;
-            
+
             // Obtener información del peer actual
             UUID peerActualId = chatFachada.p2p().obtenerPeerActualId();
             com.arquitectura.DTO.p2p.PeerResponseDto peerActual = chatFachada.p2p().obtenerPeer(peerActualId);
@@ -220,10 +231,30 @@ public class ServerViewController {
                 usuarioMap.put("conectado", conectado);
                 
                 if (conectado) {
-                    usuariosConectados++;
-                    usuarioMap.put("peerId", peerActual.getPeerId().toString());
-                    usuarioMap.put("peerIp", peerActual.getIp());
-                    usuarioMap.put("peerPuerto", peerActual.getPuerto());
+                    // Si está conectado, determinar en qué peer está
+                    UUID userPeerId = usuario.getPeerId();
+                    if (userPeerId != null && userPeerId.equals(peerActualId)) {
+                        // Usuario conectado en ESTE peer
+                        usuarioMap.put("peerId", peerActual.getPeerId().toString());
+                        usuarioMap.put("peerIp", peerActual.getIp());
+                        usuarioMap.put("peerPuerto", peerActual.getPuerto());
+                    } else if (userPeerId != null) {
+                        // Usuario conectado en OTRO peer
+                        try {
+                            com.arquitectura.DTO.p2p.PeerResponseDto otroPeer = chatFachada.p2p().obtenerPeer(userPeerId);
+                            usuarioMap.put("peerId", otroPeer.getPeerId().toString());
+                            usuarioMap.put("peerIp", otroPeer.getIp());
+                            usuarioMap.put("peerPuerto", otroPeer.getPuerto());
+                        } catch (Exception e) {
+                            usuarioMap.put("peerId", null);
+                            usuarioMap.put("peerIp", null);
+                            usuarioMap.put("peerPuerto", null);
+                        }
+                    } else {
+                        usuarioMap.put("peerId", null);
+                        usuarioMap.put("peerIp", null);
+                        usuarioMap.put("peerPuerto", null);
+                    }
                 } else {
                     usuarioMap.put("peerId", null);
                     usuarioMap.put("peerIp", null);
@@ -233,9 +264,7 @@ public class ServerViewController {
                 mapaUsuarios.put(usuario.getUserId().toString(), usuarioMap);
             }
             
-            // PASO 2: Consultar usuarios de OTROS PEERS P2P (todos los disponibles, no solo activos)
-            // Usamos listarPeersDisponibles() en lugar de listarPeersActivos() porque las conexiones
-            // P2P son efímeras (se abren/cierran por cada petición) usando retransmitirPeticion
+            // PASO 2: Consultar usuarios de OTROS PEERS P2P
             List<com.arquitectura.DTO.p2p.PeerResponseDto> peersDisponibles = chatFachada.p2p().listarPeersDisponibles();
 
             // Filtrar para obtener solo los peers que NO son el actual
@@ -257,7 +286,6 @@ public class ServerViewController {
                         new com.arquitectura.DTO.Comunicacion.DTORequest("sincronizarUsuarios", requestData);
                     
                     // Retransmitir petición al peer remoto via P2P
-                    // retransmitirPeticion maneja conexiones efímeras (abre, envía, recibe, cierra)
                     com.arquitectura.DTO.Comunicacion.DTOResponse response =
                         chatFachada.p2p().retransmitirPeticion(peer.getPeerId(), sincRequest);
                     
@@ -273,19 +301,45 @@ public class ServerViewController {
                                 if (usuarioObj instanceof Map) {
                                     Map<String, Object> usuarioRemoto = (Map<String, Object>) usuarioObj;
                                     String usuarioId = (String) usuarioRemoto.get("usuarioId");
-                                    
-                                    // Agregar TODOS los usuarios remotos (no solo los conectados)
-                                    // Si el usuario no existe en nuestro mapa, agregarlo
+                                    String username = (String) usuarioRemoto.get("username");
+                                    Boolean conectado = (Boolean) usuarioRemoto.get("conectado");
+                                    String peerId = (String) usuarioRemoto.get("peerId");
+
+                                    // PERSISTIR el usuario remoto en BD local
+                                    try {
+                                        UUID usuarioUUID = UUID.fromString(usuarioId);
+                                        UUID peerUUID = peerId != null ? UUID.fromString(peerId) : null;
+                                        String estado = (conectado != null && conectado) ? "ONLINE" : "OFFLINE";
+
+                                        // Sincronizar usuario remoto en BD local
+                                        chatFachada.usuarios().sincronizarUsuarioRemoto(
+                                            usuarioUUID,
+                                            username,
+                                            null, // Email no disponible desde sincronización
+                                            peerUUID,
+                                            estado
+                                        );
+
+                                        System.out.println("    ✓ Usuario remoto persistido en BD local: " + username);
+                                    } catch (Exception e) {
+                                        System.err.println("    ✗ Error al persistir usuario remoto " + username + ": " + e.getMessage());
+                                    }
+
+                                    // Actualizar o agregar al mapa (evitar duplicados)
                                     if (!mapaUsuarios.containsKey(usuarioId)) {
+                                        // Usuario nuevo del peer remoto
                                         mapaUsuarios.put(usuarioId, new java.util.HashMap<>(usuarioRemoto));
-                                        
-                                        // Incrementar contador solo si está conectado
-                                        Boolean conectado = (Boolean) usuarioRemoto.get("conectado");
+                                    } else {
+                                        // Usuario ya existe localmente, actualizar info del peer si está conectado remotamente
+                                        Map<String, Object> usuarioLocal = mapaUsuarios.get(usuarioId);
                                         if (conectado != null && conectado) {
-                                            usuariosConectados++;
+                                            // El usuario está conectado en el peer remoto, actualizar ubicación
+                                            usuarioLocal.put("conectado", true);
+                                            usuarioLocal.put("peerId", usuarioRemoto.get("peerId"));
+                                            usuarioLocal.put("peerIp", usuarioRemoto.get("peerIp"));
+                                            usuarioLocal.put("peerPuerto", usuarioRemoto.get("peerPuerto"));
                                         }
                                     }
-                                    // Si ya existe localmente, mantener la info local (prioridad local)
                                 }
                             }
                         }
@@ -298,9 +352,14 @@ public class ServerViewController {
                 }
             }
             
-            // PASO 3: Convertir el mapa a lista
+            // PASO 3: Convertir el mapa a lista y contar correctamente
             List<Map<String, Object>> usuariosData = new java.util.ArrayList<>(mapaUsuarios.values());
             
+            // Contar usuarios conectados correctamente
+            int usuariosConectados = (int) usuariosData.stream()
+                .filter(u -> Boolean.TRUE.equals(u.get("conectado")))
+                .count();
+
             // Preparar respuesta
             Map<String, Object> result = new java.util.HashMap<>();
             result.put("usuarios", usuariosData);
@@ -308,8 +367,12 @@ public class ServerViewController {
             result.put("usuariosConectados", usuariosConectados);
             result.put("fechaSincronizacion", java.time.LocalDateTime.now().toString());
             
-            System.out.println("✓ [ServerViewController] Sincronización P2P completada: " + 
-                usuariosData.size() + " usuarios totales (" + usuariosConectados + " conectados) de " + 
+            // Actualizar caché
+            cachedSyncData = result;
+            lastSyncTimestamp = currentTime;
+
+            System.out.println("✓ [ServerViewController] Sincronización P2P completada: " +
+                usuariosData.size() + " usuarios totales (" + usuariosConectados + " conectados) de " +
                 peersDisponibles.size() + " peers");
 
             return result;

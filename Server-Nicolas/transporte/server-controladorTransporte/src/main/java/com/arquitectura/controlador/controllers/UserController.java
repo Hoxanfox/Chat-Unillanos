@@ -11,6 +11,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -21,6 +22,7 @@ import java.util.*;
  * - Registro
  * - Logout
  * - Listar contactos
+ * - Escuchar eventos de actualización de contactos (sincronización P2P)
  */
 @Component
 public class UserController extends BaseController {
@@ -337,6 +339,31 @@ public class UserController extends BaseController {
             e.printStackTrace();
             sendJsonResponse(handler, "listarContactos", false, "Error interno del servidor", null);
         }
+    }
+
+    /**
+     * 🔔 EVENT LISTENER: Escucha eventos de actualización de lista de contactos
+     * Este evento se dispara cuando:
+     * - Se sincroniza información con otros peers P2P
+     * - Un usuario cambia de estado en un peer remoto
+     * - Se detectan cambios en la red P2P
+     */
+    @EventListener
+    public void handleContactListUpdateEvent(com.arquitectura.events.ContactListUpdateEvent event) {
+        System.out.println("🔔 [UserController] Evento ContactListUpdateEvent recibido. Enviando notificación push a todos los clientes...");
+        broadcastContactListToAllClients();
+    }
+
+    /**
+     * 🔔 EVENT LISTENER: Escucha eventos de sincronización P2P
+     * Este evento se dispara cuando un peer remoto nos notifica de un cambio de estado de usuario.
+     * Automáticamente envía notificaciones push a todos los clientes conectados.
+     */
+    @EventListener
+    public void handlePeerSyncEvent(com.arquitectura.events.PeerSyncEvent event) {
+        System.out.println("🔔 [UserController] Evento PeerSyncEvent recibido. Usuario: " + event.getUsuarioId() +
+            " cambió a estado: " + event.getNuevoEstado() + ". Enviando notificación push...");
+        broadcastContactListToAllClients();
     }
 
     /**

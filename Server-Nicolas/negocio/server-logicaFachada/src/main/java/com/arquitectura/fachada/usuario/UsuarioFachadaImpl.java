@@ -89,5 +89,9 @@ public class UsuarioFachadaImpl implements IUsuarioFachada {
                 motivo != null ? motivo : "Sesión cerrada por el servidor"
         ));
     }
-}
 
+    @Override
+    public UserResponseDto sincronizarUsuarioRemoto(UUID usuarioId, String username, String email, UUID peerId, String estado) {
+        return userService.sincronizarUsuarioRemoto(usuarioId, username, email, peerId, estado);
+    }
+}

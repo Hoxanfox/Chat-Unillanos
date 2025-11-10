@@ -8,6 +8,7 @@ import com.arquitectura.fachada.IChatFachada;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -19,6 +20,7 @@ import java.util.*;
  * - Reportar heartbeats
  * - Retransmitir peticiones entre peers
  * - Actualizar lista de peers
+ * - Disparar eventos de sincronización para notificaciones push
  */
 @Component
 public class PeerController extends BaseController {
@@ -40,9 +42,12 @@ public class PeerController extends BaseController {
         "sincronizarcanales"
     );
     
+    private final ApplicationEventPublisher eventPublisher;
+
     @Autowired
-    public PeerController(IChatFachada chatFachada, Gson gson) {
+    public PeerController(IChatFachada chatFachada, Gson gson, ApplicationEventPublisher eventPublisher) {
         super(chatFachada, gson);
+        this.eventPublisher = eventPublisher;
     }
     
     @Override
@@ -1001,6 +1006,9 @@ public class PeerController extends BaseController {
      * Maneja la acción de verificar conexión (Ping/Pong).
      * Responde inmediatamente para confirmar que el peer está activo.
      * 
+
+            // Disparar evento de sincronización P2P
+            eventPublisher.publishEvent(new com.arquitectura.events.PeerSyncEvent(this, usuarioId, nuevoEstado));
      * Request data esperado:
      * {
      *   "peerId": "uuid-del-peer-solicitante" (opcional),

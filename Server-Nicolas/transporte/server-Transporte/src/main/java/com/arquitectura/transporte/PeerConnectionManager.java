@@ -523,10 +523,16 @@ public class PeerConnectionManager {
         // Verificar si este peer ya está conectado (evitar duplicados)
         if (activePeerConnections.containsKey(peerId)) {
             IPeerHandler existing = activePeerConnections.get(peerId);
-            if (existing != null && existing != handler && existing.isConnected()) {
-                log.warn("Ya existe una conexión activa para peer {}. Cerrando conexión duplicada.", peerId);
-                handler.forceDisconnect();
-                return;
+            if (existing != null && existing != handler) {
+                // Si la conexión existente está activa, cerrarla para aceptar la nueva
+                if (existing.isConnected()) {
+                    log.info("Reemplazando conexión existente para peer {} con nueva conexión", peerId);
+                    existing.forceDisconnect(); // Cerrar la conexión antigua
+                } else {
+                    // La conexión existente está muerta, solo removerla
+                    activePeerConnections.remove(peerId);
+                    log.info("Removiendo conexión inactiva para peer {}", peerId);
+                }
             }
         }
 

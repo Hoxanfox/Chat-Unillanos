@@ -216,6 +216,7 @@ public class ServerListener implements IContactListBroadcaster {
         if (userSessions != null && !userSessions.isEmpty()) {
             log.info("Enviando pedido de logout a {} sesiones del usuario {}", userSessions.size(), userId);
             List<IClientHandler> sessionsToNotify = new ArrayList<>(userSessions);
+
             sessionsToNotify.forEach(handler -> {
                 handler.sendMessage(notification);
                 log.info("Notificación de logout enviada a sesión de usuario {} desde IP {}", userId, handler.getClientIpAddress());
