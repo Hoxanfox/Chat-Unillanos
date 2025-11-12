@@ -4,8 +4,10 @@ import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 
-import com.arquitectura.controlador.controllers.*;
+import com.arquitectura.controlador.servidor.*;
 
+import com.arquitectura.controlador.peer.IContactListBroadcaster;
+import com.arquitectura.controlador.peer.PeerController;
 import com.arquitectura.fachada.IChatFachada;
 import com.google.gson.Gson;
 import org.springframework.beans.factory.annotation.Autowired;

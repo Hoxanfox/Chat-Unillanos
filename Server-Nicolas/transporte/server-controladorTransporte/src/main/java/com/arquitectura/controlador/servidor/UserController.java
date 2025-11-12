@@ -1,11 +1,11 @@
-package com.arquitectura.controlador.controllers;
+package com.arquitectura.controlador.servidor;
 
 import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.controlador.IClientHandler;
-import com.arquitectura.controlador.IContactListBroadcaster;
+import com.arquitectura.controlador.peer.IContactListBroadcaster;
 import com.arquitectura.events.ContactListUpdateEvent;
 import com.arquitectura.fachada.IChatFachada;
 import com.google.gson.Gson;

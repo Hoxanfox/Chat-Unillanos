@@ -1,6 +1,6 @@
-package com.arquitectura.transporte;
+package com.arquitectura.transporte.peer;
 
-import com.arquitectura.controlador.IPeerHandler;
+import com.arquitectura.controlador.peer.IPeerHandler;
 import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.controlador.RequestDispatcher;
 import com.google.gson.Gson;

@@ -1,4 +1,4 @@
-package com.arquitectura.controlador.controllers;
+package com.arquitectura.controlador.servidor;
 
 import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.controlador.IClientHandler;

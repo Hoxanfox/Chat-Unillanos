@@ -1,4 +1,4 @@
-package com.arquitectura.transporte;
+package com.arquitectura.transporte.peer;
 
 // Importaciones necesarias
 import com.arquitectura.DTO.Comunicacion.DTORequest;
@@ -103,6 +103,38 @@ public class PeerOutgoingConnection implements Runnable {
                 // 6. Quitar el timeout para el bucle de lectura/escritura normal
                 socket.setSoTimeout(0);
 
+                // ==================================================================
+                // DESCUBRIMIENTO DE PEERS: Solicitar lista de peers disponibles
+                // ==================================================================
+                try {
+                    DTORequest discoverReq = new DTORequest("descubrirPeers", manager.getLocalPeerInfo());
+                    out.println(gson.toJson(discoverReq));
+                    log.debug("Petición 'descubrirPeers' enviada a peer {}", peerId);
+
+                    // Leer la respuesta de descubrimiento (con timeout corto)
+                    socket.setSoTimeout(5000); // 5 segundos para recibir respuesta
+                    String discoverRespJson = in.readLine();
+                    socket.setSoTimeout(0); // Volver a modo sin timeout
+
+                    if (discoverRespJson != null) {
+                        DTOResponse discoverResp = gson.fromJson(discoverRespJson, DTOResponse.class);
+                        if (discoverResp != null && "descubrirPeers".equals(discoverResp.getAction())
+                                && "success".equals(discoverResp.getStatus())) {
+                            // Delegar al manager para registrar peers descubiertos en BD
+                            manager.registerDiscoveredPeers(discoverResp.getData());
+                            log.info("✓ Peers descubiertos procesados desde peer {}", peerId);
+                        } else {
+                            log.debug("Respuesta 'descubrirPeers' no válida de peer {}", peerId);
+                        }
+                    } else {
+                        log.debug("No se recibió respuesta de 'descubrirPeers' desde peer {}", peerId);
+                    }
+                } catch (Exception e) {
+                    log.debug("No se pudo completar descubrimiento con peer {}: {}", peerId, e.getMessage());
+                    // Continuar aunque falle el descubrimiento
+                }
+                // ==================================================================
+
                 // --- INICIO DE LA SOLUCIÓN DEL BUCLE DE TIMEOUT ---
 
                 lastPingTime = System.currentTimeMillis(); // Inicializar contador de ping
@@ -143,6 +175,12 @@ public class PeerOutgoingConnection implements Runnable {
 
                 if (maxReconnectAttempts > 0 && attempts >= maxReconnectAttempts) {
                     log.warn("Máximo de intentos de reconexión alcanzado para peer {}", peerId);
+                    // NUEVO: Marcar el peer como OFFLINE en la BD tras fallos consecutivos
+                    try {
+                        manager.markPeerAsOfflineAfterFailure(peerId);
+                    } catch (Exception ex) {
+                        log.debug("No se pudo marcar peer {} como OFFLINE: {}", peerId, ex.getMessage());
+                    }
                     break;
                 }
 

@@ -1,6 +1,7 @@
-package com.arquitectura.controlador;
+package com.arquitectura.controlador.peer;
 
-import com.arquitectura.DTO.usuarios.UserResponseDto;
+import com.arquitectura.controlador.IClientHandler;
+
 import java.util.UUID;
 
 /**

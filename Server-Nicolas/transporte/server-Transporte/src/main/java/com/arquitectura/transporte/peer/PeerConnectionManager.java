@@ -1,7 +1,7 @@
-package com.arquitectura.transporte;
+package com.arquitectura.transporte.peer;
 
 import com.arquitectura.controlador.IClientHandler;
-import com.arquitectura.controlador.IPeerHandler;
+import com.arquitectura.controlador.peer.IPeerHandler;
 import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.p2p.PeerResponseDto;
@@ -109,6 +109,9 @@ public class PeerConnectionManager {
         log.info("PeerConnectionManager inicializado. Local Peer ID: {}", localPeerId);
         log.info("Puerto P2P: {}, Max conexiones: {}", peerPort, maxPeerConnections);
         
+        // NUEVO: Inicializar tabla de peers y conectar a la red
+        initializePeersOnStartup();
+
         // Iniciar tareas de mantenimiento
         scheduleMaintenanceTasks();
         
@@ -118,6 +121,71 @@ public class PeerConnectionManager {
         }
     }
     
+    /**
+     * Inicializa la tabla de peers al arrancar el servidor:
+     * 1) Lee peers de la BD
+     * 2) Si solo está el peer local, intenta poblar desde bootstrap (y registra en BD)
+     * 3) Espera breve para que la BD persista
+     * 4) Lanza conexiones a todos los peers conocidos
+     */
+    public void initializePeersOnStartup() {
+        try {
+            log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            log.info("INICIALIZANDO PEERS EN STARTUP");
+            log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+            // PASO 1: Leer peers desde la BD
+            List<PeerResponseDto> peers = peerService.listarPeersDisponibles();
+            log.info("Peers encontrados en BD: {}", peers == null ? 0 : peers.size());
+
+            if (peers != null) {
+                for (PeerResponseDto peer : peers) {
+                    log.info("  - Peer: {} ({}:{}) - Estado: {}",
+                            peer.getPeerId(), peer.getIp(), peer.getPuerto(), peer.getConectado());
+                }
+            }
+
+            // PASO 2: Si no hay peers o solo existe el local, intentar bootstrap
+            if (peers == null || peers.isEmpty() || peers.size() == 1) {
+                log.warn("⚠️ La BD contiene 0 o solo 1 peer (probablemente solo el local)");
+                log.info("Intentando poblar tabla de peers desde bootstrap...");
+
+                connectToBootstrapPeers();
+
+                // PASO 3: Esperar para que los registros de bootstrap se persistan en BD
+                log.info("Esperando 2 segundos para que peers bootstrap se registren en BD...");
+                try {
+                    Thread.sleep(2000); // 2 segundos
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Espera interrumpida durante inicialización de peers");
+                }
+
+                // Volver a leer la BD luego del intento de bootstrap
+                peers = peerService.listarPeersDisponibles();
+                log.info("Peers en BD tras bootstrap: {}", peers == null ? 0 : peers.size());
+            } else {
+                log.info("✓ Se encontraron {} peers en BD", peers.size());
+            }
+
+            // PASO 4: Conectar a todos los peers conocidos en BD
+            log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            log.info("CONECTANDO A PEERS CONOCIDOS");
+            log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+            connectToAllKnownPeers();
+
+            log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            log.info("INICIALIZACIÓN DE PEERS COMPLETADA");
+            log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+        } catch (Exception e) {
+            log.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            log.error("ERROR INICIALIZANDO PEERS EN STARTUP: {}", e.getMessage(), e);
+            log.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        }
+    }
+
     /**
      * Auto-registra este servidor con los peers bootstrap configurados
      */
@@ -461,14 +529,16 @@ public class PeerConnectionManager {
         // Obtener peers usando el servicio
         List<PeerResponseDto> allPeers = peerService.listarPeersDisponibles();
 
+        // FILTRAR: Solo intentar reconectar peers que están ONLINE en BD pero desconectados en memoria
         List<PeerResponseDto> offlinePeers = allPeers.stream()
             .filter(peer -> !peer.getPeerId().equals(localPeerId))
+            .filter(peer -> "ONLINE".equals(peer.getConectado())) // SOLO peers marcados como ONLINE
             .filter(peer -> !isConnectedToPeer(peer.getPeerId()))
             .toList();
 
         if (!offlinePeers.isEmpty()) {
-            log.debug("Intentando reconectar a {} peers desconectados", offlinePeers.size());
-            
+            log.debug("Intentando reconectar a {} peers ONLINE desconectados", offlinePeers.size());
+
             for (PeerResponseDto peer : offlinePeers) {
                 connectToPeer(peer.getPeerId(), peer.getIp(), peer.getPuerto());
             }
@@ -709,6 +779,92 @@ public class PeerConnectionManager {
         return false;
     }
     
+    /**
+     * Marca un peer como OFFLINE después de fallos consecutivos de conexión
+     */
+    public void markPeerAsOfflineAfterFailure(UUID peerId) {
+        try {
+            log.info("Marcando peer {} como OFFLINE tras fallos consecutivos de conexión", peerId);
+            peerService.marcarPeerComoDesconectado(peerId);
+        } catch (Exception e) {
+            log.warn("Error al marcar peer {} como OFFLINE: {}", peerId, e.getMessage());
+        }
+    }
+
+    /**
+     * Registra peers descubiertos desde otro peer en la base de datos.
+     * No conecta automáticamente, solo actualiza la tabla de peers.
+     */
+    public void registerDiscoveredPeers(Object payload) {
+        if (payload == null) {
+            log.debug("registerDiscoveredPeers: payload nulo, nada que registrar");
+            return;
+        }
+
+        try {
+            var json = gson.toJsonTree(payload).getAsJsonObject();
+            if (!json.has("peersDisponibles")) {
+                log.debug("registerDiscoveredPeers: no contiene 'peersDisponibles'");
+                return;
+            }
+
+            var arr = json.getAsJsonArray("peersDisponibles");
+            int added = 0;
+            int updated = 0;
+
+            log.info("Procesando {} peers descubiertos...", arr.size());
+
+            for (var elem : arr) {
+                var obj = elem.getAsJsonObject();
+
+                String ip = obj.has("ip") && !obj.get("ip").isJsonNull() ? obj.get("ip").getAsString() : null;
+                int puerto = obj.has("puerto") && !obj.get("puerto").isJsonNull() ? obj.get("puerto").getAsInt() : -1;
+
+                if (ip == null || ip.trim().isEmpty() || puerto <= 0 || puerto > 65535) {
+                    log.debug("Peer descubierto inválido (ip/puerto): {}/{}", ip, puerto);
+                    continue;
+                }
+
+                try {
+                    var existing = peerService.buscarPeerPorIpYPuerto(ip, puerto);
+                    if (existing.isPresent()) {
+                        // Ya existe, podrías actualizar datos si es necesario
+                        log.debug("Peer descubierto ya existe en BD: {}:{}", ip, puerto);
+                        updated++;
+                    } else {
+                        // Nuevo peer, agregar a la BD
+                        peerService.agregarPeer(ip, puerto);
+                        added++;
+                        log.info("✓ Nuevo peer registrado en BD: {}:{}", ip, puerto);
+                    }
+                } catch (Exception e) {
+                    log.warn("Error registrando peer descubierto {}:{} -> {}", ip, puerto, e.getMessage());
+                }
+            }
+
+            if (added > 0 || updated > 0) {
+                log.info("Descubrimiento completado: {} nuevos, {} existentes", added, updated);
+
+                // NUEVO: Después de registrar peers, intentar conectar a los nuevos
+                if (added > 0) {
+                    log.info("Esperando 1 segundo antes de conectar a {} peers nuevos...", added);
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                    // Conectar a todos los peers conocidos (incluidos los nuevos)
+                    connectToAllKnownPeers();
+                }
+            } else {
+                log.debug("No se registraron peers nuevos desde descubrimiento");
+            }
+
+        } catch (Exception e) {
+            log.warn("Error procesando payload de descubrimiento: {}", e.getMessage());
+        }
+    }
+
     /**
      * Broadcast un mensaje a todos los peers conectados
      */

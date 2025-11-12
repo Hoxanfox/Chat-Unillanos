@@ -1,11 +1,12 @@
-package com.arquitectura.transporte;
+package com.arquitectura.transporte.server;
 
 import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
 import com.arquitectura.controlador.IClientHandler;
-import com.arquitectura.controlador.IContactListBroadcaster;
+import com.arquitectura.controlador.peer.IContactListBroadcaster;
 import com.arquitectura.controlador.RequestDispatcher;
 import com.arquitectura.events.*;
+import com.arquitectura.transporte.cliente.ClientHandler;
 import com.google.gson.Gson;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -269,7 +270,8 @@ public class ServerListener implements IContactListBroadcaster {
     /**
      * Envía la lista de contactos actualizada a TODOS los clientes conectados
      */
-    public void broadcastContactListUpdate(Object contactListData) {
+    @Override
+    public void broadcastContactListUpdate(Map<String, Object> contactListData) {
         log.info("📢 Broadcasting actualización de lista de contactos a {} usuarios conectados", activeClientsById.size());
         DTOResponse response = new DTOResponse("solicitarListaContactos", "success", "Lista de contactos obtenida exitosamente", contactListData);
         String notification = gson.toJson(response);
@@ -282,6 +284,66 @@ public class ServerListener implements IContactListBroadcaster {
             }
         }
         log.info("✅ Lista de contactos enviada a {} sesiones activas", totalNotifications);
+    }
+
+    /**
+     * Difunde una actualización de usuario específico a todos los peers activos
+     */
+    @Override
+    public void broadcastUserStatusUpdate(String userId, String action) {
+        log.info("📢 Broadcasting cambio de estado de usuario {} - Acción: {}", userId, action);
+
+        Map<String, Object> statusData = new HashMap<>();
+        statusData.put("userId", userId);
+        statusData.put("action", action);
+        statusData.put("timestamp", System.currentTimeMillis());
+
+        DTOResponse response = new DTOResponse("userStatusUpdate", "success", "Estado de usuario actualizado", statusData);
+        String notification = gson.toJson(response);
+
+        activeClientsById.values().forEach(handlerList -> {
+            handlerList.forEach(handler -> handler.sendMessage(notification));
+        });
+    }
+
+    /**
+     * Difunde una actualización de usuario a peers específicos
+     */
+    @Override
+    public void broadcastToSpecificPeers(String userId, String action, List<String> targetPeerIds) {
+        log.info("📢 Broadcasting a peers específicos para usuario {} - Acción: {}", userId, action);
+
+        Map<String, Object> statusData = new HashMap<>();
+        statusData.put("userId", userId);
+        statusData.put("action", action);
+        statusData.put("timestamp", System.currentTimeMillis());
+
+        DTOResponse response = new DTOResponse("userStatusUpdate", "success", "Estado de usuario actualizado", statusData);
+        String notification = gson.toJson(response);
+
+        // Por ahora, broadcast a todos (implementación específica de peers requeriría más contexto)
+        activeClientsById.values().forEach(handlerList -> {
+            handlerList.forEach(handler -> handler.sendMessage(notification));
+        });
+    }
+
+    /**
+     * Notifica a todos los peers sobre un cambio en el sistema
+     */
+    @Override
+    public void notifyAllPeers(String message) {
+        log.info("📢 Notificando a todos los peers: {}", message);
+
+        Map<String, Object> notificationData = new HashMap<>();
+        notificationData.put("message", message);
+        notificationData.put("timestamp", System.currentTimeMillis());
+
+        DTOResponse response = new DTOResponse("systemNotification", "info", message, notificationData);
+        String notification = gson.toJson(response);
+
+        activeClientsById.values().forEach(handlerList -> {
+            handlerList.forEach(handler -> handler.sendMessage(notification));
+        });
     }
 
     // --- MÉTODO PRIVADO DE LIMPIEZA ---

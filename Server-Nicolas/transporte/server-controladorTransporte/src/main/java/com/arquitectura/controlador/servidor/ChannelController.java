@@ -1,5 +1,5 @@
 // java
-package com.arquitectura.controlador.controllers;
+package com.arquitectura.controlador.servidor;
 
 import com.arquitectura.DTO.Comunicacion.DTORequest;
 import com.arquitectura.DTO.canales.ChannelResponseDto;

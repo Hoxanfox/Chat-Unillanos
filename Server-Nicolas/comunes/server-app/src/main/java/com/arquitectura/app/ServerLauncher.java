@@ -3,8 +3,8 @@ package com.arquitectura.app;
 import com.arquitectura.controlador.ServerViewController;
 import com.arquitectura.utils.mail.MailConfig;
 import com.arquitectura.configdb.ConfiguracionPersistencia;
-import com.arquitectura.transporte.ServerListener;
-import com.arquitectura.transporte.PeerConnectionManager;
+import com.arquitectura.transporte.server.ServerListener;
+import com.arquitectura.transporte.peer.PeerConnectionManager;
 import com.arquitectura.vista.ServerMainWindow;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
