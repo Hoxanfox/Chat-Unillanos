@@ -95,6 +95,7 @@ public class PeerOutgoingConnection implements Runnable {
                 }
 
                 log.info("✓ Handshake completado con peer {} ({}:{})", peerId, ip, port);
+                System.out.println("[PeerOutgoingConnection] Handshake completado con peer " + peerId + " (" + ip + ":" + port + ")");
 
                 // 5. SOLO AHORA la conexión se marca como 'conectada'
                 connected = true;
@@ -109,7 +110,9 @@ public class PeerOutgoingConnection implements Runnable {
                 try {
                     DTORequest discoverReq = new DTORequest("descubrirPeers", manager.getLocalPeerInfo());
                     out.println(gson.toJson(discoverReq));
+                    out.flush();
                     log.debug("Petición 'descubrirPeers' enviada a peer {}", peerId);
+                    System.out.println("[PeerOutgoingConnection] Petición 'descubrirPeers' enviada a peer " + peerId + " payload=" + gson.toJson(manager.getLocalPeerInfo()));
 
                     // Leer la respuesta de descubrimiento (con timeout corto)
                     socket.setSoTimeout(5000); // 5 segundos para recibir respuesta
@@ -121,16 +124,21 @@ public class PeerOutgoingConnection implements Runnable {
                         if (discoverResp != null && "descubrirPeers".equals(discoverResp.getAction())
                                 && "success".equals(discoverResp.getStatus())) {
                             // Delegar al manager para registrar peers descubiertos en BD
+                            System.out.println("[PeerOutgoingConnection] Respuesta 'descubrirPeers' recibida de " + peerId + " -> " + discoverRespJson);
                             manager.registerDiscoveredPeers(discoverResp.getData());
                             log.info("✓ Peers descubiertos procesados desde peer {}", peerId);
+                            System.out.println("[PeerOutgoingConnection] Peers descubiertos procesados desde " + peerId);
                         } else {
                             log.debug("Respuesta 'descubrirPeers' no válida de peer {}", peerId);
+                            System.out.println("[PeerOutgoingConnection] Respuesta 'descubrirPeers' no válida de " + peerId + " -> " + discoverRespJson);
                         }
                     } else {
                         log.debug("No se recibió respuesta de 'descubrirPeers' desde peer {}", peerId);
+                        System.out.println("[PeerOutgoingConnection] No se recibió respuesta de 'descubrirPeers' desde " + peerId);
                     }
                 } catch (Exception e) {
                     log.debug("No se pudo completar descubrimiento con peer {}: {}", peerId, e.getMessage());
+                    System.out.println("[PeerOutgoingConnection] Error en descubrirPeers con " + peerId + ": " + e.getMessage());
                     // Continuar aunque falle el descubrimiento
                 }
                 // ==================================================================
@@ -149,6 +157,7 @@ public class PeerOutgoingConnection implements Runnable {
                             throw new IOException("Peer " + peerId + " cerró la conexión");
                         }
                         log.debug("Recibido de peer {}: {}", peerId, line);
+                        System.out.println("[PeerOutgoingConnection] Recibido de " + peerId + ": " + line);
                         // Aquí puedes procesar respuestas (ej. "heartbeat_ack") si lo deseas
                     }
 
@@ -160,6 +169,7 @@ public class PeerOutgoingConnection implements Runnable {
                         sendMessage(gson.toJson(heartbeatRequest));
                         lastPingTime = now;
                         log.debug("Ping/Heartbeat enviado a peer {}", peerId);
+                        System.out.println("[PeerOutgoingConnection] Ping/Heartbeat enviado a " + peerId);
                     }
 
                     // 3. Dormir un poco para no consumir 100% de CPU

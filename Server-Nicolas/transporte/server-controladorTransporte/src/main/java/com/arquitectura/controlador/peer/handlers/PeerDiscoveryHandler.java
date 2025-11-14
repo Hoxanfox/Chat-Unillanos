@@ -52,6 +52,48 @@ public class PeerDiscoveryHandler {
         }
     }
 
+    /**
+     * Acción pública "registrarPeer" — solicita al peer receptor que cree/retorne un peerId para la IP/puerto enviados.
+     * Responde con un objeto que contiene 'peerSolicitante' con el peerId asignado (y opcionalmente lista de peers disponibles).
+     */
+    public void handleRegistrarPeer(DTORequest request, IClientHandler handler) {
+        System.out.println("→ [PeerDiscoveryHandler] Procesando registrarPeer");
+
+        if (!validatePayload(request.getPayload(), handler)) {
+            return;
+        }
+
+        try {
+            JsonObject payload = gson.toJsonTree(request.getPayload()).getAsJsonObject();
+            PeerConnectionData connectionData = extractConnectionData(payload, handler);
+            if (connectionData == null) return;
+
+            // Siempre creamos (o devolvemos existente) un peer para la IP/puerto indicados
+            PeerResponseDto nuevoPeer = chatFachada.p2p().agregarPeer(connectionData.ip, connectionData.puerto);
+            UUID peerId = nuevoPeer.getPeerId();
+            System.out.println("→ [PeerDiscoveryHandler] registrarPeer: peer creado/obtenido " + peerId);
+
+            // Obtener la lista completa de peers (online y offline) desde la BD del bootstrap
+            List<PeerResponseDto> allPeers = chatFachada.p2p().listarPeersDisponibles();
+            List<Map<String, Object>> peersDisponibles = convertPeersToMapList(allPeers);
+
+            Map<String, Object> peerSolicitanteInfo = new HashMap<>();
+            peerSolicitanteInfo.put("peerId", peerId.toString());
+            peerSolicitanteInfo.put("registrado", true);
+
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("peerSolicitante", peerSolicitanteInfo);
+            responseData.put("peersDisponibles", peersDisponibles);
+            responseData.put("totalPeers", peersDisponibles.size());
+
+            responseHelper.sendSuccess(handler, "registrarPeer", "Peer registrado correctamente", responseData);
+
+        } catch (Exception e) {
+            System.err.println("✗ [PeerDiscoveryHandler] Error en registrarPeer: " + e.getMessage());
+            responseHelper.sendError(handler, "registrarPeer", "Error al registrar peer: " + e.getMessage(), null);
+        }
+    }
+
     public void handleListarPeersDisponibles(DTORequest request, IClientHandler handler) {
         System.out.println("→ [PeerDiscoveryHandler] Procesando listarPeersDisponibles");
 
@@ -180,4 +222,3 @@ public class PeerDiscoveryHandler {
         }
     }
 }
-

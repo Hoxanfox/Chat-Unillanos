@@ -29,6 +29,7 @@ import java.util.*;
 public class PeerController extends BaseController {
     
     private static final Set<String> SUPPORTED_ACTIONS = Set.of(
+        "registrarpeer",
         "listarpeersdisponibles",
         "reportarlatido",
         "retransmitirpeticion",
@@ -86,6 +87,10 @@ public class PeerController extends BaseController {
 
         // Delegar a los handlers especializados
         switch (actionLower) {
+            case "registrarpeer":
+                discoveryHandler.handleRegistrarPeer(request, handler);
+                break;
+
             case "listarpeersdisponibles":
                 discoveryHandler.handleListarPeersDisponibles(request, handler);
                 break;

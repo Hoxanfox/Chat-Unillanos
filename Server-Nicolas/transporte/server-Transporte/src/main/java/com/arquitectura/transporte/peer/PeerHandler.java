@@ -76,6 +76,9 @@ public class PeerHandler implements IPeerHandler, Runnable {
 
     private void processMessage(String message) {
         try {
+            // Log raw incoming message for debugging
+            log.debug("PeerHandler.processMessage() - raw message from {}: {}", peerIp, message);
+
             DTORequest request = gson.fromJson(message, DTORequest.class);
 
             if (request == null || request.getAction() == null) {
@@ -87,6 +90,7 @@ public class PeerHandler implements IPeerHandler, Runnable {
             // es el "peer_handshake".
             if (!this.authenticated) {
                 if ("peer_handshake".equals(request.getAction())) {
+                    log.debug("PeerHandler: recibido peer_handshake payload: {}", gson.toJson(request.getPayload()));
                     handleHandshake(request);
                 } else {
                     // Si envía cualquier otra cosa, lo ignoramos o desconectamos.
@@ -99,31 +103,35 @@ public class PeerHandler implements IPeerHandler, Runnable {
                 return;
             }
 
-
             // Si llegamos aquí, es porque this.authenticated == true
             // y this.peerId NO es nulo.
-            log.debug("Mensaje recibido de peer {}: action={}", peerId, request.getAction());
+            log.debug("PeerHandler.processMessage() - authenticated message from {} (peerId={}): action={}", peerIp, peerId, request.getAction());
 
             switch (request.getAction()) {
                 case "peer_handshake":
                     // El peer ya estaba autenticado, pero envía otro handshake.
                     log.warn("Peer {} envió un handshake repetido.", peerId);
+                    log.debug("PeerHandler: repeated handshake payload: {}", gson.toJson(request.getPayload()));
                     handleHandshake(request); // Actualizar sus datos
                     break;
 
                 case "heartbeat":
+                    log.debug("PeerHandler: received heartbeat from {}", peerId);
                     handleHeartbeat(request);
                     break;
 
                 case "retransmit":
+                    log.debug("PeerHandler: received retransmit from {} -> delegating", peerId);
                     connectionManager.handleRetransmitRequest(this, request);
                     break;
 
                 case "sync":
+                    log.debug("PeerHandler: received sync from {} -> delegating", peerId);
                     connectionManager.handleSyncRequest(this, request);
                     break;
 
                 default:
+                    log.debug("PeerHandler: delegating action {} to processPeerRequest", request.getAction());
                     connectionManager.processPeerRequest(this, request);
                     break;
             }

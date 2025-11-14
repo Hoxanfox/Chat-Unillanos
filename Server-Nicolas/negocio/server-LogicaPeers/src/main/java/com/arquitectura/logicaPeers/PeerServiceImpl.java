@@ -19,6 +19,11 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+// Nuevas importaciones para los servicios extraídos
+import com.arquitectura.logicaPeers.transfer.FileTransferService;
+import com.arquitectura.logicaPeers.notifier.PeerNotifier;
+import com.arquitectura.logicaPeers.sync.UserSyncService;
+
 /**
  * Implementación del servicio de gestión de peers P2P.
  * Maneja la lógica de negocio para peers, heartbeats y retransmisión.
@@ -34,6 +39,16 @@ public class PeerServiceImpl implements IPeerService {
 
     // Cache del peer actual
     private Peer peerActual;
+
+    // Dependencias extraídas — inyectadas por Spring (field injection para compatibilidad mínima)
+    @Autowired
+    private FileTransferService fileTransferService;
+
+    @Autowired
+    private PeerNotifier peerNotifier;
+
+    @Autowired
+    private UserSyncService userSyncService;
 
     @Autowired
     public PeerServiceImpl(PeerRepository peerRepository, NetworkUtils networkUtils, P2PConfig p2pConfig, 
@@ -285,77 +300,8 @@ public class PeerServiceImpl implements IPeerService {
 
     @Override
     public byte[] descargarArchivoDesdePeer(UUID peerDestinoId, String fileId) throws Exception {
-        System.out.println("→ [PeerService] Descargando archivo " + fileId + " desde peer: " + peerDestinoId);
-
-        // Obtener información del peer destino
-        Peer peerDestino = peerRepository.findById(peerDestinoId)
-                .orElseThrow(() -> new Exception("Peer destino no encontrado: " + peerDestinoId));
-
-        if (!peerDestino.estaActivo()) {
-            throw new Exception("El peer destino no está activo: " + peerDestinoId);
-        }
-
-        // Paso 1: Iniciar la descarga para obtener información del archivo
-        System.out.println("→ [PeerService] Iniciando descarga con startFileDownload");
-        DTORequest startDownloadRequest = new DTORequest(
-            "startFileDownload",
-            java.util.Map.of("fileId", fileId)
-        );
-
-        DTOResponse startResponse = peerConnectionPool.enviarPeticion(
-            peerDestino.getIp(),
-            peerDestino.getPuerto(),
-            startDownloadRequest
-        );
-
-        if (!"success".equals(startResponse.getStatus())) {
-            throw new Exception("Error al iniciar descarga: " + startResponse.getMessage());
-        }
-
-        // Parsear la información de descarga
-        com.google.gson.Gson gson = new com.google.gson.Gson();
-        com.google.gson.JsonObject payload = gson.toJsonTree(startResponse.getData()).getAsJsonObject();
-        String downloadId = payload.get("downloadId").getAsString();
-        int totalChunks = payload.get("totalChunks").getAsInt();
-        long fileSize = payload.get("fileSize").getAsLong();
-
-        System.out.println("→ [PeerService] Archivo info: downloadId=" + downloadId + ", totalChunks=" + totalChunks + ", size=" + fileSize);
-
-        // Paso 2: Descargar todos los chunks
-        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-
-        for (int chunkNumber = 0; chunkNumber < totalChunks; chunkNumber++) {
-            System.out.println("→ [PeerService] Solicitando chunk " + (chunkNumber + 1) + "/" + totalChunks);
-
-            DTORequest chunkRequest = new DTORequest(
-                "requestFileChunk",
-                java.util.Map.of(
-                    "downloadId", downloadId,
-                    "chunkNumber", chunkNumber
-                )
-            );
-
-            DTOResponse chunkResponse = peerConnectionPool.enviarPeticion(
-                peerDestino.getIp(),
-                peerDestino.getPuerto(),
-                chunkRequest
-            );
-
-            if (!"success".equals(chunkResponse.getStatus())) {
-                throw new Exception("Error al descargar chunk " + chunkNumber + ": " + chunkResponse.getMessage());
-            }
-
-            // Extraer y decodificar el chunk
-            com.google.gson.JsonObject chunkData = gson.toJsonTree(chunkResponse.getData()).getAsJsonObject();
-            String chunkBase64 = chunkData.get("chunkDataBase64").getAsString();
-            byte[] chunkBytes = java.util.Base64.getDecoder().decode(chunkBase64);
-
-            // Escribir los bytes del chunk al stream
-            baos.write(chunkBytes);
-        }
-
-        System.out.println("✓ [PeerService] Archivo descargado exitosamente (" + baos.size() + " bytes)");
-        return baos.toByteArray();
+        // Delegar la responsabilidad al servicio especializado
+        return fileTransferService.descargarArchivoDesdePeer(peerDestinoId, fileId);
     }
 
     // ==================== PEER ACTUAL ====================
@@ -773,179 +719,15 @@ public class PeerServiceImpl implements IPeerService {
             String peerIp,
             Integer peerPuerto) {
 
-        System.out.println("🔔 [PeerService] Notificando cambio de usuario a todos los peers: " + username + " -> " + nuevoEstado);
-
-        try {
-            // Obtener todos los peers disponibles (no solo activos) porque usamos conexiones efímeras
-            List<PeerResponseDto> peersDisponibles = listarPeersDisponibles();
-            UUID peerLocalId = obtenerPeerActualId();
-
-            // Filtrar el peer local para no notificarnos a nosotros mismos
-            List<PeerResponseDto> peersRemotos = peersDisponibles.stream()
-                .filter(p -> !p.getPeerId().equals(peerLocalId))
-                .collect(java.util.stream.Collectors.toList());
-
-            if (peersRemotos.isEmpty()) {
-                System.out.println("ℹ [PeerService] No hay peers remotos disponibles para notificar");
-                return;
-            }
-
-            System.out.println("→ [PeerService] Enviando notificación PUSH a " + peersRemotos.size() + " peers remotos");
-
-            // Preparar el mapa de peers para broadcast
-            java.util.Map<UUID, String[]> peersParaBroadcast = new java.util.HashMap<>();
-            for (PeerResponseDto peer : peersRemotos) {
-                peersParaBroadcast.put(
-                    peer.getPeerId(),
-                    new String[]{peer.getIp(), String.valueOf(peer.getPuerto())}
-                );
-            }
-
-            // Preparar la notificación PUSH
-            java.util.Map<String, Object> notificationData = new java.util.HashMap<>();
-            notificationData.put("usuarioId", usuarioId.toString());
-            notificationData.put("username", username);
-            notificationData.put("nuevoEstado", nuevoEstado);
-            notificationData.put("peerId", peerId != null ? peerId.toString() : null);
-            notificationData.put("peerIp", peerIp);
-            notificationData.put("peerPuerto", peerPuerto);
-            notificationData.put("timestamp", LocalDateTime.now().toString());
-
-            DTORequest notificationRequest = new DTORequest(
-                "notificacionCambioUsuario",
-                notificationData
-            );
-
-            // Enviar broadcast a todos los peers
-            java.util.Map<String, java.util.concurrent.Future<DTOResponse>> futures =
-                peerConnectionPool.broadcast(peersParaBroadcast, notificationRequest);
-
-            // Esperar las respuestas de forma asíncrona (no bloqueante)
-            // Las respuestas se procesan en segundo plano
-            int exitosos = 0;
-            int fallidos = 0;
-
-            for (java.util.Map.Entry<String, java.util.concurrent.Future<DTOResponse>> entry : futures.entrySet()) {
-                try {
-                    DTOResponse response = entry.getValue().get(2, java.util.concurrent.TimeUnit.SECONDS);
-                    if ("success".equals(response.getStatus())) {
-                        exitosos++;
-                    } else {
-                        fallidos++;
-                        System.out.println("⚠ [PeerService] Peer " + entry.getKey() + " respondió con error: " + response.getMessage());
-                    }
-                } catch (java.util.concurrent.TimeoutException e) {
-                    fallidos++;
-                    System.out.println("⚠ [PeerService] Timeout al notificar peer " + entry.getKey());
-                } catch (Exception e) {
-                    fallidos++;
-                    System.out.println("⚠ [PeerService] Error al notificar peer " + entry.getKey() + ": " + e.getMessage());
-                }
-            }
-
-            System.out.println("✓ [PeerService] Notificación completada: " + exitosos + " exitosas, " + fallidos + " fallidas");
-
-        } catch (Exception e) {
-            System.err.println("✗ [PeerService] Error al enviar notificaciones push: " + e.getMessage());
-            e.printStackTrace();
-        }
+        // Delegar al notificador especializado
+        peerNotifier.notificarCambioUsuarioATodosLosPeers(usuarioId, username, nuevoEstado, peerId, peerIp, peerPuerto);
     }
 
     // ==================== SINCRONIZACIÓN DE USUARIOS ====================
 
     @Override
     public List<java.util.Map<String, Object>> sincronizarUsuariosDeTodosLosPeers() {
-        System.out.println("🔄 [PeerService] Iniciando sincronización de usuarios de todos los peers...");
-
-        List<java.util.Map<String, Object>> todosLosUsuarios = new java.util.ArrayList<>();
-        java.util.Set<String> usuariosYaAgregados = new java.util.HashSet<>();
-
-        try {
-            // Obtener el peer actual para no consultarnos a nosotros mismos
-            UUID peerLocalId = obtenerPeerActualId();
-
-            // Obtener lista de peers activos
-            List<PeerResponseDto> peersActivos = listarPeersActivos();
-
-            // Filtrar el peer local
-            List<PeerResponseDto> peersRemotos = peersActivos.stream()
-                .filter(p -> !p.getPeerId().equals(peerLocalId))
-                .collect(java.util.stream.Collectors.toList());
-
-            System.out.println("→ [PeerService] Consultando usuarios de " + peersRemotos.size() + " peers remotos activos");
-
-            // Consultar cada peer
-            for (PeerResponseDto peer : peersRemotos) {
-                try {
-                    System.out.println("  ├─ Consultando peer: " + peer.getNombreServidor() +
-                                     " (" + peer.getIp() + ":" + peer.getPuerto() + ")");
-
-                    // Preparar la petición
-                    java.util.Map<String, Object> requestData = new java.util.HashMap<>();
-                    requestData.put("peerId", peerLocalId.toString());
-
-                    DTORequest request = new DTORequest("sincronizarUsuarios", requestData);
-
-                    // Usar PeerConnectionPool.enviarPeticion para hacer la petición
-                    DTOResponse response = peerConnectionPool.enviarPeticion(
-                        peer.getIp(),
-                        peer.getPuerto(),
-                        request
-                    );
-
-                    if (response != null && "success".equals(response.getStatus())) {
-                        // Extraer la lista de usuarios de la respuesta
-                        Object dataObj = response.getData();
-
-                        if (dataObj instanceof java.util.Map) {
-                            @SuppressWarnings("unchecked")
-                            java.util.Map<String, Object> dataMap = (java.util.Map<String, Object>) dataObj;
-
-                            if (dataMap.containsKey("usuarios")) {
-                                Object usuariosObj = dataMap.get("usuarios");
-
-                                if (usuariosObj instanceof java.util.List) {
-                                    @SuppressWarnings("unchecked")
-                                    java.util.List<java.util.Map<String, Object>> usuariosPeer =
-                                        (java.util.List<java.util.Map<String, Object>>) usuariosObj;
-
-                                    // Agregar usuarios que no estén duplicados
-                                    int usuariosAgregados = 0;
-                                    for (java.util.Map<String, Object> usuario : usuariosPeer) {
-                                        String usuarioId = (String) usuario.get("usuarioId");
-
-                                        // Solo agregar si no está duplicado
-                                        if (usuarioId != null && !usuariosYaAgregados.contains(usuarioId)) {
-                                            todosLosUsuarios.add(usuario);
-                                            usuariosYaAgregados.add(usuarioId);
-                                            usuariosAgregados++;
-                                        }
-                                    }
-
-                                    System.out.println("  └─ ✓ Agregados " + usuariosAgregados + " usuarios del peer " +
-                                                     peer.getNombreServidor());
-                                }
-                            }
-                        }
-                    } else {
-                        System.out.println("  └─ ⚠ Peer respondió con error o sin datos: " +
-                                         (response != null ? response.getMessage() : "null"));
-                    }
-
-                } catch (Exception e) {
-                    System.err.println("  └─ ✗ Error al consultar peer " + peer.getNombreServidor() +
-                                     ": " + e.getMessage());
-                }
-            }
-
-            System.out.println("✓ [PeerService] Sincronización completada. Total usuarios de peers remotos: " +
-                             todosLosUsuarios.size());
-
-        } catch (Exception e) {
-            System.err.println("✗ [PeerService] Error al sincronizar usuarios de peers: " + e.getMessage());
-            e.printStackTrace();
-        }
-
-        return todosLosUsuarios;
+        // Delegar la sincronización al servicio especializado
+        return userSyncService.sincronizarUsuariosDeTodosLosPeers();
     }
 }

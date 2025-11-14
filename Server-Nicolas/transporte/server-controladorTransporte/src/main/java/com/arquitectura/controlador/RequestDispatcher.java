@@ -33,6 +33,8 @@ public class RequestDispatcher {
             "uploadfileforregistration",
             "uploadfilechunk",
             "endfileupload",
+            // Acción para solicitar registro/ID de peer en la red P2P
+            "registrarpeer",
             // Acciones P2P que no requieren autenticación de usuario
             "listarpeersdisponibles",
             "reportarlatido",
@@ -84,8 +86,13 @@ public class RequestDispatcher {
         DTORequest request;
         String action = "unknown";
         try {
+            // Log raw request for debugging
+            System.out.println("[RequestDispatcher] dispatch raw JSON: " + requestJson);
+
             request = gson.fromJson(requestJson, DTORequest.class);
             action = request.getAction() != null ? request.getAction().toLowerCase() : "unknown";
+
+            System.out.println("[RequestDispatcher] action detected: " + action + ", authenticated? " + handler.isAuthenticated());
 
             // Validar sesión
             if (!ACCIONES_PUBLICAS.contains(action) && !handler.isAuthenticated()) {
@@ -98,11 +105,13 @@ public class RequestDispatcher {
             for (IController controller : controllers) {
                 if (controller.handleAction(action, request, handler)) {
                     handled = true;
+                    System.out.println("[RequestDispatcher] Acción '" + action + "' manejada por " + controller.getClass().getSimpleName());
                     break;
                 }
             }
 
             if (!handled) {
+                System.out.println("[RequestDispatcher] Ningún controlador manejó la acción: " + action);
                 sendJsonResponse(handler, action, false, "Comando desconocido: " + action, null);
             }
 
