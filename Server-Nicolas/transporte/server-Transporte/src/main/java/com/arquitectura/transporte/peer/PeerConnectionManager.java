@@ -29,7 +29,7 @@ public class PeerConnectionManager {
 
     private static final Logger log = LoggerFactory.getLogger(PeerConnectionManager.class);
 
-    @Value("${peer.server.port:22200}")
+    @Value("${peer.server.port:22100}")
     private int peerPort;
 
     @Value("${server.port:22100}")

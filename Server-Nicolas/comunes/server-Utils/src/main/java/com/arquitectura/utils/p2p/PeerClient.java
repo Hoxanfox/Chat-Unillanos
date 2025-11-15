@@ -184,8 +184,8 @@ public class PeerClient {
         }
         
         // Modo legacy: usar puerto por defecto
-        System.err.println("⚠ [PeerClient] Puerto P2P no configurado, usando 22200 por defecto");
-        return 22200; // Puerto por defecto
+        System.err.println("⚠ [PeerClient] Puerto P2P no configurado, usando 22100 por defecto");
+        return 22100; // Puerto por defecto
     }
 
     /**

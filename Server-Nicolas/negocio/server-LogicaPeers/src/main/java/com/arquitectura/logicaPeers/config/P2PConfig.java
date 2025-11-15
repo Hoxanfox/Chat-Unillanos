@@ -11,7 +11,7 @@ import org.springframework.context.annotation.PropertySource;
  * para los servicios P2P.
  */
 @Configuration
-@PropertySource(value = "file:./config/p2p.properties", ignoreResourceNotFound = true)
+@PropertySource(value = {"file:./config/p2p.properties", "file:./config/server.properties", "file:./config/mail.properties"}, ignoreResourceNotFound = true)
 public class P2PConfig {
     
     // ==================== CONFIGURACIÓN GENERAL P2P ====================
@@ -19,21 +19,26 @@ public class P2PConfig {
     @Value("${p2p.enabled:true}")
     private boolean enabled;
     
-    @Value("${p2p.puerto:22100}")
+    // Ajustado a 22100 para coincidir con la configuración esperada
+    @Value("${peer.server.port:22100}")
     private int puerto;
     
+    @Value("${server.host:}")
+    private String ip;
+
+    @Value("${peer.max.connections:10}")
+    private int peerMaxConnections;
+
     @Value("${p2p.nombre.servidor:Servidor-P2P}")
     private String nombreServidor;
-    
-    @Value("${p2p.ip:}")
-    private String ip;
     
     // ==================== CONFIGURACIÓN DE HEARTBEAT ====================
     
     @Value("${p2p.heartbeat.interval:30000}")
     private long heartbeatInterval;
     
-    @Value("${p2p.heartbeat.timeout:90000}")
+    // Aumentado a 180000 ms por defecto (coincide con logs anteriores)
+    @Value("${p2p.heartbeat.timeout:180000}")
     private long heartbeatTimeout;
     
     @Value("${p2p.heartbeat.enabled:true}")
@@ -122,6 +127,8 @@ public class P2PConfig {
         return clientRetryDelay;
     }
     
+    public int getPeerMaxConnections() { return peerMaxConnections; }
+
     // ==================== MÉTODOS DE UTILIDAD ====================
     
     /**
