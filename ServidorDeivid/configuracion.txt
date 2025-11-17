@@ -8,12 +8,12 @@ cliente.host=localhost
 cliente.puerto=8000
 
 # Host y puerto por defecto para peers
-#peer.host=localhost
-#peer.puerto=9000
+peer.host=192.168.1.17
+peer.puerto=9000
 
 # Peer inicial (opcional) - ejemplo
-# peer.inicial.host=192
-# peer.inicial.puerto=9001
+peer.inicial.host=192.168.1.11
+peer.inicial.puerto=9000
 
 # Transporte a usar por defecto (FabricaTransporte.crearTransporte)
 # Valores típicos: TCP, UDP, etc. (depende de las implementaciones disponibles)

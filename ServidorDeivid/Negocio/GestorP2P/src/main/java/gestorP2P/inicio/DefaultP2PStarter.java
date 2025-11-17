@@ -16,6 +16,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.UUID;
 import logger.LoggerCentral;
+import transporte.FabricaTransporte;
+import transporte.TransporteServidor;
+import dto.gestionConexion.transporte.DTOConexion;
+import conexion.GestorConexion;
+import conexion.TipoPool;
+import dto.gestionConexion.conexion.DTOSesion;
 
 /**
  * Implementación por defecto del starter P2P.
@@ -27,6 +33,9 @@ public class DefaultP2PStarter implements IStarterP2P {
     private final PeerRepositorio peerRepo;
     private final IConfigReader config;
     private final ExecutorService exec = Executors.newCachedThreadPool();
+
+    // Transporte servidor local para aceptar conexiones entrantes (peers)
+    private final TransporteServidor transporteServidor = new TransporteServidor();
 
     public DefaultP2PStarter(IGestorP2P gestorP2P, IPeerRegistrar peerRegistrar) {
         this(gestorP2P, peerRegistrar, new PeerRepositorio(), new FileConfigReader());
@@ -55,6 +64,24 @@ public class DefaultP2PStarter implements IStarterP2P {
                 Peer existente = peerRepo.obtenerPorSocketInfo(localSocketInfo);
                 if (existente != null) {
                     LoggerCentral.info("DefaultP2PStarter.iniciar: peer local ya existe en repo id=" + (existente.getId()!=null?existente.getId():"<null>") + " socket=" + localSocketInfo);
+
+                    // Iniciar servidor de escucha local (solo si existe peer local en BD)
+                    try {
+                        transporteServidor.iniciar(localHost, localPort, true, new TransporteServidor.SesionHandler() {
+                            @Override
+                            public void onSesionAceptada(DTOSesion sesion) {
+                                try {
+                                    GestorConexion.getInstancia().agregarSesionPeer(sesion);
+                                } catch (Exception e) {
+                                    LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
+                                    try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
+                                }
+                            }
+                        });
+                    } catch (Exception e) {
+                        LoggerCentral.warn("DefaultP2PStarter.iniciar: no se pudo iniciar transporte servidor en " + localSocketInfo + " -> " + e.getMessage());
+                    }
+
                     // Re-notificar el peer local (incluir socketInfo) para que Observadores reciban información local
                     try {
                         peerRegistrar.registrarPeer(existente, localSocketInfo);
@@ -99,9 +126,43 @@ public class DefaultP2PStarter implements IStarterP2P {
                 if (bootstrapHost != null && !bootstrapHost.isEmpty() && bootstrapPort > 0) {
                     try {
                         LoggerCentral.info("DefaultP2PStarter.iniciar: intentando bootstrap contra " + bootstrapHost + ":" + bootstrapPort);
+
+                        // Intento proactivo: crear conexión TCP directa al bootstrap y añadir al poolPeers para que el envío use la sesión
+                        try {
+                            LoggerCentral.debug("DefaultP2PStarter: intentando conectar proactivamente al bootstrap " + bootstrapHost + ":" + bootstrapPort);
+                            DTOConexion datos = new DTOConexion(bootstrapHost, bootstrapPort);
+                            DTOSesion s = FabricaTransporte.crearTransporte("TCP").conectar(datos);
+                            if (s != null && s.estaActiva()) {
+                                LoggerCentral.debug("DefaultP2PStarter: conexión proactiva al bootstrap establecida -> " + s + ". Añadiendo al poolPeers");
+                                GestorConexion.getInstancia().agregarSesionPeer(s);
+                            } else {
+                                LoggerCentral.debug("DefaultP2PStarter: no se pudo establecer conexión proactiva al bootstrap");
+                            }
+                        } catch (Exception e) {
+                            LoggerCentral.debug("DefaultP2PStarter: error al intentar conexión proactiva al bootstrap -> " + e.getMessage());
+                        }
+
                         UUID id = gestorP2P.unirseRed(bootstrapHost, bootstrapPort).get();
                         if (id != null) {
                             LoggerCentral.info("DefaultP2PStarter.iniciar: bootstrap exitoso, id asignado=" + id);
+
+                            // Iniciar servidor de escucha local tras unirse con éxito (ahora el peer local debería estar registrado)
+                            try {
+                                transporteServidor.iniciar(localHost, localPort, true, new TransporteServidor.SesionHandler() {
+                                    @Override
+                                    public void onSesionAceptada(DTOSesion sesion) {
+                                        try {
+                                            GestorConexion.getInstancia().agregarSesionPeer(sesion);
+                                        } catch (Exception e) {
+                                            LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
+                                            try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
+                                        }
+                                    }
+                                });
+                            } catch (Exception e) {
+                                LoggerCentral.warn("DefaultP2PStarter.iniciar: no se pudo iniciar transporte servidor tras bootstrap en " + localSocketInfo + " -> " + e.getMessage());
+                            }
+
                             // solicitar lista para sincronizar
                             gestorP2P.solicitarListaPeers(bootstrapHost, bootstrapPort).exceptionally(ex -> { LoggerCentral.warn("DefaultP2PStarter.iniciar: fallo solicitando lista tras bootstrap -> " + (ex!=null?ex.getMessage():"<null>")); return null; }).get();
                             return null;
@@ -121,6 +182,24 @@ public class DefaultP2PStarter implements IStarterP2P {
                 Peer genesis = new Peer(newId, localHost, null, Peer.Estado.ONLINE, Instant.now());
                 LoggerCentral.info("DefaultP2PStarter.iniciar: creando peer genesis local id=" + newId + " socket=" + localSocketInfo);
                 peerRegistrar.registrarPeer(genesis, localSocketInfo);
+
+                // Iniciar servidor de escucha local tras crear/registrar peer genesis
+                try {
+                    transporteServidor.iniciar(localHost, localPort, true, new TransporteServidor.SesionHandler() {
+                        @Override
+                        public void onSesionAceptada(DTOSesion sesion) {
+                            try {
+                                GestorConexion.getInstancia().agregarSesionPeer(sesion);
+                            } catch (Exception e) {
+                                LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
+                                try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
+                            }
+                        }
+                    });
+                } catch (Exception e) {
+                    LoggerCentral.warn("DefaultP2PStarter.iniciar: no se pudo iniciar transporte servidor tras crear peer genesis en " + localSocketInfo + " -> " + e.getMessage());
+                }
+
                 return null;
 
             } catch (Exception e) {

@@ -33,6 +33,7 @@ public class GestorRespuesta implements IGestorRespuesta {
         this.gestorConexion = GestorConexion.getInstancia();
         this.manejadores = new ConcurrentHashMap<>();
         this.gson = new Gson();
+        LoggerCentral.debug("GestorRespuesta: instancia creada.");
     }
 
     /**
@@ -61,9 +62,11 @@ public class GestorRespuesta implements IGestorRespuesta {
             return;
         }
 
+        LoggerCentral.debug("GestorRespuesta.iniciarEscucha(pool=" + tipoPool + ") - iniciando hilo de escucha. Manejadores registrados=" + manejadores.size());
+
         hiloEscucha = new Thread(() -> {
             // Obtener una sesión del pool seleccionado
-            DTOSesion sesion = null;
+            DTOSesion sesion;
             if (tipoPool == TipoPool.PEERS) {
                 sesion = gestorConexion.obtenerSesionPeer(5000);
             } else {
@@ -75,10 +78,16 @@ public class GestorRespuesta implements IGestorRespuesta {
                 return;
             }
 
+            LoggerCentral.debug("GestorRespuesta: sesión obtenida para escucha en pool " + tipoPool + " -> " + sesion);
+
             try (BufferedReader in = sesion.getIn()) {
                 LoggerCentral.info("Gestor de respuestas iniciado en pool " + tipoPool + ". Esperando mensajes...");
                 String respuestaServidor;
                 while (!Thread.currentThread().isInterrupted() && (respuestaServidor = in.readLine()) != null) {
+                    // Log del JSON crudo recibido (truncado si es muy largo)
+                    String rawForLog = respuestaServidor.length() > 2000 ? respuestaServidor.substring(0, 2000) + "... [truncado]" : respuestaServidor;
+                    LoggerCentral.debug("[" + tipoPool + "] << RAW respuesta recibida (len=" + respuestaServidor.length() + "): " + rawForLog);
+
                     // Truncar respuestas muy largas para evitar imprimir imágenes en base64
                     String respuestaParaLog = truncarRespuesta(respuestaServidor, 500);
                     LoggerCentral.info("[" + tipoPool + "] << Respuesta recibida: " + respuestaParaLog);
@@ -104,8 +113,10 @@ public class GestorRespuesta implements IGestorRespuesta {
     }
 
     private void procesarRespuesta(String jsonResponse) {
+        LoggerCentral.debug("procesarRespuesta: entrada json length=" + (jsonResponse != null ? jsonResponse.length() : 0));
         try {
             DTOResponse response = gson.fromJson(jsonResponse, DTOResponse.class);
+            LoggerCentral.debug("procesarRespuesta: parsed DTOResponse=" + (response != null ? response.getAction() + " (action)" : "null"));
             if (response != null && response.getAction() != null) {
                 // Intentar extraer requestId desde response.data si existe
                 String requestId = null;
@@ -114,21 +125,26 @@ public class GestorRespuesta implements IGestorRespuesta {
                     try {
                         Type mapType = new TypeToken<Map<String, Object>>(){}.getType();
                         Map<String, Object> map = gson.fromJson(gson.toJson(dataObj), mapType);
+                        LoggerCentral.debug("procesarRespuesta: data convertido a map, keys=" + (map != null ? map.keySet() : "null"));
                         if (map != null && map.containsKey("requestId")) {
                             requestId = String.valueOf(map.get("requestId"));
+                            LoggerCentral.debug("procesarRespuesta: requestId extraido=" + requestId);
                         }
                     } catch (Exception ignored) {
+                        LoggerCentral.debug("procesarRespuesta: data no es un map, omitiendo extracción de requestId.");
                         // no hacer nada si no es un map
                     }
                 }
 
                 // Buscar manejador por clave específica action:requestId (si requestId existe)
-                Consumer<DTOResponse> manejador = null;
+                Consumer<DTOResponse> manejador;
                 if (requestId != null && !requestId.isEmpty()) {
                     String llaveEspecifica = response.getAction() + ":" + requestId;
+                    LoggerCentral.debug("procesarRespuesta: buscando manejador específico llave=" + llaveEspecifica);
                     manejador = manejadores.get(llaveEspecifica);
                     if (manejador != null) {
                         try {
+                            LoggerCentral.debug("procesarRespuesta: ejecutando manejador específico para " + llaveEspecifica);
                             manejador.accept(response);
                         } catch (Exception e) {
                             LoggerCentral.error("Error ejecutando manejador específico para accion " + llaveEspecifica + ": " + e.getMessage(), e);
@@ -144,9 +160,11 @@ public class GestorRespuesta implements IGestorRespuesta {
                 manejador = manejadores.get(response.getAction());
                 if (manejador == null) {
                     // Intentar buscar con todas las claves normalizadas
+                    LoggerCentral.debug("procesarRespuesta: buscando manejador por comparacion case-insensitive para action=" + response.getAction());
                     for (Map.Entry<String, Consumer<DTOResponse>> entry : manejadores.entrySet()) {
                         if (entry.getKey().toLowerCase().equals(actionNormalizada)) {
                             manejador = entry.getValue();
+                            LoggerCentral.debug("procesarRespuesta: encontrado manejador por llave=" + entry.getKey());
                             break;
                         }
                     }
@@ -154,12 +172,13 @@ public class GestorRespuesta implements IGestorRespuesta {
 
                 if (manejador != null) {
                     try {
+                        LoggerCentral.debug("procesarRespuesta: ejecutando manejador para accion=" + response.getAction());
                         manejador.accept(response);
                     } catch (Exception e) {
                         LoggerCentral.error("Error ejecutando manejador para accion " + response.getAction() + ": " + e.getMessage(), e);
                     }
                 } else {
-                    LoggerCentral.warn("No se encontró un manejador para la acción: " + response.getAction());
+                    LoggerCentral.warn("No se encontró un manejador para la acción: " + response.getAction() + ". Manejadores registrados=" + manejadores.keySet());
                 }
             }
         } catch (JsonSyntaxException e) {
@@ -178,14 +197,14 @@ public class GestorRespuesta implements IGestorRespuesta {
     @Override
     public void registrarManejador(String tipoOperacion, Consumer<DTOResponse> manejador) {
         manejadores.put(tipoOperacion, manejador);
-        LoggerCentral.debug("Manejador registrado para operación: " + tipoOperacion);
+        LoggerCentral.debug("Manejador registrado para operación: " + tipoOperacion + ". Total manejadores=" + manejadores.size());
     }
 
     @Override
     public void removerManejador(String tipoOperacion) {
         if (tipoOperacion == null) return;
         manejadores.remove(tipoOperacion);
-        LoggerCentral.debug("Manejador removido para operación: " + tipoOperacion);
+        LoggerCentral.debug("Manejador removido para operación: " + tipoOperacion + ". Total manejadores=" + manejadores.size());
     }
 
     /**

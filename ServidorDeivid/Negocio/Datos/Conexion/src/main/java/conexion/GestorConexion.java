@@ -13,6 +13,8 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import logger.LoggerCentral;
+
 /**
  * Gestor Singleton que almacena y gestiona el ciclo de vida de la DTOSesion activa.
  * Actúa como un "Sujeto" observable para notificar cambios de sesión y además
@@ -108,8 +110,13 @@ public class GestorConexion implements ISujeto {
             if (!poolClientes.contains(sesion)) {
                 boolean offered = poolClientes.offer(sesion);
                 if (!offered) System.err.println("No se pudo añadir la sesión al poolClientes");
+                LoggerCentral.debug("agregarSesionCliente: session añadida -> " + sesion + ". poolClientes.size=" + poolClientes.size());
                 notificarObservadores("POOL_CLIENTES_ACTUALIZADO", poolClientes.size());
+            } else {
+                LoggerCentral.debug("agregarSesionCliente: sesión ya existe en poolClientes -> " + sesion);
             }
+        } else {
+            LoggerCentral.debug("agregarSesionCliente: sesión nula o inactiva, no añadida -> " + sesion);
         }
     }
 
@@ -121,8 +128,13 @@ public class GestorConexion implements ISujeto {
             if (!poolPeers.contains(sesion)) {
                 boolean offered = poolPeers.offer(sesion);
                 if (!offered) System.err.println("No se pudo añadir la sesión al poolPeers");
+                LoggerCentral.debug("agregarSesionPeer: session añadida -> " + sesion + ". poolPeers.size=" + poolPeers.size());
                 notificarObservadores("POOL_PEERS_ACTUALIZADO", poolPeers.size());
+            } else {
+                LoggerCentral.debug("agregarSesionPeer: sesión ya existe en poolPeers -> " + sesion);
             }
+        } else {
+            LoggerCentral.debug("agregarSesionPeer: sesión nula o inactiva, no añadida -> " + sesion);
         }
     }
 
@@ -131,20 +143,30 @@ public class GestorConexion implements ISujeto {
      * NO se utiliza fallback a `sesionActiva` para evitar compartir la misma instancia entre hilos.
      */
     public DTOSesion obtenerSesionCliente(long timeoutMs) {
+        LoggerCentral.debug("obtenerSesionCliente: solicitada con timeoutMs=" + timeoutMs + ". poolClientes.size=" + poolClientes.size());
         long start = System.currentTimeMillis();
         long remaining = Math.max(0, timeoutMs);
         try {
             while (remaining >= 0) {
                 DTOSesion s = poolClientes.poll(remaining, TimeUnit.MILLISECONDS);
-                if (s == null) return null; // timeout
-                if (s.estaActiva()) return s;
+                if (s == null) {
+                    LoggerCentral.debug("obtenerSesionCliente: timeout sin sesión disponible (timeoutMs=" + timeoutMs + ")");
+                    return null; // timeout
+                }
+                if (s.estaActiva()) {
+                    LoggerCentral.debug("obtenerSesionCliente: sesión obtenida -> " + s);
+                    return s;
+                }
                 // si no está activa, seguir intentando con el tiempo restante
+                LoggerCentral.debug("obtenerSesionCliente: sesión obtenida no activa, descartando -> " + s);
                 remaining = timeoutMs - (System.currentTimeMillis() - start);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            LoggerCentral.debug("obtenerSesionCliente: hilo interrumpido durante poll");
             return null;
         }
+        LoggerCentral.debug("obtenerSesionCliente: final sin resultado");
         return null;
     }
 
@@ -153,19 +175,29 @@ public class GestorConexion implements ISujeto {
      * NO se utiliza fallback a `sesionActiva` para evitar compartir la misma instancia entre hilos.
      */
     public DTOSesion obtenerSesionPeer(long timeoutMs) {
+        LoggerCentral.debug("obtenerSesionPeer: solicitada con timeoutMs=" + timeoutMs + ". poolPeers.size=" + poolPeers.size());
         long start = System.currentTimeMillis();
         long remaining = Math.max(0, timeoutMs);
         try {
             while (remaining >= 0) {
                 DTOSesion s = poolPeers.poll(remaining, TimeUnit.MILLISECONDS);
-                if (s == null) return null; // timeout
-                if (s.estaActiva()) return s;
+                if (s == null) {
+                    LoggerCentral.debug("obtenerSesionPeer: timeout sin sesión disponible (timeoutMs=" + timeoutMs + ")");
+                    return null; // timeout
+                }
+                if (s.estaActiva()) {
+                    LoggerCentral.debug("obtenerSesionPeer: sesión obtenida -> " + s);
+                    return s;
+                }
+                LoggerCentral.debug("obtenerSesionPeer: sesión obtenida no activa, descartando -> " + s);
                 remaining = timeoutMs - (System.currentTimeMillis() - start);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            LoggerCentral.debug("obtenerSesionPeer: hilo interrumpido durante poll");
             return null;
         }
+        LoggerCentral.debug("obtenerSesionPeer: final sin resultado");
         return null;
     }
 
@@ -181,6 +213,7 @@ public class GestorConexion implements ISujeto {
      */
     public DTOSesion obtenerSesionPorDireccion(String ip, int port, long timeoutMs, boolean buscarEnPeers) {
         BlockingQueue<DTOSesion> queue = buscarEnPeers ? poolPeers : poolClientes;
+        LoggerCentral.debug("obtenerSesionPorDireccion: buscando ip=" + ip + " port=" + port + " buscarEnPeers=" + buscarEnPeers + " timeoutMs=" + timeoutMs + " poolSize=" + queue.size());
         List<DTOSesion> temp = new ArrayList<>();
         long deadline = System.currentTimeMillis() + Math.max(0, timeoutMs);
         DTOSesion encontrada = null;
@@ -189,10 +222,14 @@ public class GestorConexion implements ISujeto {
             while (System.currentTimeMillis() <= deadline) {
                 long remaining = Math.max(0, deadline - System.currentTimeMillis());
                 DTOSesion s = queue.poll(remaining, TimeUnit.MILLISECONDS);
-                if (s == null) break; // timeout
+                if (s == null) {
+                    LoggerCentral.debug("obtenerSesionPorDireccion: timeout sin encontrar sesion para " + ip + ":" + port);
+                    break; // timeout
+                }
 
                 // Si la sesión no está activa, se cierra y se ignora
                 if (!s.estaActiva()) {
+                    LoggerCentral.debug("obtenerSesionPorDireccion: sesión extraída no activa, cerrando -> " + s);
                     try {
                         if (s.getIn() != null) s.getIn().close();
                         if (s.getOut() != null) s.getOut().close();
@@ -207,10 +244,12 @@ public class GestorConexion implements ISujeto {
                         int remotePort = s.getSocket().getPort();
                         if (addr.getHostAddress().equals(ip) && remotePort == port) {
                             encontrada = s;
+                            LoggerCentral.debug("obtenerSesionPorDireccion: sesión encontrada -> " + s);
                             break; // encontrada, no reinsertar todavía
                         }
                     }
-                } catch (Exception ignored) {
+                } catch (Exception ex) {
+                    LoggerCentral.debug("obtenerSesionPorDireccion: error inspeccionando sesion -> " + ex.getMessage());
                     // en caso de fallo al inspeccionar, tratar como no encontrada y seguir
                 }
 
@@ -219,6 +258,7 @@ public class GestorConexion implements ISujeto {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            LoggerCentral.debug("obtenerSesionPorDireccion: hilo interrumpido durante búsqueda");
         } finally {
             // Reinsertar sesiones temporales al pool
             for (DTOSesion sTemp : temp) {
@@ -229,12 +269,14 @@ public class GestorConexion implements ISujeto {
                         boolean offered = queue.offer(sTemp);
                         if (!offered) System.err.println("No se pudo reinsertar sesión temporal en el pool");
                     }
+                    LoggerCentral.debug("obtenerSesionPorDireccion: reinsertada sesion temporal -> " + sTemp + ". poolSize ahora=" + queue.size());
                 } else {
                     try {
                         if (sTemp.getIn() != null) sTemp.getIn().close();
                         if (sTemp.getOut() != null) sTemp.getOut().close();
                         if (sTemp.getSocket() != null) sTemp.getSocket().close();
                     } catch (IOException ignored) {}
+                    LoggerCentral.debug("obtenerSesionPorDireccion: sesión temporal inactiva cerrada -> " + sTemp);
                 }
             }
         }
@@ -251,7 +293,10 @@ public class GestorConexion implements ISujeto {
             if (!poolClientes.contains(sesion)) {
                 boolean offered = poolClientes.offer(sesion);
                 if (!offered) System.err.println("No se pudo añadir la sesión al poolClientes (liberar)");
+                LoggerCentral.debug("liberarSesionCliente: sesion reinsertada -> " + sesion + ". poolClientes.size=" + poolClientes.size());
                 notificarObservadores("POOL_CLIENTES_ACTUALIZADO", poolClientes.size());
+            } else {
+                LoggerCentral.debug("liberarSesionCliente: sesion ya existia en poolClientes -> " + sesion);
             }
         } else {
             // Intentar cerrar recursos si es necesario
@@ -260,6 +305,7 @@ public class GestorConexion implements ISujeto {
                 if (sesion.getOut() != null) sesion.getOut().close();
                 if (sesion.getSocket() != null) sesion.getSocket().close();
             } catch (IOException ignored) {}
+            LoggerCentral.debug("liberarSesionCliente: sesion inactiva cerrada -> " + sesion);
         }
     }
 
@@ -272,7 +318,10 @@ public class GestorConexion implements ISujeto {
             if (!poolPeers.contains(sesion)) {
                 boolean offered = poolPeers.offer(sesion);
                 if (!offered) System.err.println("No se pudo añadir la sesión al poolPeers (liberar)");
+                LoggerCentral.debug("liberarSesionPeer: sesion reinsertada -> " + sesion + ". poolPeers.size=" + poolPeers.size());
                 notificarObservadores("POOL_PEERS_ACTUALIZADO", poolPeers.size());
+            } else {
+                LoggerCentral.debug("liberarSesionPeer: sesion ya existia en poolPeers -> " + sesion);
             }
         } else {
             try {
@@ -280,6 +329,7 @@ public class GestorConexion implements ISujeto {
                 if (sesion.getOut() != null) sesion.getOut().close();
                 if (sesion.getSocket() != null) sesion.getSocket().close();
             } catch (IOException ignored) {}
+            LoggerCentral.debug("liberarSesionPeer: sesion inactiva cerrada -> " + sesion);
         }
     }
 
