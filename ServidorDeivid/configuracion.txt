@@ -4,7 +4,7 @@
 # Valores relevantes para los pools de conexión
 
 # Host y puerto por defecto para clientes
-cliente.host=localhost
+cliente.host=192.168.1.17
 cliente.puerto=8000
 
 # Host y puerto por defecto para peers

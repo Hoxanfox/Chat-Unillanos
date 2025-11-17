@@ -19,6 +19,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -103,6 +104,41 @@ public class MainWindow extends JFrame {
                             });
                         } else {
                             System.out.println("[DEBUG] P2P_JOIN_EXITOSA - datos no son PeerDTO");
+                        }
+                        break;
+                    case "P2P_JOIN_ERROR":
+                    case "P2P_PEER_LIST_ERROR":
+                        // Manejar errores estructurados enviados como Map
+                        if (datos instanceof Map) {
+                            Map<?,?> map = (Map<?,?>) datos;
+                            Object reqId = map.get("requestId");
+                            Object target = map.get("targetSocketInfo");
+                            Object message = map.get("message");
+                            Object resp = map.get("response");
+                            Object exObj = map.get("exception");
+                            System.out.println("[DEBUG] " + tipoDeDato + " - requestId=" + reqId + ", target=" + target + ", message=" + message + ", response=" + (resp!=null?resp.getClass().getSimpleName():"null") + ", exception=" + (exObj!=null?exObj.getClass().getSimpleName():"null"));
+                            LOGGER.log(Level.WARNING, "P2P error [{0}] target={1} msg={2}", new Object[]{reqId, target, message});
+                            // Mostrar diálogo de error para join (más visible al usuario)
+                            if ("P2P_JOIN_ERROR".equals(tipoDeDato)) {
+                                // Construir el mensaje antes de la lambda y asignarlo a una variable final
+                                StringBuilder sb = new StringBuilder();
+                                sb.append("RequestId: ").append(reqId).append('\n');
+                                sb.append("Target: ").append(target).append('\n');
+                                sb.append("Error: ").append(message);
+                                if (resp != null) sb.append('\n').append("Response: ").append(resp.toString());
+                                final String detailsFinal = sb.toString();
+                                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(MainWindow.this, "Error unirse a la red:\n" + detailsFinal, "Error P2P_JOIN", JOptionPane.ERROR_MESSAGE));
+                            }
+                        } else if (datos != null) {
+                            // si es un String u otro tipo, mostrarlo tal cual
+                            System.out.println("[DEBUG] " + tipoDeDato + " - detalle: " + datos.toString());
+                            LOGGER.log(Level.WARNING, "P2P error raw: {0}", datos.toString());
+                            if ("P2P_JOIN_ERROR".equals(tipoDeDato)) {
+                                final String msg = datos.toString();
+                                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(MainWindow.this, "Error unirse a la red:\n" + msg, "Error P2P_JOIN", JOptionPane.ERROR_MESSAGE));
+                            }
+                        } else {
+                            System.out.println("[DEBUG] " + tipoDeDato + " - sin datos adicionales");
                         }
                         break;
                     default:

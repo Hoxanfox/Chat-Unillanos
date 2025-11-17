@@ -14,6 +14,8 @@ import dto.p2p.DTOPeerListResponse;
 import dto.p2p.DTOPeerPush;
 import dominio.p2p.Peer;
 import gestorP2P.actualizacion.PeerPushPublisherImpl;
+import gestorP2P.config.FileConfigReader;
+import gestorP2P.config.IConfigReader;
 import gestorP2P.inicio.DefaultP2PStarter;
 import gestorP2P.inicio.IStarterP2P;
 import gestorP2P.registroP2P.IPeerRegistrar;
@@ -46,6 +48,9 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final IStarterP2P starter;
 
+    // Config reader para obtener ip/puerto local
+    private final IConfigReader config;
+
     // Observadores
     private final List<IObservador> observadores = new ArrayList<>();
 
@@ -56,6 +61,8 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
         this.peerRegistrar = new PeerRegistrarImpl();
         // Inicializar gson antes de usarlo en los manejadores
         this.gson = new Gson();
+        // Inicializar config reader para conocer la ip/puerto local
+        this.config = new FileConfigReader();
         // Registrarse como observador del PeerRegistrar para reenviar eventos a la red
         try {
             this.peerRegistrar.registrarObservador(this);
@@ -149,10 +156,17 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
         String requestId = UUID.randomUUID().toString();
 
         Map<String, Object> payload = new HashMap<>();
-        payload.put("ip", ip);
-        payload.put("port", puerto);
-        payload.put("socketInfo", ip + ":" + puerto);
+
+        // Corregido: enviar la IP/PUERTO locales en el payload para que el bootstrap conozca nuestra dirección
+        String localHost = config.getString("peer.host", "localhost");
+        int localPort = config.getInt("peer.puerto", 9000);
+        payload.put("ip", localHost);
+        payload.put("port", localPort);
+        payload.put("socketInfo", localHost + ":" + localPort);
+
+        // Mantener requestId y además opcionalmente incluir destino para claridad
         payload.put("requestId", requestId);
+        payload.put("targetSocketInfo", ip + ":" + puerto);
 
         DTORequest request = new DTORequest(ACCION, payload);
 
@@ -166,7 +180,12 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
                 LoggerCentral.debug("unirseRed.manejador: recibido response para clave " + claveManejador + " -> " + (response==null?"<null>":response.toString()));
                 if (response == null) {
                     String msg = "Respuesta nula al intentar unirse a la red";
-                    notificarObservadores("P2P_JOIN_ERROR", msg);
+                    // Enviar detalles estructurados
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("requestId", requestId);
+                    err.put("targetSocketInfo", ip + ":" + puerto);
+                    err.put("message", msg);
+                    notificarObservadores("P2P_JOIN_ERROR", err);
                     futuro.completeExceptionally(new RuntimeException(msg));
                     gestorRespuesta.removerManejador(claveManejador);
                     return;
@@ -174,7 +193,12 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
 
                 if (!response.fueExitoso()) {
                     String msg = response.getMessage() != null ? response.getMessage() : "Error al unir peer";
-                    notificarObservadores("P2P_JOIN_ERROR", msg);
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("requestId", requestId);
+                    err.put("targetSocketInfo", ip + ":" + puerto);
+                    err.put("message", msg);
+                    err.put("response", response);
+                    notificarObservadores("P2P_JOIN_ERROR", err);
                     futuro.completeExceptionally(new RuntimeException(msg));
                     gestorRespuesta.removerManejador(claveManejador);
                     return;
@@ -211,6 +235,12 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
 
                 if (respRequestId != null && !requestId.equals(respRequestId)) {
                     // Este handler no corresponde a este request (seguridad extra)
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("requestId", requestId);
+                    err.put("targetSocketInfo", ip + ":" + puerto);
+                    err.put("message", "requestId mismatch en la respuesta");
+                    err.put("respRequestId", respRequestId);
+                    notificarObservadores("P2P_JOIN_ERROR", err);
                     gestorRespuesta.removerManejador(claveManejador);
                     futuro.completeExceptionally(new RuntimeException("requestId mismatch en la respuesta"));
                     return;
@@ -218,7 +248,11 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
 
                 if (idStr == null || idStr.isEmpty() || "null".equalsIgnoreCase(idStr)) {
                     String msg = "UUID no recibido en la respuesta";
-                    notificarObservadores("P2P_JOIN_ERROR", msg);
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("requestId", requestId);
+                    err.put("targetSocketInfo", ip + ":" + puerto);
+                    err.put("message", msg);
+                    notificarObservadores("P2P_JOIN_ERROR", err);
                     futuro.completeExceptionally(new RuntimeException(msg));
                     gestorRespuesta.removerManejador(claveManejador);
                     return;
@@ -232,11 +266,15 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
 
                 if (guardado) {
                     LoggerCentral.info("unirseRed.manejador: join exitoso y peer guardado id=" + uuid + " ip=" + ip + " puerto=" + puerto);
-                    // No notificar aquí: el PeerRegistrar ya notificará "PEER_REGISTRADO" (con socketInfo) y el gestor reenviará
+                    // No notificar aquí: el PeerRegistrar ya notificará "PEER_REGISTRADO" (con socketInfo) y el gestor la reenvará
                     futuro.complete(uuid);
                 } else {
                     String msg = "No se pudo guardar el peer en la persistencia";
-                    notificarObservadores("P2P_JOIN_ERROR", msg);
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("requestId", requestId);
+                    err.put("targetSocketInfo", ip + ":" + puerto);
+                    err.put("message", msg);
+                    notificarObservadores("P2P_JOIN_ERROR", err);
                     futuro.completeExceptionally(new RuntimeException(msg));
                 }
 
@@ -246,7 +284,12 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
             } catch (Exception e) {
                 gestorRespuesta.removerManejador(claveManejador);
                 LoggerCentral.error("Excepción en manejador de unirseRed", e);
-                notificarObservadores("P2P_JOIN_ERROR", e.getMessage());
+                Map<String, Object> err = new HashMap<>();
+                err.put("requestId", requestId);
+                err.put("targetSocketInfo", ip + ":" + puerto);
+                err.put("message", e.getMessage());
+                err.put("exception", e);
+                notificarObservadores("P2P_JOIN_ERROR", err);
                 futuro.completeExceptionally(e);
             }
         };
@@ -266,6 +309,12 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
             LoggerCentral.info("Enviada solicitud PEER_JOIN con requestId=" + requestId + " hacia " + ip + ":" + puerto);
         } catch (Exception e) {
             LoggerCentral.error("Error enviando solicitud PEER_JOIN: " + e.getMessage(), e);
+            Map<String, Object> err = new HashMap<>();
+            err.put("requestId", requestId);
+            err.put("targetSocketInfo", ip + ":" + puerto);
+            err.put("message", e.getMessage());
+            err.put("exception", e);
+            notificarObservadores("P2P_JOIN_ERROR", err);
             gestorRespuesta.removerManejador(claveManejador);
             futuro.completeExceptionally(e);
             return futuro;
@@ -277,7 +326,11 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
                 gestorRespuesta.removerManejador(claveManejador);
                 String msg = "Timeout esperando respuesta PEER_JOIN";
                 LoggerCentral.warn(msg + " requestId=" + requestId);
-                notificarObservadores("P2P_JOIN_ERROR", msg);
+                Map<String, Object> err = new HashMap<>();
+                err.put("requestId", requestId);
+                err.put("targetSocketInfo", ip + ":" + puerto);
+                err.put("message", msg);
+                notificarObservadores("P2P_JOIN_ERROR", err);
                 futuro.completeExceptionally(new RuntimeException(msg));
             }
         }, 6, TimeUnit.SECONDS);
@@ -291,10 +344,15 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
         String requestId = UUID.randomUUID().toString();
 
         Map<String, Object> payload = new HashMap<>();
-        payload.put("ip", ip);
-        payload.put("port", puerto);
-        payload.put("socketInfo", ip + ":" + puerto);
+
+        // Corregido: enviar la IP/PUERTO locales en el payload
+        String localHost = config.getString("peer.host", "localhost");
+        int localPort = config.getInt("peer.puerto", 9000);
+        payload.put("ip", localHost);
+        payload.put("port", localPort);
+        payload.put("socketInfo", localHost + ":" + localPort);
         payload.put("requestId", requestId);
+        payload.put("targetSocketInfo", ip + ":" + puerto);
 
         DTORequest request = new DTORequest(ACCION, payload);
 
@@ -305,7 +363,11 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
                 LoggerCentral.debug("solicitarListaPeers.manejador: recibido response para clave " + claveManejador + " -> " + (response==null?"<null>":response.toString()));
                 if (response == null) {
                     String msg = "Respuesta nula al solicitar lista de peers";
-                    notificarObservadores("P2P_PEER_LIST_ERROR", msg);
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("requestId", requestId);
+                    err.put("targetSocketInfo", ip + ":" + puerto);
+                    err.put("message", msg);
+                    notificarObservadores("P2P_PEER_LIST_ERROR", err);
                     futuro.completeExceptionally(new RuntimeException(msg));
                     gestorRespuesta.removerManejador(claveManejador);
                     return;
@@ -313,7 +375,12 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
 
                 if (!response.fueExitoso()) {
                     String msg = response.getMessage() != null ? response.getMessage() : "Error al obtener lista de peers";
-                    notificarObservadores("P2P_PEER_LIST_ERROR", msg);
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("requestId", requestId);
+                    err.put("targetSocketInfo", ip + ":" + puerto);
+                    err.put("message", msg);
+                    err.put("response", response);
+                    notificarObservadores("P2P_PEER_LIST_ERROR", err);
                     futuro.completeExceptionally(new RuntimeException(msg));
                     gestorRespuesta.removerManejador(claveManejador);
                     return;
@@ -359,7 +426,12 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
              } catch (Exception e) {
                  gestorRespuesta.removerManejador(claveManejador);
                  LoggerCentral.error("Excepción en manejador de solicitarListaPeers", e);
-                 notificarObservadores("P2P_PEER_LIST_ERROR", e.getMessage());
+                 Map<String, Object> err = new HashMap<>();
+                 err.put("requestId", requestId);
+                 err.put("targetSocketInfo", ip + ":" + puerto);
+                 err.put("message", e.getMessage());
+                 err.put("exception", e);
+                 notificarObservadores("P2P_PEER_LIST_ERROR", err);
                  futuro.completeExceptionally(e);
              }
          };
@@ -379,6 +451,12 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
             LoggerCentral.info("Enviada solicitud PEER_LIST con requestId=" + requestId + " hacia " + ip + ":" + puerto);
         } catch (Exception e) {
             LoggerCentral.error("Error enviando solicitud PEER_LIST: " + e.getMessage(), e);
+            Map<String, Object> err = new HashMap<>();
+            err.put("requestId", requestId);
+            err.put("targetSocketInfo", ip + ":" + puerto);
+            err.put("message", e.getMessage());
+            err.put("exception", e);
+            notificarObservadores("P2P_PEER_LIST_ERROR", err);
             gestorRespuesta.removerManejador(claveManejador);
             futuro.completeExceptionally(e);
             return futuro;
@@ -390,7 +468,11 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
                 gestorRespuesta.removerManejador(claveManejador);
                 String msg = "Timeout esperando lista de peers";
                 LoggerCentral.warn(msg + " requestId=" + requestId);
-                notificarObservadores("P2P_PEER_LIST_ERROR", msg);
+                Map<String, Object> err = new HashMap<>();
+                err.put("requestId", requestId);
+                err.put("targetSocketInfo", ip + ":" + puerto);
+                err.put("message", msg);
+                notificarObservadores("P2P_PEER_LIST_ERROR", err);
                 futuro.completeExceptionally(new RuntimeException(msg));
             }
         }, 6, TimeUnit.SECONDS);
@@ -426,8 +508,8 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
         for (IObservador obs : snapshot) {
             try {
                 obs.actualizar(tipoDeDato, datos);
-            } catch (Exception ex) {
-                LoggerCentral.warn("Error notificando observador: " + ex.getMessage());
+            } catch (Exception e) {
+                LoggerCentral.warn("Error notificando observador: " + e.getMessage());
             }
         }
     }
