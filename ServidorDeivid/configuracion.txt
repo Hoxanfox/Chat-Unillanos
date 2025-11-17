@@ -1,0 +1,39 @@
+# configuracion.txt
+# Formato: clave=valor
+# Comentarios con '#'.
+# Valores relevantes para los pools de conexión
+
+# Host y puerto por defecto para clientes
+cliente.host=localhost
+cliente.puerto=8000
+
+# Host y puerto por defecto para peers
+#peer.host=localhost
+#peer.puerto=9000
+
+# Peer inicial (opcional) - ejemplo
+# peer.inicial.host=192
+# peer.inicial.puerto=9001
+
+# Transporte a usar por defecto (FabricaTransporte.crearTransporte)
+# Valores típicos: TCP, UDP, etc. (depende de las implementaciones disponibles)
+transporte.tipo=TCP
+
+# Configuración del pool de clientes
+# pool.clientes.min: número mínimo de sesiones a mantener en el pool de clientes
+# pool.clientes.max: número máximo de sesiones permitidas en el pool de clientes
+pool.clientes.min=1
+pool.clientes.max=10
+
+# Configuración del pool de peers
+# pool.peers.min: número mínimo de sesiones a mantener en el pool de peers
+# pool.peers.max: número máximo de sesiones permitidas en el pool de peers
+pool.peers.min=0
+pool.peers.max=10
+
+# Notas:
+# - `GestorConexion` lee estas claves a través de `Configuracion.getInstance()` y crea
+#   dos pools (Clientes y Peers) con los valores min/max configurados.
+# - `transporte.tipo` decide el tipo de transporte que usa la fábrica `FabricaTransporte`.
+# - Cambiar estos valores y reiniciar la aplicación afectará el comportamiento del pool.
+
