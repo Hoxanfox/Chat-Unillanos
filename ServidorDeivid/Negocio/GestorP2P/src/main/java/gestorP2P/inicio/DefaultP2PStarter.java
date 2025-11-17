@@ -22,6 +22,7 @@ import dto.gestionConexion.transporte.DTOConexion;
 import conexion.GestorConexion;
 import conexion.TipoPool;
 import dto.gestionConexion.conexion.DTOSesion;
+import comunicacion.GestorRespuesta;
 
 /**
  * Implementación por defecto del starter P2P.
@@ -72,6 +73,8 @@ public class DefaultP2PStarter implements IStarterP2P {
                             public void onSesionAceptada(DTOSesion sesion) {
                                 try {
                                     GestorConexion.getInstancia().agregarSesionPeer(sesion);
+                                    // Además de añadir al pool, iniciar escucha directa para procesar respuestas
+                                    try { GestorRespuesta.getInstancia().escucharSesionDirecta(sesion, TipoPool.PEERS); } catch (Exception ignore) {}
                                 } catch (Exception e) {
                                     LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
                                     try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
@@ -153,6 +156,8 @@ public class DefaultP2PStarter implements IStarterP2P {
                                     public void onSesionAceptada(DTOSesion sesion) {
                                         try {
                                             GestorConexion.getInstancia().agregarSesionPeer(sesion);
+                                            // Además de añadir al pool, iniciar escucha directa para procesar respuestas
+                                            try { GestorRespuesta.getInstancia().escucharSesionDirecta(sesion, TipoPool.PEERS); } catch (Exception ignore) {}
                                         } catch (Exception e) {
                                             LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
                                             try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
@@ -190,6 +195,8 @@ public class DefaultP2PStarter implements IStarterP2P {
                         public void onSesionAceptada(DTOSesion sesion) {
                             try {
                                 GestorConexion.getInstancia().agregarSesionPeer(sesion);
+                                // Además de añadir al pool, iniciar escucha directa para procesar respuestas
+                                try { GestorRespuesta.getInstancia().escucharSesionDirecta(sesion, TipoPool.PEERS); } catch (Exception ignore) {}
                             } catch (Exception e) {
                                 LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
                                 try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}

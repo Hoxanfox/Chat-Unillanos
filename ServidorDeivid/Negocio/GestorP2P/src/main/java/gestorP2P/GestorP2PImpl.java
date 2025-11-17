@@ -111,37 +111,94 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
                     }
                 } catch (Exception e) { LoggerCentral.error("Manejador PEER_PUSH: excepción procesando response: " + (e!=null?e.getMessage():"<null>"), e); }
             });
+            LoggerCentral.debug("GestorP2PImpl: registrado manejador global para action=" + AccionesComunicacion.PEER_PUSH);
 
-            LoggerCentral.debug("GestorP2PImpl: registrando manejador para PEER_UPDATE");
-            // Cuando recibimos una actualización completa de peers, registrarla localmente
-            gestorRespuesta.registrarManejador(AccionesComunicacion.PEER_UPDATE, (DTOResponse resp) -> {
+            LoggerCentral.debug("GestorP2PImpl: registrando manejador para PEER_JOIN");
+            // Cuando recibimos una notificación registrarNuevoPeer, comportarse como un PEER_PUSH: solicitar la lista al remitente
+            gestorRespuesta.registrarManejador(AccionesComunicacion.PEER_JOIN, (DTOResponse resp) -> {
                 try {
                     if (resp == null) {
-                        LoggerCentral.warn("Manejador PEER_UPDATE: response nulo recibido");
+                        LoggerCentral.warn("Manejador PEER_JOIN: response nulo recibido");
                         return;
                     }
-                    LoggerCentral.debug("Manejador PEER_UPDATE: recibido response=" + resp.toString());
+                    LoggerCentral.debug("Manejador PEER_JOIN: recibido response=" + (resp==null?"<null>":resp.toString()));
                     Object data = resp.getData();
                     String json = gson.toJson(data);
-                    DTOPeerListResponse lista = gson.fromJson(json, DTOPeerListResponse.class);
-                    if (lista != null && lista.getPeers() != null) {
-                        LoggerCentral.info("Manejador PEER_UPDATE: lista recibida con count=" + lista.getPeers().size());
-                        peerRegistrar.registrarListaDesdeDTO(lista.getPeers());
-                    } else {
-                        LoggerCentral.warn("Manejador PEER_UPDATE: lista parseada es nula o vacía. Intentando fallback parsear como lista directa");
-                        // fallback: intentar como lista directa
-                        try {
-                            Type listType = new TypeToken<List<DTOPeer>>(){}.getType();
-                            List<DTOPeer> dtos = gson.fromJson(json, listType);
-                            if (dtos != null) {
-                                LoggerCentral.debug("Manejador PEER_UPDATE: fallback parseó lista directa tamaño=" + dtos.size());
-                                peerRegistrar.registrarListaDesdeDTO(dtos);
-                            }
-                        } catch (Exception e) { LoggerCentral.warn("Manejador PEER_UPDATE: fallback falló -> " + e.getMessage()); }
+                    DTOPeerPush push = gson.fromJson(json, DTOPeerPush.class);
+                    if (push == null) {
+                        LoggerCentral.warn("Manejador PEER_JOIN: push parseado es null para json=" + json);
+                        return;
                     }
-                } catch (Exception e) { LoggerCentral.error("Manejador PEER_UPDATE: excepción procesando response: " + (e!=null?e.getMessage():"<null>"), e); }
+
+                    // Extraer info de origen
+                    String ip = push.getIp();
+                    int port = push.getPort();
+                    String socketInfo = push.getSocketInfo();
+                    // si no hay ip/port explícito, intentar extraer desde socketInfo
+                    if ((ip == null || ip.isEmpty()) && socketInfo != null) {
+                        String[] parts = socketInfo.split(":");
+                        if (parts.length >= 2) {
+                            ip = parts[0];
+                            try { port = Integer.parseInt(parts[1]); } catch (Exception ignored) { }
+                        }
+                    }
+
+                    LoggerCentral.debug("Manejador PEER_JOIN: push parseado ip=" + ip + " port=" + port + " socketInfo=" + socketInfo);
+
+                    // Crear UUID y registrar peer en repositorio
+                    UUID newId = UUID.randomUUID();
+                    String socketForRegister = (socketInfo != null && !socketInfo.isEmpty()) ? socketInfo : (ip != null && port > 0 ? ip + ":" + port : null);
+                    Peer peer = new Peer(newId, ip, null, Peer.Estado.ONLINE, Instant.now());
+                    boolean guardado = peerRegistrar.registrarPeer(peer, socketForRegister);
+
+                    // Preparar data de respuesta: incluir uuid y requestId si estaba presente
+                    Map<String,Object> respData = new HashMap<>();
+                    respData.put("uuid", newId.toString());
+                    // intentar extraer requestId desde push (si el cliente lo incluyó)
+                    try {
+                        Type mapType = new com.google.gson.reflect.TypeToken<Map<String,Object>>(){}.getType();
+                        Map<String,Object> payloadMap = gson.fromJson(json, mapType);
+                        if (payloadMap != null && payloadMap.containsKey("requestId")) respData.put("requestId", String.valueOf(payloadMap.get("requestId")));
+                    } catch (Exception ignored) {}
+
+                    // Construir DTOResponse
+                    DTOResponse responseToSender;
+                    if (guardado) {
+                        responseToSender = new DTOResponse(AccionesComunicacion.PEER_JOIN, "success", "Peer registrado", respData);
+                        LoggerCentral.info("Manejador PEER_JOIN: peer registrado id=" + newId + " socket=" + socketForRegister);
+                    } else {
+                        responseToSender = new DTOResponse(AccionesComunicacion.PEER_JOIN, "error", "No se pudo registrar el peer", respData);
+                        LoggerCentral.warn("Manejador PEER_JOIN: fallo al registrar peer id=" + newId + " socket=" + socketForRegister);
+                    }
+
+                    // Responder al remitente (si conocemos ip/port)
+                    if (ip != null && port > 0) {
+                        try {
+                            EnviadorPeticiones env = new EnviadorPeticiones();
+                            boolean sent = env.enviarResponseA(ip, port, responseToSender, TipoPool.PEERS);
+                            LoggerCentral.debug("Manejador PEER_JOIN: response enviada a " + ip + ":" + port + " -> sent=" + sent);
+                        } catch (Exception e) {
+                            LoggerCentral.warn("Manejador PEER_JOIN: no se pudo enviar response al remitente " + ip + ":" + port + " -> " + e.getMessage());
+                        }
+                    } else {
+                        LoggerCentral.warn("Manejador PEER_JOIN: no se conoce ip/port del remitente, no se pudo enviar response");
+                    }
+
+                    // Al registrar con peerRegistrar, el PeerPushPublisherImpl (registrado como observador) publicará automáticamente el push
+                } catch (Exception e) { LoggerCentral.error("Manejador PEER_JOIN: excepción procesando response: " + (e!=null?e.getMessage():"<null>"), e); }
             });
+            LoggerCentral.debug("GestorP2PImpl: registrado manejador global para action=" + AccionesComunicacion.PEER_JOIN);
         } catch (Exception e) { LoggerCentral.error("GestorP2PImpl: excepción registrando manejadores iniciales: " + (e!=null?e.getMessage():"<null>"), e); }
+
+        // Iniciar escucha de respuestas en el pool de PEERS para procesar peticiones entrantes
+        try {
+            LoggerCentral.debug("GestorP2PImpl: arrancando GestorRespuesta en pool PEERS");
+            this.gestorRespuesta.iniciarEscucha(TipoPool.PEERS);
+            LoggerCentral.info("GestorRespuesta: escucha iniciada en pool PEERS desde GestorP2PImpl");
+        } catch (Exception e) {
+            LoggerCentral.warn("No se pudo iniciar GestorRespuesta en pool PEERS: " + e.getMessage());
+        }
+
         // Starter P2P (por defecto)
         this.starter = new DefaultP2PStarter(this, this.peerRegistrar);
         LoggerCentral.debug("GestorP2PImpl: constructor - fin inicialización");

@@ -10,11 +10,11 @@ import logger.LoggerCentral;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import com.google.gson.reflect.TypeToken;
-import java.lang.reflect.Type;
 
 /**
  * Implementación del componente que escucha y gestiona las respuestas del servidor.
@@ -34,6 +34,8 @@ public class GestorRespuesta implements IGestorRespuesta {
         this.manejadores = new ConcurrentHashMap<>();
         this.gson = new Gson();
         LoggerCentral.debug("GestorRespuesta: instancia creada.");
+        // NOTA: GestorRespuesta no debe contener lógica de negocio (no registrar manejadores específicos).
+        // Los manejadores deben ser registrados por la capa de negocio (por ejemplo GestorP2PImpl).
     }
 
     /**
@@ -65,51 +67,183 @@ public class GestorRespuesta implements IGestorRespuesta {
         LoggerCentral.debug("GestorRespuesta.iniciarEscucha(pool=" + tipoPool + ") - iniciando hilo de escucha. Manejadores registrados=" + manejadores.size());
 
         hiloEscucha = new Thread(() -> {
-            // Obtener una sesión del pool seleccionado
-            DTOSesion sesion;
-            if (tipoPool == TipoPool.PEERS) {
-                sesion = gestorConexion.obtenerSesionPeer(5000);
-            } else {
-                sesion = gestorConexion.obtenerSesionCliente(5000);
+            // backoff y control de logs para reintentos cuando no hay sesiones disponibles
+            long backoffMs = 1000;
+            final long maxBackoffMs = 10000;
+            int retryCount = 0;
+            long lastLogMs = 0;
+
+            while (!Thread.currentThread().isInterrupted()) {
+                // Obtener una sesión del pool seleccionado (reintentar hasta que haya una)
+                DTOSesion sesion = null;
+                try {
+                    if (tipoPool == TipoPool.PEERS) {
+                        sesion = gestorConexion.obtenerSesionPeer(5000);
+                    } else {
+                        sesion = gestorConexion.obtenerSesionCliente(5000);
+                    }
+                } catch (Exception e) {
+                    LoggerCentral.error("GestorRespuesta: error obteniendo sesion del pool " + tipoPool + ": " + e.getMessage(), e);
+                }
+
+                if (sesion == null || !sesion.estaActiva()) {
+                    // Control de logs: warn la primera vez, luego informar cada 5s para evitar spam en el log
+                    retryCount++;
+                    long now = System.currentTimeMillis();
+                    if (retryCount == 1) {
+                        LoggerCentral.warn("No se puede iniciar la escucha en pool " + tipoPool + ": no hay sesión activa disponible. Reintentando en " + (backoffMs / 1000) + "s...");
+                    } else if (now - lastLogMs >= 5000) {
+                        LoggerCentral.info("Aún esperando sesiones en pool " + tipoPool + " (reintentos=" + retryCount + "). Próximo intento en " + (backoffMs / 1000) + "s...");
+                        lastLogMs = now;
+                    } else {
+                        LoggerCentral.debug("GestorRespuesta: sin sesión disponible en pool " + tipoPool + " (reintentos=" + retryCount + ")");
+                    }
+
+                    try {
+                        Thread.sleep(backoffMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+
+                    // aumentar backoff de forma exponencial hasta un máximo
+                    backoffMs = Math.min(maxBackoffMs, backoffMs * 2);
+                    continue; // reintentar obtener sesión
+                } else {
+                    // sesión obtenida: resetear contador/backoff
+                    retryCount = 0;
+                    backoffMs = 1000;
+                    lastLogMs = 0;
+                }
+
+                LoggerCentral.debug("GestorRespuesta: sesión obtenida para escucha en pool " + tipoPool + " -> " + sesion);
+
+                try (BufferedReader in = sesion.getIn()) {
+                    LoggerCentral.info("Gestor de respuestas iniciado en pool " + tipoPool + ". Esperando mensajes...");
+                    String respuestaServidor;
+                    while (!Thread.currentThread().isInterrupted() && (respuestaServidor = in.readLine()) != null) {
+                        // Log del JSON crudo recibido (truncado si es muy largo)
+                        String rawForLog = respuestaServidor.length() > 2000 ? respuestaServidor.substring(0, 2000) + "... [truncado]" : respuestaServidor;
+                        LoggerCentral.debug("[" + tipoPool + "] << RAW respuesta recibida (len=" + respuestaServidor.length() + "): " + rawForLog);
+
+                        // Truncar respuestas muy largas para evitar imprimir imágenes en base64
+                        String respuestaParaLog = truncarRespuesta(respuestaServidor, 500);
+                        LoggerCentral.info("[" + tipoPool + "] << Respuesta recibida: " + respuestaParaLog);
+                        procesarRespuesta(respuestaServidor);
+                    }
+                } catch (IOException e) {
+                    if (!Thread.currentThread().isInterrupted()) {
+                        LoggerCentral.error("La conexión con el servidor se ha perdido en pool " + tipoPool + ": " + e.getMessage(), e);
+                    }
+                } finally {
+                    // Liberar la sesión de vuelta al pool correspondiente
+                    try {
+                        if (tipoPool == TipoPool.PEERS) gestorConexion.liberarSesionPeer(sesion);
+                        else gestorConexion.liberarSesionCliente(sesion);
+                    } catch (Exception ex) {
+                        LoggerCentral.error("Error liberando sesión en pool " + tipoPool + ": " + ex.getMessage(), ex);
+                    }
+                    LoggerCentral.info("El gestor de respuestas ha dejado de escuchar en pool " + tipoPool + ". Volviendo a esperar nuevas sesiones...");
+                }
             }
+        }, "Hilo-Escucha-Respuestas-" + (tipoPool != null ? tipoPool : TipoPool.CLIENTES));
+        hiloEscucha.setDaemon(true);
+        hiloEscucha.start();
+    }
 
-            if (sesion == null || !sesion.estaActiva()) {
-                LoggerCentral.error("No se puede iniciar la escucha en pool " + tipoPool + ": no hay sesión activa disponible.");
-                return;
-            }
+    /**
+     * Inicia un lector dedicado para la sesión proporcionada. Útil para sesiones entrantes
+     * aceptadas por el servidor (TransporteServidor). La sesión se liberará al finalizar.
+     */
+    public void escucharSesionDirecta(DTOSesion sesion, TipoPool tipoPool) {
+        if (sesion == null || !sesion.estaActiva()) {
+            LoggerCentral.debug("escucharSesionDirecta: sesión nula o inactiva, no se inicia lector -> " + sesion);
+            return;
+        }
 
-            LoggerCentral.debug("GestorRespuesta: sesión obtenida para escucha en pool " + tipoPool + " -> " + sesion);
-
+        Thread hilo = new Thread(() -> {
+            LoggerCentral.info("GestorRespuesta: iniciando escucha directa en sesión " + sesion + " pool=" + tipoPool);
             try (BufferedReader in = sesion.getIn()) {
-                LoggerCentral.info("Gestor de respuestas iniciado en pool " + tipoPool + ". Esperando mensajes...");
                 String respuestaServidor;
-                while (!Thread.currentThread().isInterrupted() && (respuestaServidor = in.readLine()) != null) {
-                    // Log del JSON crudo recibido (truncado si es muy largo)
+                while (!Thread.currentThread().isInterrupted() && sesion.estaActiva() && (respuestaServidor = in.readLine()) != null) {
                     String rawForLog = respuestaServidor.length() > 2000 ? respuestaServidor.substring(0, 2000) + "... [truncado]" : respuestaServidor;
                     LoggerCentral.debug("[" + tipoPool + "] << RAW respuesta recibida (len=" + respuestaServidor.length() + "): " + rawForLog);
-
-                    // Truncar respuestas muy largas para evitar imprimir imágenes en base64
                     String respuestaParaLog = truncarRespuesta(respuestaServidor, 500);
                     LoggerCentral.info("[" + tipoPool + "] << Respuesta recibida: " + respuestaParaLog);
                     procesarRespuesta(respuestaServidor);
                 }
             } catch (IOException e) {
                 if (!Thread.currentThread().isInterrupted()) {
-                    LoggerCentral.error("La conexión con el servidor se ha perdido en pool " + tipoPool + ": " + e.getMessage(), e);
+                    LoggerCentral.error("La conexión de sesión directa se ha perdido en pool " + tipoPool + ": " + e.getMessage(), e);
                 }
             } finally {
-                // Liberar la sesión de vuelta al pool correspondiente
                 try {
                     if (tipoPool == TipoPool.PEERS) gestorConexion.liberarSesionPeer(sesion);
                     else gestorConexion.liberarSesionCliente(sesion);
                 } catch (Exception ex) {
-                    LoggerCentral.error("Error liberando sesión en pool " + tipoPool + ": " + ex.getMessage(), ex);
+                    LoggerCentral.error("Error liberando sesión directa en pool " + tipoPool + ": " + ex.getMessage(), ex);
                 }
-                LoggerCentral.info("El gestor de respuestas ha dejado de escuchar en pool " + tipoPool + ".");
+                LoggerCentral.info("GestorRespuesta: lector de sesión directa finalizado para pool " + tipoPool + ".");
             }
-        }, "Hilo-Escucha-Respuestas-" + (tipoPool != null ? tipoPool : TipoPool.CLIENTES));
-        hiloEscucha.setDaemon(true);
-        hiloEscucha.start();
+        }, "GestorRespuesta-Sesion-" + (sesion.getSocket() != null ? sesion.getSocket().getRemoteSocketAddress() : sesion.hashCode()));
+        hilo.setDaemon(true);
+        hilo.start();
+    }
+
+    // Método simple para truncar respuestas para logging (evita mostrar payloads muy largos)
+    private String truncarRespuesta(String respuesta, int maxLength) {
+        if (respuesta == null) return null;
+        try {
+            if (respuesta.length() <= maxLength) return respuesta;
+            return respuesta.substring(0, maxLength) + "... [mensaje truncado]";
+        } catch (Exception e) {
+            return respuesta;
+        }
+    }
+
+    @Override
+    public void detenerEscucha() {
+        LoggerCentral.info("Deteniendo gestor de respuestas...");
+        if (hiloEscucha != null) {
+            try {
+                hiloEscucha.interrupt();
+                try {
+                    hiloEscucha.join(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            } catch (Exception e) {
+                LoggerCentral.error("Error al detener el hilo de escucha: " + e.getMessage(), e);
+            } finally {
+                hiloEscucha = null;
+            }
+        } else {
+            LoggerCentral.debug("detenerEscucha: no hay hilo de escucha activo.");
+        }
+    }
+
+    @Override
+    public void registrarManejador(String tipoOperacion, Consumer<DTOResponse> manejador) {
+        if (tipoOperacion == null || manejador == null) {
+            LoggerCentral.warn("registrarManejador: tipoOperacion o manejador nulo, operación ignorada.");
+            return;
+        }
+        manejadores.put(tipoOperacion, manejador);
+        LoggerCentral.debug("registrarManejador: manejador registrado para llave='" + tipoOperacion + "'. Total manejadores=" + manejadores.size());
+    }
+
+    @Override
+    public void removerManejador(String tipoOperacion) {
+        if (tipoOperacion == null) {
+            LoggerCentral.warn("removerManejador: tipoOperacion nulo, operación ignorada.");
+            return;
+        }
+        Consumer<DTOResponse> removed = manejadores.remove(tipoOperacion);
+        if (removed != null) {
+            LoggerCentral.debug("removerManejador: manejador eliminado para llave='" + tipoOperacion + "'. Total manejadores=" + manejadores.size());
+        } else {
+            LoggerCentral.debug("removerManejador: no existía manejador para llave='" + tipoOperacion + "'.");
+        }
     }
 
     private void procesarRespuesta(String jsonResponse) {
@@ -132,12 +266,11 @@ public class GestorRespuesta implements IGestorRespuesta {
                         }
                     } catch (Exception ignored) {
                         LoggerCentral.debug("procesarRespuesta: data no es un map, omitiendo extracción de requestId.");
-                        // no hacer nada si no es un map
                     }
                 }
 
                 // Buscar manejador por clave específica action:requestId (si requestId existe)
-                Consumer<DTOResponse> manejador;
+                Consumer<DTOResponse> manejador = null;
                 if (requestId != null && !requestId.isEmpty()) {
                     String llaveEspecifica = response.getAction() + ":" + requestId;
                     LoggerCentral.debug("procesarRespuesta: buscando manejador específico llave=" + llaveEspecifica);
@@ -159,10 +292,9 @@ public class GestorRespuesta implements IGestorRespuesta {
                 // Buscar manejador con la acción original o normalizada
                 manejador = manejadores.get(response.getAction());
                 if (manejador == null) {
-                    // Intentar buscar con todas las claves normalizadas
                     LoggerCentral.debug("procesarRespuesta: buscando manejador por comparacion case-insensitive para action=" + response.getAction());
                     for (Map.Entry<String, Consumer<DTOResponse>> entry : manejadores.entrySet()) {
-                        if (entry.getKey().toLowerCase().equals(actionNormalizada)) {
+                        if (entry.getKey() != null && entry.getKey().toLowerCase().equals(actionNormalizada)) {
                             manejador = entry.getValue();
                             LoggerCentral.debug("procesarRespuesta: encontrado manejador por llave=" + entry.getKey());
                             break;
@@ -186,64 +318,4 @@ public class GestorRespuesta implements IGestorRespuesta {
         }
     }
 
-    @Override
-    public void detenerEscucha() {
-        if (hiloEscucha != null && hiloEscucha.isAlive()) {
-            hiloEscucha.interrupt();
-            LoggerCentral.info("Solicitud de detención del gestor de respuestas enviada.");
-        }
-    }
-
-    @Override
-    public void registrarManejador(String tipoOperacion, Consumer<DTOResponse> manejador) {
-        manejadores.put(tipoOperacion, manejador);
-        LoggerCentral.debug("Manejador registrado para operación: " + tipoOperacion + ". Total manejadores=" + manejadores.size());
-    }
-
-    @Override
-    public void removerManejador(String tipoOperacion) {
-        if (tipoOperacion == null) return;
-        manejadores.remove(tipoOperacion);
-        LoggerCentral.debug("Manejador removido para operación: " + tipoOperacion + ". Total manejadores=" + manejadores.size());
-    }
-
-    /**
-     * Trunca la respuesta para evitar imprimir mensajes demasiado largos que contengan imágenes en base64.
-     * También elimina el campo imagenBase64 si está presente.
-     *
-     * @param respuesta La respuesta completa del servidor.
-     * @param maxLength La longitud máxima del mensaje truncado.
-     * @return El mensaje limpio y truncado si es necesario.
-     */
-    private String truncarRespuesta(String respuesta, int maxLength) {
-        // Si la respuesta contiene imagenBase64, eliminarlo del log
-        if (respuesta.contains("\"imagenBase64\":")) {
-            try {
-                // Usar regex para eliminar el campo imagenBase64 y su valor
-                String respuestaLimpia = respuesta.replaceAll(
-                        "\"imagenBase64\":\\s*\"[^\"]*\"\\s*,?",
-                        "\"imagenBase64\":\"[IMAGEN_OMITIDA]\","
-                );
-
-                // Si después de limpiar aún es muy largo, truncar
-                if (respuestaLimpia.length() > maxLength) {
-                    return respuestaLimpia.substring(0, maxLength) + "... [mensaje truncado]";
-                }
-                return respuestaLimpia;
-            } catch (Exception e) {
-                // Si falla el regex, solo truncar
-                if (respuesta.length() > maxLength) {
-                    return respuesta.substring(0, maxLength) + "... [mensaje truncado]";
-                }
-                return respuesta;
-            }
-        }
-
-        // Si no contiene imagenBase64 pero es muy largo, truncar normalmente
-        if (respuesta.length() > maxLength) {
-            return respuesta.substring(0, maxLength) + "... [mensaje truncado]";
-        }
-
-        return respuesta;
-    }
 }

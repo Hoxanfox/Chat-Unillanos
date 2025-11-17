@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import conexion.GestorConexion;
 import conexion.TipoPool;
 import dto.comunicacion.DTORequest;
+import dto.comunicacion.DTOResponse;
 import dto.gestionConexion.conexion.DTOSesion;
 import logger.LoggerCentral;
 import transporte.FabricaTransporte;
@@ -197,6 +198,46 @@ public class EnviadorPeticiones implements IEnviadorPeticiones {
             } else {
                 gestorConexion.liberarSesionCliente(sesion);
                 LoggerCentral.debug("Sesión liberada al pool CLIENTES (enviarA): " + sesion);
+            }
+        }
+    }
+
+    /**
+     * Envia un DTOResponse serializado directamente a la sesión correspondiente a ip:port.
+     * Devuelve true si se envió correctamente.
+     */
+    public boolean enviarResponseA(String ip, int port, DTOResponse response, TipoPool tipoPool) {
+        LoggerCentral.debug("EnviadorPeticiones.enviarResponseA(ip=" + ip + ", port=" + port + ", pool=" + tipoPool + ") - preparando envío de DTOResponse");
+        DTOSesion sesion = gestorConexion.obtenerSesionPorDireccion(ip, port, 2000, tipoPool == TipoPool.PEERS);
+        if (sesion == null) {
+            LoggerCentral.warn("No se encontró sesión para " + ip + ":" + port + " en pool " + tipoPool + ". No se puede enviar response.");
+            return false;
+        }
+
+        try {
+            if (!sesion.estaActiva()) {
+                LoggerCentral.warn("La sesión encontrada ya no está activa para " + ip + ":" + port + ".");
+                return false;
+            }
+            LoggerCentral.debug("Sesión específica obtenida para response: " + sesion);
+            PrintWriter out = sesion.getOut();
+            String jsonResponse = gson.toJson(response);
+            int len = jsonResponse != null ? jsonResponse.length() : 0;
+            String toLog = jsonResponse != null ? (len > 1000 ? jsonResponse.substring(0, 1000) + "... [truncado]" : jsonResponse) : "null";
+            out.println(jsonResponse);
+            out.flush();
+            LoggerCentral.info("[" + tipoPool + "] >> Response enviada a " + ip + ":" + port + " -> " + toLog);
+            return true;
+        } catch (Exception e) {
+            LoggerCentral.error("Error enviando response a " + ip + ":" + port + ": " + e.getMessage(), e);
+            return false;
+        } finally {
+            if (tipoPool == TipoPool.PEERS) {
+                gestorConexion.liberarSesionPeer(sesion);
+                LoggerCentral.debug("Sesión liberada al pool PEERS (enviarResponseA): " + sesion);
+            } else {
+                gestorConexion.liberarSesionCliente(sesion);
+                LoggerCentral.debug("Sesión liberada al pool CLIENTES (enviarResponseA): " + sesion);
             }
         }
     }
