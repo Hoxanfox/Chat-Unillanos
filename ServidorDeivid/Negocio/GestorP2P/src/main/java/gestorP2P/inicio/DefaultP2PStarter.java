@@ -75,6 +75,8 @@ public class DefaultP2PStarter implements IStarterP2P {
                                 try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
                             }
                         });
+                        // Arrancar la escucha del gestor de respuestas en pool PEERS ahora que el servidor local está iniciado
+                        try { if (gestorP2P != null) gestorP2P.iniciarEscuchaPoolPeers(); } catch (Exception e) { LoggerCentral.warn("DefaultP2PStarter: no se pudo iniciar escucha pool PEERS tras iniciar transporte servidor -> " + e.getMessage()); }
                     } catch (Exception e) {
                         LoggerCentral.warn("DefaultP2PStarter.iniciar: no se pudo iniciar transporte servidor en " + localSocketInfo + " -> " + e.getMessage());
                     }
@@ -156,6 +158,7 @@ public class DefaultP2PStarter implements IStarterP2P {
                                         try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
                                     }
                                 });
+                                try { if (gestorP2P != null) gestorP2P.iniciarEscuchaPoolPeers(); } catch (Exception e) { LoggerCentral.warn("DefaultP2PStarter: no se pudo iniciar escucha pool PEERS tras iniciar transporte servidor (bootstrap) -> " + e.getMessage()); }
                             } catch (Exception e) {
                                 LoggerCentral.warn("DefaultP2PStarter.iniciar: no se pudo iniciar transporte servidor tras bootstrap en " + localSocketInfo + " -> " + e.getMessage());
                             }
@@ -192,6 +195,7 @@ public class DefaultP2PStarter implements IStarterP2P {
                             try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
                         }
                     });
+                    try { if (gestorP2P != null) gestorP2P.iniciarEscuchaPoolPeers(); } catch (Exception e) { LoggerCentral.warn("DefaultP2PStarter: no se pudo iniciar escucha pool PEERS tras iniciar transporte servidor (genesis) -> " + e.getMessage()); }
                 } catch (Exception e) {
                     LoggerCentral.warn("DefaultP2PStarter.iniciar: no se pudo iniciar transporte servidor tras crear peer genesis en " + localSocketInfo + " -> " + e.getMessage());
                 }

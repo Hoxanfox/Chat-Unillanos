@@ -25,6 +25,7 @@ import gestorP2P.registroP2P.PeerRegistrarImpl;
 import observador.IObservador;
 import logger.LoggerCentral;
 
+// importaciones estándar necesarias
 import java.lang.reflect.Type;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -36,6 +37,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
+// imports añadidos para permitir conexión proactiva directa si no hay sesión en el pool
+import transporte.FabricaTransporte;
+import dto.gestionConexion.transporte.DTOConexion;
+import conexion.GestorConexion;
+import dto.gestionConexion.conexion.DTOSesion;
 
 /**
  * Implementación del gestor P2P que solicita unirse a la red mediante otra instancia peer.
@@ -197,18 +204,26 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
         } catch (Exception e) { LoggerCentral.error("GestorP2PImpl: excepción registrando manejadores iniciales: " + e.getMessage(), e); }
 
         // Iniciar escucha de respuestas en el pool de PEERS para procesar peticiones entrantes
-        try {
-            LoggerCentral.debug("GestorP2PImpl: arrancando GestorRespuesta en pool PEERS");
-            // Solicitar al gestor de respuestas que escuche en el pool de PEERS
-            this.gestorRespuesta.iniciarEscucha(TipoPool.PEERS);
-            LoggerCentral.info("GestorRespuesta: escucha iniciada en pool PEERS desde GestorP2PImpl");
-        } catch (Exception e) {
-            LoggerCentral.warn("No se pudo iniciar GestorRespuesta en pool PEERS: " + e.getMessage());
-        }
+        // Nota: No iniciar GestorRespuesta aquí para evitar logs/warns cuando no hay sesiones en el pool
+        LoggerCentral.debug("GestorP2PImpl: gestorRespuesta escucha diferida hasta que la red local esté lista");
 
         // Starter P2P (por defecto)
         this.starter = new DefaultP2PStarter(this, this.peerRegistrar);
         LoggerCentral.debug("GestorP2PImpl: constructor - fin inicialización");
+    }
+
+    /**
+     * Inicia la escucha de respuestas en el pool PEERS. Se expone públicamente para que el
+     * starter P2P lo invoque una vez que el servidor local y/o las conexiones iniciales estén listas.
+     */
+    public void iniciarEscuchaPoolPeers() {
+        try {
+            LoggerCentral.debug("GestorP2PImpl.iniciarEscuchaPoolPeers: arrancando GestorRespuesta en pool PEERS");
+            this.gestorRespuesta.iniciarEscucha(TipoPool.PEERS);
+            LoggerCentral.info("GestorRespuesta: escucha iniciada en pool PEERS desde GestorP2PImpl.iniciarEscuchaPoolPeers");
+        } catch (Exception e) {
+            LoggerCentral.warn("GestorP2PImpl.iniciarEscuchaPoolPeers: No se pudo iniciar GestorRespuesta en pool PEERS: " + e.getMessage());
+        }
     }
 
     // Nuevo constructor para tests: permite inyectar mocks/stubs
@@ -404,21 +419,66 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
             return futuro;
         }
 
+        // Intento proactivo: si no existe sesión en el pool para el destino, crear una conexión directa
         try {
-            enviador.enviar(request, TipoPool.PEERS);
-            LoggerCentral.info("Enviada solicitud PEER_JOIN con requestId=" + requestId + " hacia " + ip + ":" + puerto);
+            DTOSesion existing = GestorConexion.getInstancia().obtenerSesionPorDireccion(ip, puerto, 500, true);
+            if (existing == null || !existing.estaActiva()) {
+                final int maxRetries = 3;
+                final long sleepMs = 400;
+                for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                    try {
+                        LoggerCentral.debug("unirseRed: intento proactico " + attempt + " de " + maxRetries + " para conectar directamente a " + ip + ":" + puerto);
+                        DTOConexion datos = new DTOConexion(ip, puerto);
+                        DTOSesion s = FabricaTransporte.crearTransporte("TCP").conectar(datos);
+                        if (s != null && s.estaActiva()) {
+                            LoggerCentral.info("unirseRed: conexión proactiva establecida a " + ip + ":" + puerto + " -> " + s + "; agregando al pool PEERS");
+                            GestorConexion.getInstancia().agregarSesionPeer(s);
+                            break;
+                        } else {
+                            LoggerCentral.debug("unirseRed: no se pudo establecer conexión proactiva en intento " + attempt);
+                        }
+                    } catch (Exception ex) {
+                        LoggerCentral.debug("unirseRed: error en intento proactivo " + attempt + " -> " + ex.getMessage());
+                    }
+                    try { Thread.sleep(sleepMs * attempt); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+                }
+            }
         } catch (Exception e) {
-            LoggerCentral.error("Error enviando solicitud PEER_JOIN: " + e.getMessage(), e);
-            Map<String, Object> err = new HashMap<>();
-            err.put("requestId", requestId);
-            err.put("targetSocketInfo", ip + ":" + puerto);
-            err.put("message", e.getMessage());
-            err.put("exception", e);
-            notificarObservadores("P2P_JOIN_ERROR", err);
-            gestorRespuesta.removerManejador(claveManejador);
-            futuro.completeExceptionally(e);
-            return futuro;
+            LoggerCentral.debug("unirseRed: error verificando/creando conexión proactiva -> " + e.getMessage());
         }
+
+        try {
+            boolean sent = false;
+            try { sent = this.enviador.enviarA(ip, puerto, request, TipoPool.PEERS); } catch (AbstractMethodError ame) { // por compatibilidad si la impl no sobreescribe enviarA
+                LoggerCentral.debug("enviarA no implementado por el enviador, usando enviar() como fallback");
+                this.enviador.enviar(request, TipoPool.PEERS);
+                sent = true;
+            }
+            LoggerCentral.info("Intento enviar solicitud PEER_JOIN con requestId=" + requestId + " hacia " + ip + ":" + puerto + " -> sent=" + sent);
+            if (!sent) {
+                // intentar fallback de creación de conexión directa usando enviar(request)
+                try {
+                    LoggerCentral.debug("enviarA falló (sin sesión). Intentando fallback enviar() que puede crear conexión directa desde payload");
+                    this.enviador.enviar(request, TipoPool.PEERS);
+                    sent = true;
+                    LoggerCentral.info("Fallback enviar() usado para PEER_JOIN hacia " + ip + ":" + puerto);
+                } catch (Exception ex) {
+                    LoggerCentral.error("Fallback enviar() falló tras enviarA=false: " + ex.getMessage(), ex);
+                    throw new RuntimeException("No se pudo enviar la solicitud PEER_JOIN a " + ip + ":" + puerto, ex);
+                }
+            }
+         } catch (Exception e) {
+             LoggerCentral.error("Error enviando solicitud PEER_JOIN: " + e.getMessage(), e);
+             Map<String, Object> err = new HashMap<>();
+             err.put("requestId", requestId);
+             err.put("targetSocketInfo", ip + ":" + puerto);
+             err.put("message", e.getMessage());
+             err.put("exception", e);
+             notificarObservadores("P2P_JOIN_ERROR", err);
+             gestorRespuesta.removerManejador(claveManejador);
+             futuro.completeExceptionally(e);
+             return futuro;
+         }
 
         // Timeout para el join
         scheduler.schedule(() -> {
@@ -546,27 +606,72 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
             return futuro;
         }
 
+        // Intento proactivo: si no existe sesión en el pool para el destino, crear una conexión directa
         try {
-            enviador.enviar(request, TipoPool.PEERS);
-            LoggerCentral.info("Enviada solicitud PEER_LIST con requestId=" + requestId + " hacia " + ip + ":" + puerto);
+            DTOSesion existing = GestorConexion.getInstancia().obtenerSesionPorDireccion(ip, puerto, 500, true);
+            if (existing == null || !existing.estaActiva()) {
+                final int maxRetries = 3;
+                final long sleepMs = 400;
+                for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                    try {
+                        LoggerCentral.debug("solicitarListaPeers: intento proactico " + attempt + " de " + maxRetries + " para conectar directamente a " + ip + ":" + puerto);
+                        DTOConexion datos = new DTOConexion(ip, puerto);
+                        DTOSesion s = FabricaTransporte.crearTransporte("TCP").conectar(datos);
+                        if (s != null && s.estaActiva()) {
+                            LoggerCentral.info("solicitarListaPeers: conexión proactiva establecida a " + ip + ":" + puerto + " -> " + s + "; agregando al pool PEERS");
+                            GestorConexion.getInstancia().agregarSesionPeer(s);
+                            break;
+                        } else {
+                            LoggerCentral.debug("solicitarListaPeers: no se pudo establecer conexión proactiva en intento " + attempt);
+                        }
+                    } catch (Exception ex) {
+                        LoggerCentral.debug("solicitarListaPeers: error en intento proactivo " + attempt + " -> " + ex.getMessage());
+                    }
+                    try { Thread.sleep(sleepMs * attempt); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+                }
+            }
         } catch (Exception e) {
-            LoggerCentral.error("Error enviando solicitud PEER_LIST: " + e.getMessage(), e);
-            Map<String, Object> err = new HashMap<>();
-            err.put("requestId", requestId);
-            err.put("targetSocketInfo", ip + ":" + puerto);
-            err.put("message", e.getMessage());
-            err.put("exception", e);
-            notificarObservadores("P2P_PEER_LIST_ERROR", err);
-            gestorRespuesta.removerManejador(claveManejador);
-            futuro.completeExceptionally(e);
-            return futuro;
+            LoggerCentral.debug("solicitarListaPeers: error verificando/creando conexión proactiva -> " + e.getMessage());
         }
 
-        // Timeout para la petición de lista
+        try {
+            boolean sent = false;
+            try { sent = this.enviador.enviarA(ip, puerto, request, TipoPool.PEERS); } catch (AbstractMethodError ame) { // por compatibilidad si la impl no sobreescribe enviarA
+                LoggerCentral.debug("enviarA no implementado por el enviador, usando enviar() como fallback");
+                this.enviador.enviar(request, TipoPool.PEERS);
+                sent = true;
+            }
+            LoggerCentral.info("Intento enviar solicitud PEER_LIST con requestId=" + requestId + " hacia " + ip + ":" + puerto + " -> sent=" + sent);
+            if (!sent) {
+                // intentar fallback de creación de conexión directa usando enviar(request)
+                try {
+                    LoggerCentral.debug("enviarA falló (sin sesión). Intentando fallback enviar() que puede crear conexión directa desde payload");
+                    this.enviador.enviar(request, TipoPool.PEERS);
+                    sent = true;
+                    LoggerCentral.info("Fallback enviar() usado para PEER_LIST hacia " + ip + ":" + puerto);
+                } catch (Exception ex) {
+                    LoggerCentral.error("Fallback enviar() falló tras enviarA=false: " + ex.getMessage(), ex);
+                    throw new RuntimeException("No se pudo enviar la solicitud PEER_LIST a " + ip + ":" + puerto, ex);
+                }
+            }
+         } catch (Exception e) {
+             LoggerCentral.error("Error enviando solicitud PEER_LIST: " + e.getMessage(), e);
+             Map<String, Object> err = new HashMap<>();
+             err.put("requestId", requestId);
+             err.put("targetSocketInfo", ip + ":" + puerto);
+             err.put("message", e.getMessage());
+             err.put("exception", e);
+             notificarObservadores("P2P_PEER_LIST_ERROR", err);
+             gestorRespuesta.removerManejador(claveManejador);
+             futuro.completeExceptionally(e);
+             return futuro;
+         }
+
+        // Timeout para la solicitud de lista
         scheduler.schedule(() -> {
             if (!futuro.isDone()) {
                 gestorRespuesta.removerManejador(claveManejador);
-                String msg = "Timeout esperando lista de peers";
+                String msg = "Timeout esperando respuesta PEER_LIST";
                 LoggerCentral.warn(msg + " requestId=" + requestId);
                 Map<String, Object> err = new HashMap<>();
                 err.put("requestId", requestId);

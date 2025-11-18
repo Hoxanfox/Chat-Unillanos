@@ -42,12 +42,67 @@ public abstract class BaseEnviador implements IEnviadorPeticiones {
     @Override
     public void enviar(DTORequest request, TipoPool tipoPool) {
         LoggerCentral.debug(this.getClass().getSimpleName() + ".enviar(request, " + tipoPool + ") - preparando para obtener sesión. Request resumen=" + (request != null ? gson.toJson(request) : "null"));
-        DTOSesion sesion;
+        DTOSesion sesion = null;
         boolean creadoLocalmente = false;
-        if (tipoPool == TipoPool.PEERS) {
-            sesion = gestorConexion.obtenerSesionPeer(2000);
-        } else {
-            sesion = gestorConexion.obtenerSesionCliente(2000);
+
+        // Intentar obtener ip/port objetivo desde el payload para preferir sesión por dirección
+        String targetIp = null;
+        Integer targetPort = null;
+        try {
+            Object data = request != null ? request.getPayload() : null;
+            if (data != null) {
+                Type mapType = new TypeToken<Map<String, Object>>(){}.getType();
+                Map<String, Object> map = gson.fromJson(gson.toJson(data), mapType);
+                if (map != null) {
+                    // Priorizar targetSocketInfo si está presente (formato "ip:port")
+                    if (map.containsKey("targetSocketInfo")) {
+                        try {
+                            String socketInfo = String.valueOf(map.get("targetSocketInfo"));
+                            if (socketInfo != null) {
+                                String[] parts = socketInfo.split(":" );
+                                if (parts.length >= 2) {
+                                    targetIp = parts[0];
+                                    try { targetPort = Integer.parseInt(parts[1]); } catch (Exception ignored) {}
+                                }
+                            }
+                        } catch (Exception e) { LoggerCentral.debug("Error parseando targetSocketInfo del payload: " + e.getMessage()); }
+                    }
+
+                    // Si no se obtuvo targetSocketInfo, usar ip/port explícitos
+                    if ((targetIp == null || targetPort == null)) {
+                        if (map.containsKey("ip")) targetIp = String.valueOf(map.get("ip"));
+                        if (map.containsKey("port")) {
+                            try { targetPort = Integer.parseInt(String.valueOf(map.get("port"))); } catch (Exception ignored) {}
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LoggerCentral.debug("Error extrayendo ip/port desde request.payload: " + e.getMessage());
+        }
+
+        // Si conocemos destino, intentar obtener sesión específica primero
+        if (targetIp != null && targetPort != null && targetPort > 0) {
+            try {
+                sesion = gestorConexion.obtenerSesionPorDireccion(targetIp, targetPort, 2000, tipoPool == TipoPool.PEERS);
+                if (sesion != null && sesion.estaActiva()) {
+                    LoggerCentral.debug("enviar: sesión específica obtenida para destino " + targetIp + ":" + targetPort + " -> " + sesion);
+                } else {
+                    sesion = null; // asegurarnos
+                }
+            } catch (Exception e) {
+                LoggerCentral.debug("enviar: error obteniendo sesión por dirección -> " + e.getMessage());
+                sesion = null;
+            }
+        }
+
+        // Si no obtuvimos sesión específica, obtener cualquiera del pool como antes
+        if (sesion == null) {
+            if (tipoPool == TipoPool.PEERS) {
+                sesion = gestorConexion.obtenerSesionPeer(2000);
+            } else {
+                sesion = gestorConexion.obtenerSesionCliente(2000);
+            }
         }
 
         // Si no hay sesión en el pool, intentar crear conexión directa si el request contiene ip/port
@@ -61,9 +116,30 @@ public abstract class BaseEnviador implements IEnviadorPeticiones {
                     Type mapType = new TypeToken<Map<String, Object>>(){}.getType();
                     Map<String, Object> map = gson.fromJson(gson.toJson(data), mapType);
                     if (map != null) {
-                        if (map.containsKey("ip")) ip = String.valueOf(map.get("ip"));
-                        if (map.containsKey("port")) {
-                            try { port = Integer.parseInt(String.valueOf(map.get("port"))); } catch (Exception ignored) {}
+                        // Priorizar targetSocketInfo para fallback destino
+                        if (map.containsKey("targetSocketInfo")) {
+                            try {
+                                String socketInfo = String.valueOf(map.get("targetSocketInfo"));
+                                if (socketInfo != null) {
+                                    String[] parts = socketInfo.split(":" );
+                                    if (parts.length >= 2) {
+                                        if (ip == null || ip.isEmpty()) ip = parts[0];
+                                        if (port == null) {
+                                            try { port = Integer.parseInt(parts[1]); } catch (Exception ignored) {}
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                LoggerCentral.debug("Error parseando targetSocketInfo del payload (fallback): " + e.getMessage());
+                            }
+                        }
+
+                        // Si no hay targetSocketInfo, usar ip/port explícitos
+                        if ((ip == null || port == null)) {
+                            if (map.containsKey("ip")) ip = String.valueOf(map.get("ip"));
+                            if (map.containsKey("port")) {
+                                try { port = Integer.parseInt(String.valueOf(map.get("port"))); } catch (Exception ignored) {}
+                            }
                         }
                     }
                 }
@@ -78,7 +154,7 @@ public abstract class BaseEnviador implements IEnviadorPeticiones {
                     try {
                         LoggerCentral.debug("Fallback: intento " + attempt + " de " + maxRetries + " para crear conexión directa a " + ip + ":" + port);
                         DTOConexion datos = new DTOConexion(ip, port);
-                        sesion = FabricaTransporte.crearTransporte(null).conectar(datos);
+                        sesion = FabricaTransporte.crearTransporte("TCP").conectar(datos);
                         if (sesion != null && sesion.estaActiva()) {
                             creadoLocalmente = true;
                             LoggerCentral.debug("Fallback: conexión directa creada y activa -> " + sesion);
@@ -224,4 +300,3 @@ public abstract class BaseEnviador implements IEnviadorPeticiones {
     }
 
 }
-

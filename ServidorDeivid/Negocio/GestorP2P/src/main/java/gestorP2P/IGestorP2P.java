@@ -26,4 +26,11 @@ public interface IGestorP2P extends ISujeto {
      * - Si no hay bootstrap se crea el peer "genesis" en la BD para aceptar conexiones.
      */
     CompletableFuture<Void> iniciarRed();
+
+    /**
+     * Arranca la escucha del GestorRespuesta en el pool PEERS.
+     * Se separa del flujo de inicio principal para permitir que el starter
+     * configure el servidor local y las sesiones iniciales antes de comenzar a escuchar.
+     */
+    void iniciarEscuchaPoolPeers();
 }

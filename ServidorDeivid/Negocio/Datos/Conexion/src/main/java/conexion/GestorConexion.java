@@ -314,6 +314,36 @@ public class GestorConexion implements ISujeto, IGestorConexion {
     }
 
     /**
+     * Busca sin extraer una sesión que coincida con la IP y puerto indicados.
+     * No modifica el pool; devuelve la primera sesión activa encontrada o null.
+     */
+    public DTOSesion buscarSesionPorDireccionSinExtraer(String ip, int port, boolean buscarEnPeers) {
+        BlockingQueue<DTOSesion> queue = buscarEnPeers ? poolPeers : poolClientes;
+        LoggerCentral.debug("buscarSesionPorDireccionSinExtraer: buscando ip=" + ip + " port=" + port + " buscarEnPeers=" + buscarEnPeers + " poolSize=" + queue.size());
+        try {
+            for (DTOSesion s : queue) {
+                if (s == null) continue;
+                try {
+                    if (!s.estaActiva()) continue;
+                    if (s.getSocket() == null || s.getSocket().getInetAddress() == null) continue;
+                    String host = s.getSocket().getInetAddress().getHostAddress();
+                    int remotePort = s.getSocket().getPort();
+                    if (host.equals(ip) && remotePort == port) {
+                        LoggerCentral.debug("buscarSesionPorDireccionSinExtraer: sesión encontrada -> " + s);
+                        return s;
+                    }
+                } catch (Exception ex) {
+                    LoggerCentral.debug("buscarSesionPorDireccionSinExtraer: error inspeccionando sesion -> " + ex.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            LoggerCentral.debug("buscarSesionPorDireccionSinExtraer: excepción iterando pool -> " + e.getMessage());
+        }
+        LoggerCentral.debug("buscarSesionPorDireccionSinExtraer: no se encontró sesión para " + ip + ":" + port);
+        return null;
+    }
+
+    /**
      * Libera (vuelve a añadir) una sesión en el pool de clientes si sigue activa.
      */
     public void liberarSesionCliente(DTOSesion sesion) {
@@ -524,6 +554,32 @@ public class GestorConexion implements ISujeto, IGestorConexion {
             } catch (Exception e) {
                 System.err.println("Error notificando observador: " + e.getMessage());
             }
+        }
+    }
+
+    /**
+     * Método de diagnóstico: devuelve un resumen (lista) de las sesiones actualmente en el poolPeers
+     * en formato "ip:port" separados por comas. Útil para logging/debug.
+     */
+    public String listarResumenPoolPeers() {
+        try {
+            List<DTOSesion> lista = new ArrayList<>(poolPeers);
+            StringBuilder sb = new StringBuilder();
+            for (DTOSesion s : lista) {
+                try {
+                    if (s != null && s.getSocket() != null && s.getSocket().getInetAddress() != null) {
+                        sb.append(s.getSocket().getInetAddress().getHostAddress()).append(":").append(s.getSocket().getPort()).append(",");
+                    } else {
+                        sb.append(s != null ? s.hashCode() : "null").append(",");
+                    }
+                } catch (Exception ignored) {
+                    sb.append(s != null ? s.hashCode() : "null").append(",");
+                }
+            }
+            if (sb.length() > 0) sb.setLength(sb.length() - 1);
+            return sb.toString();
+        } catch (Exception e) {
+            return "error_obteniendo_resumen_poolPeers: " + e.getMessage();
         }
     }
 }
