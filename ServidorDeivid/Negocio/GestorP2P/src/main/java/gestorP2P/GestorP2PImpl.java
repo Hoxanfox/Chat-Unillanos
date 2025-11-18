@@ -3,9 +3,11 @@ package gestorP2P;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import comunicacion.peticionesPull.AccionesComunicacion;
-import comunicacion.EnviadorPeticiones;
-import comunicacion.GestorRespuesta;
-import conexion.TipoPool;
+import comunicacion.IEnviadorPeticiones;
+import comunicacion.IGestorRespuesta;
+import comunicacion.fabrica.FabricaComunicacion;
+import comunicacion.fabrica.FabricaComunicacionImpl;
+import conexion.enums.TipoPool;
 import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
 import dto.p2p.DTOJoinResponse;
@@ -41,8 +43,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class GestorP2PImpl implements IGestorP2P, IObservador {
 
-    private final EnviadorPeticiones enviador;
-    private final GestorRespuesta gestorRespuesta;
+    private final IEnviadorPeticiones enviador;
+    private final IGestorRespuesta gestorRespuesta;
     private final IPeerRegistrar peerRegistrar;
     private final Gson gson;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -56,8 +58,12 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
 
     public GestorP2PImpl() {
         LoggerCentral.debug("GestorP2PImpl: constructor - inicio inicialización");
-        this.enviador = new EnviadorPeticiones();
-        this.gestorRespuesta = GestorRespuesta.getInstancia();
+        // Obtener la fábrica y crear componentes de comunicación
+        FabricaComunicacion fabrica = FabricaComunicacionImpl.getInstancia();
+        // Usar las sobrecargas que solo requieren TipoPool para evitar dependencia directa del enum ModoComunicacion
+        // Este gestor P2P opera sobre peers, por lo que pedimos componentes configurados para el pool PEERS
+        this.enviador = fabrica.crearEnviador(TipoPool.PEERS);
+        this.gestorRespuesta = fabrica.crearGestorRespuesta(TipoPool.PEERS);
         this.peerRegistrar = new PeerRegistrarImpl();
         // Inicializar gson antes de usarlo en los manejadores
         this.gson = new Gson();
@@ -88,7 +94,7 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
                         LoggerCentral.warn("Manejador PEER_PUSH: response nulo recibido");
                         return;
                     }
-                    LoggerCentral.debug("Manejador PEER_PUSH: recibido response=" + resp.toString());
+                    LoggerCentral.debug("Manejador PEER_PUSH: recibido response=" + resp);
                     Object data = resp.getData();
                     String json = gson.toJson(data);
                     DTOPeerPush push = gson.fromJson(json, DTOPeerPush.class);
@@ -109,7 +115,7 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
                     } else {
                         LoggerCentral.warn("Manejador PEER_PUSH: push parseado es null para json=" + json);
                     }
-                } catch (Exception e) { LoggerCentral.error("Manejador PEER_PUSH: excepción procesando response: " + (e!=null?e.getMessage():"<null>"), e); }
+                } catch (Exception e) { LoggerCentral.error("Manejador PEER_PUSH: excepción procesando response: " + e.getMessage(), e); }
             });
             LoggerCentral.debug("GestorP2PImpl: registrado manejador global para action=" + AccionesComunicacion.PEER_PUSH);
 
@@ -121,7 +127,7 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
                         LoggerCentral.warn("Manejador PEER_JOIN: response nulo recibido");
                         return;
                     }
-                    LoggerCentral.debug("Manejador PEER_JOIN: recibido response=" + (resp==null?"<null>":resp.toString()));
+                    LoggerCentral.debug("Manejador PEER_JOIN: recibido response=" + resp);
                     Object data = resp.getData();
                     String json = gson.toJson(data);
                     DTOPeerPush push = gson.fromJson(json, DTOPeerPush.class);
@@ -174,8 +180,8 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
                     // Responder al remitente (si conocemos ip/port)
                     if (ip != null && port > 0) {
                         try {
-                            EnviadorPeticiones env = new EnviadorPeticiones();
-                            boolean sent = env.enviarResponseA(ip, port, responseToSender, TipoPool.PEERS);
+                            // Reutilizar el enviador de la instancia en lugar de crear uno nuevo
+                            boolean sent = this.enviador.enviarResponseA(ip, port, responseToSender, TipoPool.PEERS);
                             LoggerCentral.debug("Manejador PEER_JOIN: response enviada a " + ip + ":" + port + " -> sent=" + sent);
                         } catch (Exception e) {
                             LoggerCentral.warn("Manejador PEER_JOIN: no se pudo enviar response al remitente " + ip + ":" + port + " -> " + e.getMessage());
@@ -185,14 +191,15 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
                     }
 
                     // Al registrar con peerRegistrar, el PeerPushPublisherImpl (registrado como observador) publicará automáticamente el push
-                } catch (Exception e) { LoggerCentral.error("Manejador PEER_JOIN: excepción procesando response: " + (e!=null?e.getMessage():"<null>"), e); }
+                } catch (Exception e) { LoggerCentral.error("Manejador PEER_JOIN: excepción procesando response: " + e.getMessage(), e); }
             });
             LoggerCentral.debug("GestorP2PImpl: registrado manejador global para action=" + AccionesComunicacion.PEER_JOIN);
-        } catch (Exception e) { LoggerCentral.error("GestorP2PImpl: excepción registrando manejadores iniciales: " + (e!=null?e.getMessage():"<null>"), e); }
+        } catch (Exception e) { LoggerCentral.error("GestorP2PImpl: excepción registrando manejadores iniciales: " + e.getMessage(), e); }
 
         // Iniciar escucha de respuestas en el pool de PEERS para procesar peticiones entrantes
         try {
             LoggerCentral.debug("GestorP2PImpl: arrancando GestorRespuesta en pool PEERS");
+            // Solicitar al gestor de respuestas que escuche en el pool de PEERS
             this.gestorRespuesta.iniciarEscucha(TipoPool.PEERS);
             LoggerCentral.info("GestorRespuesta: escucha iniciada en pool PEERS desde GestorP2PImpl");
         } catch (Exception e) {
@@ -202,6 +209,42 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
         // Starter P2P (por defecto)
         this.starter = new DefaultP2PStarter(this, this.peerRegistrar);
         LoggerCentral.debug("GestorP2PImpl: constructor - fin inicialización");
+    }
+
+    // Nuevo constructor para tests: permite inyectar mocks/stubs
+    /* package-private */ GestorP2PImpl(IEnviadorPeticiones enviador,
+                                        IGestorRespuesta gestorRespuesta,
+                                        IPeerRegistrar peerRegistrar,
+                                        IConfigReader config,
+                                        IStarterP2P starter) {
+        LoggerCentral.debug("GestorP2PImpl: constructor (test) - inicio inicialización");
+        this.enviador = enviador;
+        this.gestorRespuesta = gestorRespuesta;
+        this.peerRegistrar = peerRegistrar;
+        this.gson = new Gson();
+        this.config = config != null ? config : new FileConfigReader();
+        this.starter = starter;
+
+        // registrar observadores si el peerRegistrar está presente
+        try {
+            if (this.peerRegistrar != null) this.peerRegistrar.registrarObservador(this);
+            LoggerCentral.debug("GestorP2PImpl (test): registrado como observador del PeerRegistrar");
+        } catch (Exception e) {
+            LoggerCentral.warn("No se pudo registrar observador del PeerRegistrar: " + e.getMessage());
+        }
+
+        // Registrar manejadores mínimos si gestorRespuesta está presente
+        try {
+            if (this.gestorRespuesta != null) {
+                // registrar manejadores vacíos para evitar NPE en tests que llaman a métodos que registran handlers
+                // El comportamiento real de los handlers se probará enviando DTOResponse directamente al manejador registrado por la prueba
+                LoggerCentral.debug("GestorP2PImpl (test): no se registran manejadores globales automáticamente en el constructor de test");
+            }
+        } catch (Exception e) {
+            LoggerCentral.error("GestorP2PImpl (test): excepción registrando manejadores iniciales: " + e.getMessage(), e);
+        }
+
+        LoggerCentral.debug("GestorP2PImpl: constructor (test) - fin inicialización");
     }
 
     @Override
@@ -234,7 +277,7 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
 
         java.util.function.Consumer<DTOResponse> manejador = (DTOResponse response) -> {
             try {
-                LoggerCentral.debug("unirseRed.manejador: recibido response para clave " + claveManejador + " -> " + (response==null?"<null>":response.toString()));
+                LoggerCentral.debug("unirseRed.manejador: recibido response para clave " + claveManejador + " -> " + response);
                 if (response == null) {
                     String msg = "Respuesta nula al intentar unirse a la red";
                     // Enviar detalles estructurados
@@ -340,7 +383,7 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
 
             } catch (Exception e) {
                 gestorRespuesta.removerManejador(claveManejador);
-                LoggerCentral.error("Excepción en manejador de unirseRed", e);
+                LoggerCentral.error("Excepción en manejador de unirseRed: " + e.getMessage(), e);
                 Map<String, Object> err = new HashMap<>();
                 err.put("requestId", requestId);
                 err.put("targetSocketInfo", ip + ":" + puerto);
@@ -417,7 +460,7 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
 
         java.util.function.Consumer<DTOResponse> manejador = (DTOResponse response) -> {
             try {
-                LoggerCentral.debug("solicitarListaPeers.manejador: recibido response para clave " + claveManejador + " -> " + (response==null?"<null>":response.toString()));
+                LoggerCentral.debug("solicitarListaPeers.manejador: recibido response para clave " + claveManejador + " -> " + response);
                 if (response == null) {
                     String msg = "Respuesta nula al solicitar lista de peers";
                     Map<String, Object> err = new HashMap<>();
@@ -482,7 +525,7 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
 
              } catch (Exception e) {
                  gestorRespuesta.removerManejador(claveManejador);
-                 LoggerCentral.error("Excepción en manejador de solicitarListaPeers", e);
+                 LoggerCentral.error("Excepción en manejador de solicitarListaPeers: " + e.getMessage(), e);
                  Map<String, Object> err = new HashMap<>();
                  err.put("requestId", requestId);
                  err.put("targetSocketInfo", ip + ":" + puerto);

@@ -1,7 +1,9 @@
 package conexion;
 
+import conexion.fabrica.ITransporteFactory;
 import dto.gestionConexion.conexion.DTOSesion;
 import dto.gestionConexion.DTOEstadoConexion;
+import dto.gestionConexion.transporte.DTOConexion;
 import observador.IObservador;
 import observador.ISujeto;
 
@@ -14,13 +16,15 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import logger.LoggerCentral;
+import transporte.ITransporte;
+import transporte.TransporteServidor;
 
 /**
  * Gestor Singleton que almacena y gestiona el ciclo de vida de la DTOSesion activa.
  * Actúa como un "Sujeto" observable para notificar cambios de sesión y además
  * mantiene pools sencillos para clientes y peers.
  */
-public class GestorConexion implements ISujeto {
+public class GestorConexion implements ISujeto, IGestorConexion {
 
     private static GestorConexion instancia;
 
@@ -32,6 +36,31 @@ public class GestorConexion implements ISujeto {
     private final BlockingQueue<DTOSesion> poolPeers = new LinkedBlockingQueue<>();
 
     private final List<IObservador> observadores = new ArrayList<>();
+
+    // Transport servers para escuchar conexiones entrantes (clientes y peers)
+    private TransporteServidor servidorClientes;
+    private TransporteServidor servidorPeers;
+
+    // Fábrica inyectable para crear transportes (por defecto delega en FabricaTransporte)
+    private ITransporteFactory transporteFactory = new ITransporteFactory() {
+        @Override
+        public transporte.ITransporte crearTransporte(String tipo) {
+            return transporte.FabricaTransporte.crearTransporte(tipo);
+        }
+    };
+
+    /**
+     * Permite inyectar una fábrica de transportes (útil para mock en tests).
+     */
+    public synchronized void setTransporteFactory(ITransporteFactory factory) {
+        if (factory != null) this.transporteFactory = factory;
+    }
+
+    /** Devuelve el tamaño actual del pool de clientes. */
+    public int getPoolClientesSize() { return poolClientes.size(); }
+
+    /** Devuelve el tamaño actual del pool de peers. */
+    public int getPoolPeersSize() { return poolPeers.size(); }
 
     private GestorConexion() {}
 
@@ -362,6 +391,116 @@ public class GestorConexion implements ISujeto {
             } catch (IOException ignored) {}
         }
         notificarObservadores("POOL_PEERS_ACTUALIZADO", 0);
+    }
+
+    /**
+     * Inicia un listener para conexiones de clientes en la dirección/puerto especificados.
+     * Las sesiones aceptadas se añadirán automáticamente al pool de clientes.
+     */
+    public synchronized void iniciarEscuchaClientes(String host, int puerto) throws IOException {
+        if (servidorClientes != null && servidorClientes.estaArrancado()) {
+            LoggerCentral.warn("iniciarEscuchaClientes: ya arrancado en puerto " + puerto);
+            return;
+        }
+        servidorClientes = new TransporteServidor();
+        servidorClientes.iniciar(host, puerto, false, sesion -> {
+            LoggerCentral.info("iniciarEscuchaClientes: sesión entrante añadida al poolClientes -> " + sesion);
+            agregarSesionCliente(sesion);
+        });
+    }
+
+    /**
+     * Inicia un listener para conexiones de peers en la dirección/puerto especificados.
+     * Las sesiones aceptadas se añadirán automáticamente al pool de peers.
+     */
+    public synchronized void iniciarEscuchaPeers(String host, int puerto) throws IOException {
+        if (servidorPeers != null && servidorPeers.estaArrancado()) {
+            LoggerCentral.warn("iniciarEscuchaPeers: ya arrancado en puerto " + puerto);
+            return;
+        }
+        servidorPeers = new TransporteServidor();
+        servidorPeers.iniciar(host, puerto, true, sesion -> {
+            LoggerCentral.info("iniciarEscuchaPeers: sesión entrante añadida al poolPeers -> " + sesion);
+            agregarSesionPeer(sesion);
+        });
+    }
+
+    /**
+     * Detiene el listener de clientes si está arrancado.
+     */
+    public synchronized void detenerEscuchaClientes() {
+        if (servidorClientes != null) {
+            servidorClientes.detener();
+            servidorClientes = null;
+            LoggerCentral.info("detenerEscuchaClientes: detenido");
+        }
+    }
+
+    /**
+     * Detiene el listener de peers si está arrancado.
+     */
+    public synchronized void detenerEscuchaPeers() {
+        if (servidorPeers != null) {
+            servidorPeers.detener();
+            servidorPeers = null;
+            LoggerCentral.info("detenerEscuchaPeers: detenido");
+        }
+    }
+
+    /**
+     * Inicializa el gestor en modo "servidor" arrancando listeners de clientes y peers.
+     * Conveniencia para configurar ambos puertos en una sola llamada.
+     */
+    public synchronized void inicializarServidor(String host, int puertoClientes, int puertoPeers) throws IOException {
+        // arrancar listeners de manera segura
+        iniciarEscuchaClientes(host, puertoClientes);
+        iniciarEscuchaPeers(host, puertoPeers);
+    }
+
+    /**
+     * Inicializa el gestor en modo "cliente": conecta a la dirección indicada,
+     * guarda la sesión activa (setSesion) y añade la sesión al pool correspondiente.
+     * Su única responsabilidad es conectar, guardar la sesión e inicializar el sistema.
+     */
+    public DTOSesion inicializarComoCliente(String host, int puerto, boolean comoPeer) {
+        DTOSesion sesion = conectarComoCliente(host, puerto, comoPeer);
+        if (sesion != null) {
+            // Guardar como sesión activa (legacy) y notificar
+            setSesion(sesion);
+        }
+        return sesion;
+    }
+
+    /**
+     * Conecta como cliente a la dirección/puerto indicados usando la fábrica de transporte.
+     * Si la conexión tiene éxito, la sesión resultante se añade al pool correspondiente.
+     * @param host host remoto
+     * @param puerto puerto remoto
+     * @param comoPeer true si la sesión debe tratarse como peer, false si como cliente
+     * @return la DTOSesion creada o null si falló la conexión
+     */
+    public DTOSesion conectarComoCliente(String host, int puerto, boolean comoPeer) {
+        DTOConexion datos = new DTOConexion(host, puerto);
+        return conectarComoCliente(datos, comoPeer);
+    }
+
+    /**
+     * Conecta usando un DTOConexion y añade la sesión al pool adecuado en caso de éxito.
+     */
+    public DTOSesion conectarComoCliente(DTOConexion datosConexion, boolean comoPeer) {
+        if (datosConexion == null) return null;
+        ITransporte transporte = transporteFactory.crearTransporte("TCP");
+        try {
+            DTOSesion sesion = transporte.conectar(datosConexion);
+            if (sesion != null && sesion.estaActiva()) {
+                if (comoPeer) agregarSesionPeer(sesion); else agregarSesionCliente(sesion);
+                LoggerCentral.info("conectarComoCliente: conexión exitosa y añadida a pool (comoPeer=" + comoPeer + ") -> " + sesion);
+                return sesion;
+            }
+        } catch (Exception e) {
+            LoggerCentral.error("conectarComoCliente: error al conectar -> " + e.getMessage(), e);
+        }
+        return null;
     }
 
     // --- Implementación de ISujeto ---

@@ -15,18 +15,17 @@ import logger.LoggerCentral;
  * Servicio que acepta conexiones TCP entrantes y las registra mediante un handler suministrado por el llamador.
  * Se puede iniciar vinculando a una dirección/puerto concretos.
  */
-public class TransporteServidor {
+public class TransporteServidor implements ITransporteServidor {
 
-    // Handler simple para notificar sesiones aceptadas al módulo llamador
-    public interface SesionHandler {
-        void onSesionAceptada(DTOSesion sesion);
-    }
+    // Mantener un alias local del handler para compatibilidad con código existente.
+    // Este alias extiende la interfaz definida en ITransporteServidor.
+    public interface SesionHandler extends ITransporteServidor.SesionHandler {}
 
     private ServerSocket serverSocket;
     private Thread hiloAceptador;
     private final AtomicBoolean arrancado = new AtomicBoolean(false);
     private boolean esPoolPeers = true;
-    private SesionHandler handler;
+    private ITransporteServidor.SesionHandler handler;
     private int soTimeoutMs = 1000; // tiempo para desbloquear accept periódicamente
 
     public TransporteServidor() {}
@@ -39,12 +38,14 @@ public class TransporteServidor {
      * @param handler callback que recibirá cada DTOSesion aceptada (no puede ser null)
      * @throws IOException si falla el bind o la apertura del ServerSocket
      */
-    public void iniciar(String host, int puerto, boolean esPoolPeers, SesionHandler handler) throws IOException {
+    @Override
+    public void iniciar(String host, int puerto, boolean esPoolPeers, ITransporteServidor.SesionHandler handler) throws IOException {
         if (arrancado.get()) {
             LoggerCentral.warn("TransporteServidor ya está arrancado en el puerto " + (serverSocket != null ? serverSocket.getLocalPort() : "?"));
             return;
         }
         if (handler == null) throw new IllegalArgumentException("handler no puede ser null");
+        // aceptamos tanto el alias local SesionHandler como la interfaz funcional de ITransporteServidor
         this.handler = handler;
         this.esPoolPeers = esPoolPeers;
 

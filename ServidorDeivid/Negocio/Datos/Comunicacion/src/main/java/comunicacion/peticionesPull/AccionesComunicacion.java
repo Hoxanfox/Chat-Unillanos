@@ -1,15 +1,15 @@
 package comunicacion.peticionesPull;
 
 /**
- * Constantes públicas para acciones de comunicación.
+ * Constantes de acciones usadas en la comunicación (peticiones/respuestas).
+ * Se implementa como constantes String porque varios puntos del código construyen DTORequest con estas constantes.
  */
 public final class AccionesComunicacion {
-    private AccionesComunicacion() {}
+    public static final String PEER_PUSH = "PEER_PUSH";
+    public static final String PEER_JOIN = "PEER_JOIN";
+    public static final String PEER_LIST = "PEER_LIST";
+    public static final String PEER_UPDATE = "PEER_UPDATE";
 
-    public static final String PEER_JOIN = "registrarNuevoPeer";
-    public static final String PEER_LIST = "listarPeers";
-    // Nuevas acciones para notificaciones push entre peers
-    public static final String PEER_PUSH = "peerPushNotification"; // notifica nuevo peer
-    public static final String PEER_UPDATE = "peerListUpdate"; // notifica actualización de lista de peers
-    // Añadir otras acciones aquí según se necesite
+    private AccionesComunicacion() {}
 }
+

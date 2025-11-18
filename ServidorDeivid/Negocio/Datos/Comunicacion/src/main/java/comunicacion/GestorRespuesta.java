@@ -3,7 +3,7 @@ package comunicacion;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import conexion.GestorConexion;
-import conexion.TipoPool;
+import conexion.enums.TipoPool;
 import dto.comunicacion.DTOResponse;
 import dto.gestionConexion.conexion.DTOSesion;
 import logger.LoggerCentral;
@@ -18,18 +18,18 @@ import com.google.gson.reflect.TypeToken;
 
 /**
  * Implementación del componente que escucha y gestiona las respuestas del servidor.
- * AHORA implementado como un Singleton.
+ * AHORA implementado de forma que puede ser subclasificado para crear gestores por pool (PEERS/CLIENTES).
  */
 public class GestorRespuesta implements IGestorRespuesta {
 
-    private static GestorRespuesta instancia; // Instancia única del Singleton
-    private final GestorConexion gestorConexion;
-    private final Map<String, Consumer<DTOResponse>> manejadores;
-    private final Gson gson;
+    private static GestorRespuesta instancia; // Instancia única del Singleton por compatibilidad
+    protected final GestorConexion gestorConexion;
+    protected final Map<String, Consumer<DTOResponse>> manejadores;
+    protected final Gson gson;
     private Thread hiloEscucha;
 
-    // El constructor ahora es privado.
-    private GestorRespuesta() {
+    // El constructor ahora es protected para permitir subclases con sus propias tablas de manejadores
+    protected GestorRespuesta() {
         this.gestorConexion = GestorConexion.getInstancia();
         this.manejadores = new ConcurrentHashMap<>();
         this.gson = new Gson();
@@ -52,7 +52,8 @@ public class GestorRespuesta implements IGestorRespuesta {
     @Override
     public void iniciarEscucha() {
         // Comportamiento previo: por defecto escuchar en el pool de CLIENTES
-        iniciarEscucha(TipoPool.CLIENTES);
+        // Por defecto en este módulo P2P escuchamos PEERS
+        iniciarEscucha(TipoPool.PEERS);
     }
 
     /**
@@ -118,6 +119,28 @@ public class GestorRespuesta implements IGestorRespuesta {
 
                 LoggerCentral.debug("GestorRespuesta: sesión obtenida para escucha en pool " + tipoPool + " -> " + sesion);
 
+                // Intentar marcar esta sesión para este lector; si ya tiene lector activo, reinsertarla y continuar
+                boolean marcado = false;
+                try {
+                    marcado = sesion.intentarAsignarLector();
+                } catch (Exception e) {
+                    LoggerCentral.debug("GestorRespuesta: no se pudo marcar sesion con lector -> " + e.getMessage());
+                    marcado = false;
+                }
+
+                if (!marcado) {
+                    LoggerCentral.debug("GestorRespuesta: la sesión ya tiene un lector activo, reinsertando y buscando otra -> " + sesion);
+                    try {
+                        if (tipoPool == TipoPool.PEERS) gestorConexion.liberarSesionPeer(sesion);
+                        else gestorConexion.liberarSesionCliente(sesion);
+                    } catch (Exception ex) {
+                        LoggerCentral.error("Error reinsertando sesión en pool cuando ya tiene lector: " + ex.getMessage(), ex);
+                    }
+                    // pequeña espera para evitar tight-loop
+                    try { Thread.sleep(50); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+                    continue; // volver a pedir otra sesión
+                }
+
                 try (BufferedReader in = sesion.getIn()) {
                     LoggerCentral.info("Gestor de respuestas iniciado en pool " + tipoPool + ". Esperando mensajes...");
                     String respuestaServidor;
@@ -136,6 +159,10 @@ public class GestorRespuesta implements IGestorRespuesta {
                         LoggerCentral.error("La conexión con el servidor se ha perdido en pool " + tipoPool + ": " + e.getMessage(), e);
                     }
                 } finally {
+                    // liberar la marca de lector en la sesión
+                    try {
+                        sesion.liberarLector();
+                    } catch (Exception ignore) {}
                     // Liberar la sesión de vuelta al pool correspondiente
                     try {
                         if (tipoPool == TipoPool.PEERS) gestorConexion.liberarSesionPeer(sesion);
@@ -156,12 +183,18 @@ public class GestorRespuesta implements IGestorRespuesta {
      * aceptadas por el servidor (TransporteServidor). La sesión se liberará al finalizar.
      */
     public void escucharSesionDirecta(DTOSesion sesion, TipoPool tipoPool) {
-        if (sesion == null || !sesion.estaActiva()) {
-            LoggerCentral.debug("escucharSesionDirecta: sesión nula o inactiva, no se inicia lector -> " + sesion);
-            return;
-        }
-
         Thread hilo = new Thread(() -> {
+            if (sesion == null || !sesion.estaActiva()) {
+                LoggerCentral.debug("escucharSesionDirecta: sesión nula/inactiva, no se inicia lector directo -> " + sesion);
+                return;
+            }
+
+            // Intentar asignar lector para evitar duplicar lectores
+            if (!sesion.intentarAsignarLector()) {
+                LoggerCentral.debug("escucharSesionDirecta: sesión ya tiene lector activo, omitiendo iniciar lector directo -> " + sesion);
+                return;
+            }
+
             LoggerCentral.info("GestorRespuesta: iniciando escucha directa en sesión " + sesion + " pool=" + tipoPool);
             try (BufferedReader in = sesion.getIn()) {
                 String respuestaServidor;
@@ -177,6 +210,8 @@ public class GestorRespuesta implements IGestorRespuesta {
                     LoggerCentral.error("La conexión de sesión directa se ha perdido en pool " + tipoPool + ": " + e.getMessage(), e);
                 }
             } finally {
+                // liberar la marca de lector
+                try { sesion.liberarLector(); } catch (Exception ignore) {}
                 try {
                     if (tipoPool == TipoPool.PEERS) gestorConexion.liberarSesionPeer(sesion);
                     else gestorConexion.liberarSesionCliente(sesion);

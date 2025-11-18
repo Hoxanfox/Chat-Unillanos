@@ -2,8 +2,9 @@ package gestorP2P.actualizacion;
 
 import com.google.gson.Gson;
 import comunicacion.peticionesPull.AccionesComunicacion;
-import comunicacion.EnviadorPeticiones;
-import conexion.TipoPool;
+import comunicacion.IEnviadorPeticiones;
+import comunicacion.fabrica.FabricaComunicacionImpl;
+import conexion.enums.TipoPool;
 import dto.comunicacion.DTORequest;
 import dto.p2p.DTOPeer;
 import dto.p2p.DTOPeerListResponse;
@@ -22,12 +23,14 @@ import java.util.List;
  */
 public class PeerPushPublisherImpl implements IPushPublisher, IObservador {
 
-    private final EnviadorPeticiones enviador;
+    private final IEnviadorPeticiones enviador;
     private final Gson gson = new Gson();
 
     public PeerPushPublisherImpl() {
-        this.enviador = new EnviadorPeticiones();
-        LoggerCentral.debug("PeerPushPublisherImpl: instanciado EnviadorPeticiones");
+        // Obtener enviador desde la fábrica (uso de pool PEERS para envíos a peers)
+        // Solicitar directamente por pool para obtener EnviadorPeer -> más claro y compatible con la fábrica actual
+        this.enviador = FabricaComunicacionImpl.getInstancia().crearEnviador(TipoPool.PEERS);
+        LoggerCentral.debug("PeerPushPublisherImpl: enviador obtenido desde FabricaComunicacion");
     }
 
     @Override

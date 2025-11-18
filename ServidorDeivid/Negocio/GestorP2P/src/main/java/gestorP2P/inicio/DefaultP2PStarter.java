@@ -5,9 +5,7 @@ import gestorP2P.config.FileConfigReader;
 import gestorP2P.config.IConfigReader;
 import gestorP2P.registroP2P.IPeerRegistrar;
 import repositorio.p2p.PeerRepositorio;
-
 import dominio.p2p.Peer;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,9 +18,7 @@ import transporte.FabricaTransporte;
 import transporte.TransporteServidor;
 import dto.gestionConexion.transporte.DTOConexion;
 import conexion.GestorConexion;
-import conexion.TipoPool;
 import dto.gestionConexion.conexion.DTOSesion;
-import comunicacion.GestorRespuesta;
 
 /**
  * Implementación por defecto del starter P2P.
@@ -68,17 +64,15 @@ public class DefaultP2PStarter implements IStarterP2P {
 
                     // Iniciar servidor de escucha local (solo si existe peer local en BD)
                     try {
-                        transporteServidor.iniciar(localHost, localPort, true, new TransporteServidor.SesionHandler() {
-                            @Override
-                            public void onSesionAceptada(DTOSesion sesion) {
-                                try {
-                                    GestorConexion.getInstancia().agregarSesionPeer(sesion);
-                                    // Además de añadir al pool, iniciar escucha directa para procesar respuestas
-                                    try { GestorRespuesta.getInstancia().escucharSesionDirecta(sesion, TipoPool.PEERS); } catch (Exception ignore) {}
-                                } catch (Exception e) {
-                                    LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
-                                    try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
-                                }
+                        transporteServidor.iniciar(localHost, localPort, true, sesion -> {
+                            try {
+                                GestorConexion.getInstancia().agregarSesionPeer(sesion);
+                                // Evitar iniciar un lector directo aquí: el gestor de respuestas ya
+                                // tiene un hilo que consume sesiones desde el pool PEERS.
+                                // Se eliminó la llamada a GestorRespuesta.getInstancia().escucharSesionDirecta(sesion, TipoPool.PEERS);
+                            } catch (Exception e) {
+                                LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
+                                try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
                             }
                         });
                     } catch (Exception e) {
@@ -151,17 +145,15 @@ public class DefaultP2PStarter implements IStarterP2P {
 
                             // Iniciar servidor de escucha local tras unirse con éxito (ahora el peer local debería estar registrado)
                             try {
-                                transporteServidor.iniciar(localHost, localPort, true, new TransporteServidor.SesionHandler() {
-                                    @Override
-                                    public void onSesionAceptada(DTOSesion sesion) {
-                                        try {
-                                            GestorConexion.getInstancia().agregarSesionPeer(sesion);
-                                            // Además de añadir al pool, iniciar escucha directa para procesar respuestas
-                                            try { GestorRespuesta.getInstancia().escucharSesionDirecta(sesion, TipoPool.PEERS); } catch (Exception ignore) {}
-                                        } catch (Exception e) {
-                                            LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
-                                            try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
-                                        }
+                                transporteServidor.iniciar(localHost, localPort, true, sesion -> {
+                                    try {
+                                        GestorConexion.getInstancia().agregarSesionPeer(sesion);
+                                        // Evitar iniciar un lector directo aquí: el gestor de respuestas ya
+                                        // consume sesiones desde pool PEERS y crear otro lector provocaría
+                                        // que ambos hilos accedan/cierren el mismo BufferedReader.
+                                    } catch (Exception e) {
+                                        LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
+                                        try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
                                     }
                                 });
                             } catch (Exception e) {
@@ -190,17 +182,14 @@ public class DefaultP2PStarter implements IStarterP2P {
 
                 // Iniciar servidor de escucha local tras crear/registrar peer genesis
                 try {
-                    transporteServidor.iniciar(localHost, localPort, true, new TransporteServidor.SesionHandler() {
-                        @Override
-                        public void onSesionAceptada(DTOSesion sesion) {
-                            try {
-                                GestorConexion.getInstancia().agregarSesionPeer(sesion);
-                                // Además de añadir al pool, iniciar escucha directa para procesar respuestas
-                                try { GestorRespuesta.getInstancia().escucharSesionDirecta(sesion, TipoPool.PEERS); } catch (Exception ignore) {}
-                            } catch (Exception e) {
-                                LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
-                                try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
-                            }
+                    transporteServidor.iniciar(localHost, localPort, true, sesion -> {
+                        try {
+                            GestorConexion.getInstancia().agregarSesionPeer(sesion);
+                            // Evitar iniciar un lector directo aquí: el gestor de respuestas escucha
+                            // en el pool PEERS.
+                        } catch (Exception e) {
+                            LoggerCentral.warn("DefaultP2PStarter: fallo al añadir sesión entrante al poolPeers -> " + e.getMessage());
+                            try { if (sesion != null && sesion.getSocket() != null) sesion.getSocket().close(); } catch (Exception ignored) {}
                         }
                     });
                 } catch (Exception e) {

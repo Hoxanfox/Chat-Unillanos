@@ -1,6 +1,6 @@
 package comunicacion;
 
-import conexion.TipoPool;
+import conexion.enums.TipoPool;
 import dto.comunicacion.DTOResponse;
 import java.util.function.Consumer;
 
