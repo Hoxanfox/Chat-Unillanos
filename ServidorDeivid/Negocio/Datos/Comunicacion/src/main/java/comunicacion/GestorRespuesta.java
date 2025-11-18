@@ -28,6 +28,16 @@ public class GestorRespuesta implements IGestorRespuesta {
     protected final Gson gson;
     private Thread hiloEscucha;
 
+    // ThreadLocal que contiene la sesion actualmente manejada por el hilo lector;
+    // permite a otros componentes (ej. BaseEnviador) reutilizar exactamente la misma sesion
+    // para enviar respuestas sin extraerla del pool.
+    private static final ThreadLocal<DTOSesion> sesionActual = new ThreadLocal<>();
+
+    // Exponer getters/setters package-private para que BaseEnviador pueda leerlo
+    public static DTOSesion obtenerSesionActual() { return sesionActual.get(); }
+    static void establecerSesionActual(DTOSesion s) { sesionActual.set(s); }
+    static void limpiarSesionActual() { sesionActual.remove(); }
+
     // El constructor ahora es protected para permitir subclases con sus propias tablas de manejadores
     protected GestorRespuesta() {
         this.gestorConexion = GestorConexion.getInstancia();
@@ -152,7 +162,13 @@ public class GestorRespuesta implements IGestorRespuesta {
                         // Truncar respuestas muy largas para evitar imprimir imágenes en base64
                         String respuestaParaLog = truncarRespuesta(respuestaServidor, 500);
                         LoggerCentral.info("[" + tipoPool + "] << Respuesta recibida: " + respuestaParaLog);
-                        procesarRespuesta(respuestaServidor);
+                        // Establecer la sesión actual para que los enviadores puedan acceder a ella
+                        establecerSesionActual(sesion);
+                        try {
+                            procesarRespuesta(respuestaServidor);
+                        } finally {
+                            limpiarSesionActual();
+                        }
                     }
                 } catch (IOException e) {
                     if (!Thread.currentThread().isInterrupted()) {
@@ -203,7 +219,12 @@ public class GestorRespuesta implements IGestorRespuesta {
                     LoggerCentral.debug("[" + tipoPool + "] << RAW respuesta recibida (len=" + respuestaServidor.length() + "): " + rawForLog);
                     String respuestaParaLog = truncarRespuesta(respuestaServidor, 500);
                     LoggerCentral.info("[" + tipoPool + "] << Respuesta recibida: " + respuestaParaLog);
-                    procesarRespuesta(respuestaServidor);
+                    establecerSesionActual(sesion);
+                    try {
+                        procesarRespuesta(respuestaServidor);
+                    } finally {
+                        limpiarSesionActual();
+                    }
                 }
             } catch (IOException e) {
                 if (!Thread.currentThread().isInterrupted()) {

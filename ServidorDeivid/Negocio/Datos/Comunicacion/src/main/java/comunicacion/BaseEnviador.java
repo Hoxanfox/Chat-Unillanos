@@ -265,6 +265,37 @@ public abstract class BaseEnviador implements IEnviadorPeticiones {
     @Override
     public boolean enviarResponseA(String ip, int port, DTOResponse response, TipoPool tipoPool) {
         LoggerCentral.debug(this.getClass().getSimpleName() + ".enviarResponseA(ip=" + ip + ", port=" + port + ", pool=" + tipoPool + ") - preparando envío de DTOResponse");
+
+        // Si el gestor de respuestas tiene una sesión actual asociada al hilo lector, intentar usarla directamente
+        try {
+            DTOSesion sesionActual = GestorRespuesta.obtenerSesionActual();
+            if (sesionActual != null && sesionActual.estaActiva()) {
+                try {
+                    // Comprobar IP de la sesión (no comparar puerto remoto, ya que puede ser efímero)
+                    String remoteHost = null;
+                    if (sesionActual.getSocket() != null && sesionActual.getSocket().getInetAddress() != null) {
+                        remoteHost = sesionActual.getSocket().getInetAddress().getHostAddress();
+                    }
+                    if (remoteHost != null && remoteHost.equals(ip)) {
+                        LoggerCentral.debug("enviarResponseA: usando sesionActual del hilo lector para enviar response a " + ip + ":" + port + " -> " + sesionActual);
+                        try {
+                            java.io.PrintWriter out = sesionActual.getOut();
+                            String jsonResponse = gson.toJson(response);
+                            out.println(jsonResponse);
+                            out.flush();
+                            LoggerCentral.info("[" + tipoPool + "] >> Response enviada (sesionActual) a " + ip + ":" + port + " -> " + (jsonResponse!=null? (jsonResponse.length()>1000?jsonResponse.substring(0,1000)+"... [truncado]":jsonResponse):"null"));
+                            return true;
+                        } catch (Exception e) {
+                            LoggerCentral.error("enviarResponseA: error enviando sobre sesionActual -> " + e.getMessage(), e);
+                            // seguir al path normal (buscar en pool)
+                        }
+                    }
+                } catch (Throwable t) {
+                    LoggerCentral.debug("enviarResponseA: no se pudo usar sesionActual -> " + t.getMessage());
+                }
+            }
+        } catch (Throwable ignored) {}
+
         DTOSesion sesion = gestorConexion.obtenerSesionPorDireccion(ip, port, 2000, tipoPool == TipoPool.PEERS);
         if (sesion == null) {
             LoggerCentral.warn("No se encontró sesión para " + ip + ":" + port + " en pool " + tipoPool + ". No se puede enviar response.");

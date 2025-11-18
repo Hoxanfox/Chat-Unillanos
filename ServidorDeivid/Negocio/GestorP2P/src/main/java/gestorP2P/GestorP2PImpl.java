@@ -24,6 +24,7 @@ import gestorP2P.registroP2P.IPeerRegistrar;
 import gestorP2P.registroP2P.PeerRegistrarImpl;
 import observador.IObservador;
 import logger.LoggerCentral;
+import comunicacion.GestorRespuesta;
 
 // importaciones estándar necesarias
 import java.lang.reflect.Type;
@@ -164,6 +165,23 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
                     Peer peer = new Peer(newId, ip, null, Peer.Estado.ONLINE, Instant.now());
                     boolean guardado = peerRegistrar.registrarPeer(peer, socketForRegister);
 
+                    // Si existe una sesión entrante asociada a este hilo (GestorRespuesta), añadirla al pool PEERS
+                    try {
+                        DTOSesion sesActual = GestorRespuesta.obtenerSesionActual();
+                        if (sesActual != null && sesActual.estaActiva()) {
+                            try {
+                                GestorConexion.getInstancia().agregarSesionPeer(sesActual);
+                                LoggerCentral.info("Manejador PEER_JOIN: sesión entrante añadida al pool PEERS -> " + sesActual);
+                            } catch (Exception ex) {
+                                LoggerCentral.warn("Manejador PEER_JOIN: no se pudo añadir sesion al pool PEERS -> " + ex.getMessage());
+                            }
+                        } else {
+                            LoggerCentral.debug("Manejador PEER_JOIN: no hay sesionActual para añadir al pool PEERS (null/inactiva)");
+                        }
+                    } catch (Throwable t) {
+                        LoggerCentral.debug("Manejador PEER_JOIN: error obteniendo sesionActual -> " + t.getMessage());
+                    }
+
                     // Preparar data de respuesta: incluir uuid y requestId si estaba presente
                     Map<String,Object> respData = new HashMap<>();
                     respData.put("uuid", newId.toString());
@@ -186,12 +204,60 @@ public class GestorP2PImpl implements IGestorP2P, IObservador {
 
                     // Responder al remitente (si conocemos ip/port)
                     if (ip != null && port > 0) {
+                        boolean sent = false;
                         try {
-                            // Reutilizar el enviador de la instancia en lugar de crear uno nuevo
-                            boolean sent = this.enviador.enviarResponseA(ip, port, responseToSender, TipoPool.PEERS);
-                            LoggerCentral.debug("Manejador PEER_JOIN: response enviada a " + ip + ":" + port + " -> sent=" + sent);
-                        } catch (Exception e) {
-                            LoggerCentral.warn("Manejador PEER_JOIN: no se pudo enviar response al remitente " + ip + ":" + port + " -> " + e.getMessage());
+                            // Intento principal usando enviarResponseA (si está implementado)
+                            sent = this.enviador.enviarResponseA(ip, port, responseToSender, TipoPool.PEERS);
+                            LoggerCentral.debug("Manejador PEER_JOIN: intento enviarResponseA a " + ip + ":" + port + " -> sent=" + sent);
+                        } catch (Throwable t) {
+                            LoggerCentral.debug("Manejador PEER_JOIN: enviarResponseA lanzó excepción: " + t.getMessage());
+                        }
+
+                        if (!sent) {
+                            // Intentar recuperar/crear sesión en GestorConexion y reintentar
+                            try {
+                                DTOSesion ses = GestorConexion.getInstancia().obtenerSesionPorDireccion(ip, port, 500, true);
+                                if (ses == null || !ses.estaActiva()) {
+                                    LoggerCentral.debug("Manejador PEER_JOIN: no hay sesión activa para " + ip + ":" + port + " -> intentando conectar directamente");
+                                    try {
+                                        DTOConexion datos = new DTOConexion(ip, port);
+                                        DTOSesion nueva = FabricaTransporte.crearTransporte("TCP").conectar(datos);
+                                        if (nueva != null && nueva.estaActiva()) {
+                                            GestorConexion.getInstancia().agregarSesionPeer(nueva);
+                                            try {
+                                                sent = this.enviador.enviarResponseA(ip, port, responseToSender, TipoPool.PEERS);
+                                                LoggerCentral.debug("Manejador PEER_JOIN: reintento enviarResponseA tras conectar -> sent=" + sent);
+                                            } catch (Throwable t2) {
+                                                LoggerCentral.warn("Manejador PEER_JOIN: reintento enviarResponseA falló: " + t2.getMessage());
+                                            }
+                                        } else {
+                                            LoggerCentral.warn("Manejador PEER_JOIN: no se logró establecer conexión directa a " + ip + ":" + port);
+                                        }
+                                    } catch (Exception ex) {
+                                        LoggerCentral.debug("Manejador PEER_JOIN: error conectando directamente -> " + ex.getMessage());
+                                    }
+                                } else {
+                                    // Si la sesión existe y estaba activa, intentar enviar de nuevo
+                                    try {
+                                        sent = this.enviador.enviarResponseA(ip, port, responseToSender, TipoPool.PEERS);
+                                        LoggerCentral.debug("Manejador PEER_JOIN: reintento enviarResponseA con sesión existente -> sent=" + sent);
+                                    } catch (Throwable t3) {
+                                        LoggerCentral.warn("Manejador PEER_JOIN: reintento con sesión existente falló: " + t3.getMessage());
+                                    }
+                                }
+                            } catch (Exception e) {
+                                LoggerCentral.warn("Manejador PEER_JOIN: error intentando recuperar/crear sesión para responder -> " + e.getMessage());
+                            }
+                        }
+
+                        // Fallback final: intentar enviarResponseA como último recurso
+                        if (!sent) {
+                            try {
+                                sent = this.enviador.enviarResponseA(ip, port, responseToSender, TipoPool.PEERS);
+                                LoggerCentral.info("Manejador PEER_JOIN: fallback enviarResponseA usado para intentar responder a " + ip + ":" + port + " -> sent=" + sent);
+                            } catch (Throwable e) {
+                                LoggerCentral.warn("Manejador PEER_JOIN: fallback enviarResponseA falló para " + ip + ":" + port + " -> " + e.getMessage());
+                            }
                         }
                     } else {
                         LoggerCentral.warn("Manejador PEER_JOIN: no se conoce ip/port del remitente, no se pudo enviar response");
