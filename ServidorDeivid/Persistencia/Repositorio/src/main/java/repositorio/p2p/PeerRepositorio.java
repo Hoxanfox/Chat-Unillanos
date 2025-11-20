@@ -104,4 +104,54 @@ public class PeerRepositorio {
         }
         return lista;
     }
+
+    /**
+     * Devuelve la lista completa de peers con id, ip, puerto, estado y fechaCreacion.
+     */
+    public static class PeerInfo {
+        public UUID id;
+        public String ip;
+        public int puerto;
+        public Estado estado;
+        public Instant fechaCreacion;
+
+        public PeerInfo(UUID id, String ip, int puerto, Estado estado, Instant fechaCreacion) {
+            this.id = id;
+            this.ip = ip;
+            this.puerto = puerto;
+            this.estado = estado;
+            this.fechaCreacion = fechaCreacion;
+        }
+    }
+
+    public List<PeerInfo> listarPeersInfo() {
+        List<PeerInfo> lista = new ArrayList<>();
+        String sql = "SELECT id, ip, socket_info, estado, fecha_creacion FROM peers";
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                UUID id = null;
+                try { id = UUID.fromString(rs.getString("id")); } catch (Exception ignored) {}
+                String ip = rs.getString("ip");
+                String socketInfo = rs.getString("socket_info");
+                int puerto = -1;
+                if (socketInfo != null && socketInfo.contains(":")) {
+                    try {
+                        String[] parts = socketInfo.split(":");
+                        puerto = Integer.parseInt(parts[1]);
+                    } catch (Exception ignored) {}
+                }
+                String estadoStr = rs.getString("estado");
+                Estado estado = Estado.OFFLINE;
+                try { if (estadoStr != null) estado = Estado.valueOf(estadoStr); } catch (Exception ignored) {}
+                Timestamp ts = rs.getTimestamp("fecha_creacion");
+                Instant fecha = ts != null ? ts.toInstant() : Instant.now();
+                lista.add(new PeerInfo(id, ip, puerto, estado, fecha));
+            }
+        } catch (SQLException e) {
+            System.err.println("[PeerRepositorio] Error listarPeersInfo: " + e.getMessage());
+        }
+        return lista;
+    }
 }
