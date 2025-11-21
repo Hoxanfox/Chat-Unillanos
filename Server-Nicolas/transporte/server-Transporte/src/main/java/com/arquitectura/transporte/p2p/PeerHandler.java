@@ -1,4 +1,4 @@
-package com.arquitectura.transporte;
+package com.arquitectura.transporte.p2p;
 
 import com.arquitectura.controlador.IPeerHandler;
 import com.arquitectura.DTO.Comunicacion.DTORequest;
@@ -98,8 +98,6 @@ public class PeerHandler implements IPeerHandler, Runnable {
                 // Salimos del método independientemente
                 return;
             }
-
-
             // Si llegamos aquí, es porque this.authenticated == true
             // y this.peerId NO es nulo.
             log.debug("Mensaje recibido de peer {}: action={}", peerId, request.getAction());

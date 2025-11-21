@@ -1,4 +1,4 @@
-package com.arquitectura.transporte;
+package com.arquitectura.transporte.p2p;
 
 import com.arquitectura.controlador.IClientHandler;
 import com.arquitectura.controlador.IPeerHandler;

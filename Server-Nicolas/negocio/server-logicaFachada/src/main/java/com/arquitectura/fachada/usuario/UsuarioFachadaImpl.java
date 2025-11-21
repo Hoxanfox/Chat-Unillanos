@@ -4,7 +4,8 @@ import com.arquitectura.DTO.usuarios.LoginRequestDto;
 import com.arquitectura.DTO.usuarios.UserRegistrationRequestDto;
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.events.ConnectedUsersRequestEvent;
-import com.arquitectura.logicaUsuarios.IUserService;
+import com.arquitectura.logicaUsuarios.ProfileService.IUserProfileService;
+import com.arquitectura.logicaUsuarios.authservice.IUserAuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -18,38 +19,40 @@ import java.util.*;
 @Component
 public class UsuarioFachadaImpl implements IUsuarioFachada {
 
-    private final IUserService userService;
+    private final IUserAuthService userAuthService;
+    private final IUserProfileService userProfileService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Autowired
-    public UsuarioFachadaImpl(IUserService userService, ApplicationEventPublisher eventPublisher) {
-        this.userService = userService;
+    public UsuarioFachadaImpl(IUserAuthService userAuthService, IUserProfileService userProfileService, ApplicationEventPublisher eventPublisher) {
+        this.userAuthService = userAuthService;
+        this.userProfileService = userProfileService;
         this.eventPublisher = eventPublisher;
     }
 
     @Override
     public void registrarUsuario(UserRegistrationRequestDto requestDto, String ipAddress) throws Exception {
-        userService.registrarUsuario(requestDto, ipAddress);
+        userAuthService.registrarUsuario(requestDto, ipAddress);
     }
 
     @Override
     public Optional<UserResponseDto> buscarUsuarioPorUsername(String username) {
-        return userService.buscarPorUsername(username);
+        return userProfileService.buscarPorUsername(username);
     }
 
     @Override
     public List<UserResponseDto> obtenerTodosLosUsuarios() {
-        return userService.obtenerTodosLosUsuarios();
+        return userProfileService.obtenerTodosLosUsuarios();
     }
 
     @Override
     public UserResponseDto autenticarUsuario(LoginRequestDto requestDto, String ipAddress) throws Exception {
-        return userService.autenticarUsuario(requestDto, ipAddress);
+        return userAuthService.autenticarUsuario(requestDto, ipAddress);
     }
 
     @Override
     public List<UserResponseDto> getUsersByIds(Set<UUID> userIds) {
-        return userService.getUsersByIds(userIds);
+        return userProfileService.getUsersByIds(userIds);
     }
 
     @Override
@@ -60,23 +63,23 @@ public class UsuarioFachadaImpl implements IUsuarioFachada {
         if (connectedUserIds.isEmpty()) {
             return new ArrayList<>();
         }
-        return userService.getUsersByIds(connectedUserIds);
+        return userProfileService.getUsersByIds(connectedUserIds);
     }
 
     @Override
     public void cambiarEstadoUsuario(UUID userId, boolean nuevoEstado) throws Exception {
-        userService.cambiarEstadoUsuario(userId, nuevoEstado);
+        userProfileService.cambiarEstadoUsuario(userId, nuevoEstado);
     }
 
     @Override
     public List<UserResponseDto> listarContactos(UUID excludeUserId) {
-        return userService.listarContactos(excludeUserId);
+        return userProfileService.listarContactos(excludeUserId);
     }
 
     @Override
     public void enviarPedidoLogout(UUID userId, String motivo) throws Exception {
         // Verificar que el usuario existe
-        UserResponseDto usuario = userService.getUsersByIds(Set.of(userId)).stream()
+        UserResponseDto usuario = userProfileService.getUsersByIds(Set.of(userId)).stream()
                 .findFirst()
                 .orElseThrow(() -> new Exception("Usuario con ID " + userId + " no encontrado"));
 

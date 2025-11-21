@@ -1,4 +1,4 @@
-package com.arquitectura.transporte;
+package com.arquitectura.transporte.p2p;
 
 // Importaciones necesarias
 import com.arquitectura.DTO.Comunicacion.DTORequest;

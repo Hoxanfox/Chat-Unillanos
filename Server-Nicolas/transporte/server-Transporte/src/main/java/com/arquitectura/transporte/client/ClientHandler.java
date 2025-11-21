@@ -1,8 +1,9 @@
-package com.arquitectura.transporte;
+package com.arquitectura.transporte.client;
 
 import com.arquitectura.DTO.usuarios.UserResponseDto;
 import com.arquitectura.controlador.IClientHandler; // <-- Asegúrate de que este import exista
 import com.arquitectura.controlador.RequestDispatcher;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;

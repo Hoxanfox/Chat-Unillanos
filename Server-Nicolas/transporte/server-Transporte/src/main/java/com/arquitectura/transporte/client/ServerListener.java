@@ -1,4 +1,4 @@
-package com.arquitectura.transporte;
+package com.arquitectura.transporte.client;
 
 import com.arquitectura.DTO.Comunicacion.DTOResponse;
 import com.arquitectura.DTO.Mensajes.MessageResponseDto;
