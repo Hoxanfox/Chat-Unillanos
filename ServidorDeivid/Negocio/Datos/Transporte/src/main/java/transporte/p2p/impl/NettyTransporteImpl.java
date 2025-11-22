@@ -57,8 +57,9 @@ public class NettyTransporteImpl implements ITransporteTcp {
 
     @Override
     public void conectarA(String host, int puerto) {
-        if (host == null || host.trim().isEmpty() || host.equals("null")) {
-            System.err.println(TAG + ROJO + "Error: HOST nulo." + RESET);
+        // VALIDACIÓN ROBUSTA: Evita loops de conexión a "null"
+        if (host == null || host.trim().isEmpty() || host.equalsIgnoreCase("null")) {
+            System.err.println(TAG + ROJO + "Error: Intento de conectar a HOST inválido (" + host + ")." + RESET);
             return;
         }
 
@@ -83,6 +84,7 @@ public class NettyTransporteImpl implements ITransporteTcp {
                 System.out.println(TAG + "Conectado a " + key);
                 canalesActivos.put(key, f.channel());
             } else {
+                // Fallo silencioso o log ligero para no saturar
                 group.shutdownGracefully();
             }
         });
@@ -90,18 +92,22 @@ public class NettyTransporteImpl implements ITransporteTcp {
 
     @Override
     public void enviarMensaje(String host, int puerto, String mensaje) {
-        if (host == null) return;
+        if (host == null || host.equals("null")) {
+            System.err.println(TAG + "No se puede enviar mensaje: Host es NULL.");
+            return;
+        }
+
         String key = host + ":" + puerto;
         Channel canal = canalesActivos.get(key);
 
         if (canal != null && canal.isActive()) {
             canal.writeAndFlush(mensaje);
         } else {
+            // Si no hay canal, intentamos abrir uno nuevo
             conectarA(host, puerto);
         }
     }
 
-    // --- NUEVO: Implementación de desconexión física ---
     @Override
     public void desconectar(String host, int puerto) {
         String key = host + ":" + puerto;

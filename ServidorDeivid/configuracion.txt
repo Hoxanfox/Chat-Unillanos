@@ -8,8 +8,8 @@ cliente.host=192.168.1.5
 cliente.puerto=8000
 
 # Host y puerto por defecto para peers
-peer.host=192.168.1.5
-peer.puerto=9000
+#peer.host=192.168.1.5
+#peer.puerto=9000
 
 # Peer inicial (opcional) - ejemplo
 #peer.inicial.host=192.168.1.14

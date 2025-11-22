@@ -62,7 +62,6 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
     }
 
     // --- NUEVO: Actualiza la "Cara Pública" del peer cuando recibimos Heartbeat ---
-    // Esto permite mostrar el puerto 7000 en lugar del 54321 en la lista visual
     @Override
     public void actualizarPuertoServidor(String connectionId, int puertoReal) {
         DTOPeerDetails peer = poolPeers.get(connectionId);
@@ -188,6 +187,15 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
         }
     }
 
+    // --- NUEVO: Manejo de Desconexión Automática (Callback de Netty) ---
+    @Override
+    public void onDesconexion(String origen) {
+        if (poolPeers.containsKey(origen)) {
+            System.out.println(TAG + AMARILLO + "Detectada caída/cierre de canal: " + origen + ". Eliminando del pool." + RESET);
+            poolPeers.remove(origen);
+        }
+    }
+
     private DTOPeerDetails crearPeerDesdeOrigen(String origen) {
         try {
             String[] parts = origen.split(":");
@@ -199,7 +207,6 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
             String ip = parts[0];
             if (ip.startsWith("/")) ip = ip.substring(1);
 
-            // Inicialmente el puerto servidor es el mismo que el físico hasta que el Heartbeat lo actualice
             return new DTOPeerDetails(origen, ip, Integer.parseInt(parts[1]), "ONLINE", LocalDateTime.now().format(FORMATTER));
         } catch (Exception e) {
             System.err.println(TAG + ROJO + "Excepción creando peer: " + e.getMessage() + RESET);

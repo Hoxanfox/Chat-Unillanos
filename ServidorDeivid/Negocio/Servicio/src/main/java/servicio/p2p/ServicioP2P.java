@@ -5,8 +5,8 @@ import gestorP2P.FachadaP2P;
 import gestorP2P.servicios.ServicioChat;
 import gestorP2P.servicios.ServicioDescubrimiento;
 import gestorP2P.servicios.ServicioGestionRed;
-// CORRECCIÓN: Asegúrate de importar desde el paquete .interfaces correcto
-import servicio.p2p.IServicioP2PControl;
+import gestorP2P.servicios.ServicioInformacion; // IMPORTANTE: Nuevo servicio
+import servicio.p2p.IServicioP2PControl; // Import corregido
 
 import java.util.Collections;
 import java.util.List;
@@ -18,7 +18,11 @@ import java.util.List;
 public class ServicioP2P implements IServicioP2PControl {
 
     private final FachadaP2P fachada;
+
+    // Referencias a servicios funcionales
     private ServicioChat servicioChat;
+    private ServicioInformacion servicioInfo; // Referencia para consultas
+
     private boolean running;
 
     public ServicioP2P() {
@@ -34,7 +38,7 @@ public class ServicioP2P implements IServicioP2PControl {
     }
 
     private void configurarServicios() {
-        // A. Gestión de Red
+        // A. Gestión de Red (Core)
         System.out.println("[ServicioP2P] Registrando ServicioGestionRed...");
         ServicioGestionRed srvRed = new ServicioGestionRed();
         fachada.registrarServicio(srvRed);
@@ -48,6 +52,11 @@ public class ServicioP2P implements IServicioP2PControl {
         System.out.println("[ServicioP2P] Registrando ServicioDescubrimiento...");
         ServicioDescubrimiento srvDiscovery = new ServicioDescubrimiento();
         fachada.registrarServicio(srvDiscovery);
+
+        // D. Información (Base de Datos + Estado)
+        System.out.println("[ServicioP2P] Registrando ServicioInformacion...");
+        this.servicioInfo = new ServicioInformacion();
+        fachada.registrarServicio(servicioInfo);
     }
 
     @Override
@@ -86,14 +95,18 @@ public class ServicioP2P implements IServicioP2PControl {
 
     @Override
     public List<DTOPeerDetails> obtenerListaPeers() {
-        // Logs reducidos aquí para no saturar la consola si se llama muy seguido
+        // Si tenemos el servicio de información, obtenemos el historial completo (BD + Memoria)
+        if (servicioInfo != null) {
+            return servicioInfo.obtenerHistorialCompleto();
+        }
+
+        // Fallback si la red no ha iniciado o servicio no existe
         if (!running) {
             System.out.println("[ServicioP2P] obtenerListaPeers llamado, pero la red está detenida.");
             return Collections.emptyList();
         }
-        List<DTOPeerDetails> lista = fachada.obtenerPeersConectados();
-        // System.out.println("[ServicioP2P] Consultando lista de peers. Total encontrados: " + lista.size());
-        return lista;
+
+        return fachada.obtenerPeersConectados();
     }
 
     @Override
