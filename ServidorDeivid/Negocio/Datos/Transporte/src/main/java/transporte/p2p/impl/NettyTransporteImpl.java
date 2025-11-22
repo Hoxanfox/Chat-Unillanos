@@ -17,9 +17,17 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class NettyTransporteImpl implements ITransporteTcp {
 
-    // 1. IMPORTANTE: Ya NO es 'final', porque se setea después del constructor
-    private IMensajeListener listener;
+    // --- COLORES ANSI ---
+    private static final String RESET = "\u001B[0m";
+    private static final String VERDE = "\u001B[32m";
+    private static final String AMARILLO = "\u001B[33m";
+    private static final String ROJO = "\u001B[31m";
+    private static final String AZUL = "\u001B[34m";
+    private static final String MAGENTA = "\u001B[35m";
 
+    private static final String TAG = AZUL + "[Netty-Core] " + RESET;
+
+    private IMensajeListener listener;
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private final Map<String, Channel> canalesActivos = new ConcurrentHashMap<>();
@@ -28,7 +36,6 @@ public class NettyTransporteImpl implements ITransporteTcp {
         this.listener = listener;
     }
 
-    // 2. IMPORTANTE: El método que te faltaba
     public void setListener(IMensajeListener listener) {
         this.listener = listener;
     }
@@ -38,26 +45,49 @@ public class NettyTransporteImpl implements ITransporteTcp {
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
 
-        ServerBootstrap b = new ServerBootstrap();
-        b.group(bossGroup, workerGroup)
-                .channel(NioServerSocketChannel.class)
-                .childHandler(new ChannelInitializer<SocketChannel>() {
-                    @Override
-                    public void initChannel(SocketChannel ch) {
-                        ch.pipeline().addLast(new StringDecoder());
-                        ch.pipeline().addLast(new StringEncoder());
-                        // Aquí pasamos 'listener' (que ya no será null cuando esto corra)
-                        ch.pipeline().addLast(new P2PInboundHandler(listener, canalesActivos));
-                    }
-                });
+        System.out.println(TAG + "Configurando servidor en puerto " + MAGENTA + puerto + RESET + "...");
 
-        b.bind(puerto).sync();
-        System.out.println(">> [Netty] Escuchando en puerto: " + puerto);
+        try {
+            ServerBootstrap b = new ServerBootstrap();
+            b.group(bossGroup, workerGroup)
+                    .channel(NioServerSocketChannel.class)
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        public void initChannel(SocketChannel ch) {
+                            ch.pipeline().addLast(new StringDecoder());
+                            ch.pipeline().addLast(new StringEncoder());
+                            ch.pipeline().addLast(new P2PInboundHandler(listener, canalesActivos));
+                        }
+                    });
+
+            ChannelFuture f = b.bind(puerto).sync();
+            System.out.println(TAG + VERDE + "✔ Servidor ESCUCHANDO en puerto: " + puerto + RESET);
+
+            // Esperar hasta que el socket del servidor se cierre
+            // f.channel().closeFuture().sync(); // Bloqueante, cuidado en Main Thread
+
+        } catch (Exception e) {
+            System.err.println(TAG + ROJO + "✘ Error fatal iniciando servidor: " + e.getMessage() + RESET);
+            throw e;
+        }
     }
 
     @Override
     public void conectarA(String host, int puerto) {
+        if (host == null) {
+            System.err.println(TAG + ROJO + "Intento de conexión a HOST NULO abortado." + RESET);
+            return;
+        }
+
+        String key = host + ":" + puerto;
+        if (canalesActivos.containsKey(key) && canalesActivos.get(key).isActive()) {
+            // System.out.println(TAG + "Ya existe conexión activa con " + key + ". Omitiendo.");
+            return;
+        }
+
         EventLoopGroup group = new NioEventLoopGroup();
+        System.out.println(TAG + "Iniciando conexión saliente a: " + AMARILLO + key + RESET);
+
         try {
             Bootstrap b = new Bootstrap();
             b.group(group)
@@ -71,13 +101,20 @@ public class NettyTransporteImpl implements ITransporteTcp {
                         }
                     });
 
-            ChannelFuture f = b.connect(host, puerto).sync();
-            String key = host + ":" + puerto;
-            canalesActivos.put(key, f.channel());
-            System.out.println(">> [Netty] Conectado a " + key);
+            ChannelFuture f = b.connect(host, puerto);
+
+            f.addListener((ChannelFuture future) -> {
+                if (future.isSuccess()) {
+                    System.out.println(TAG + VERDE + "✔ Conexión EXITOSA con " + key + RESET);
+                    canalesActivos.put(key, future.channel());
+                } else {
+                    System.err.println(TAG + ROJO + "✘ FALLÓ conexión a " + key + ": " + future.cause().getMessage() + RESET);
+                    group.shutdownGracefully(); // Limpiar recursos si falla
+                }
+            });
 
         } catch (Exception e) {
-            System.err.println(">> [Netty] Error conectando a " + host + ": " + e.getMessage());
+            System.err.println(TAG + ROJO + "Excepción al intentar conectar a " + host + ": " + e.getMessage() + RESET);
         }
     }
 
@@ -85,20 +122,26 @@ public class NettyTransporteImpl implements ITransporteTcp {
     public void enviarMensaje(String host, int puerto, String mensaje) {
         String key = host + ":" + puerto;
         Channel canal = canalesActivos.get(key);
+
         if (canal != null && canal.isActive()) {
+            // Log ligero para envío
+            // System.out.println(TAG + "Enviando a " + key + " (" + mensaje.length() + " bytes)");
             canal.writeAndFlush(mensaje);
         } else {
-            // Intento de reconexión rápida si quieres
-            System.out.println(">> [Netty] Reconectando para enviar a " + key);
+            System.out.println(TAG + AMARILLO + "⚠ Canal inactivo o inexistente para " + key + ". Intentando reconectar..." + RESET);
+            // Intento de reconexión rápida
             conectarA(host, puerto);
-            // Nota: El mensaje actual podría perderse si no implementas una cola,
-            // pero para este ejemplo es suficiente.
+            // Nota: El mensaje actual se pierde en este diseño simple, se requeriría una cola de reintentos.
         }
     }
 
     @Override
     public void detener() {
+        System.out.println(TAG + MAGENTA + "Deteniendo hilos de transporte..." + RESET);
         if (workerGroup != null) workerGroup.shutdownGracefully();
         if (bossGroup != null) bossGroup.shutdownGracefully();
+        canalesActivos.values().forEach(Channel::close);
+        canalesActivos.clear();
+        System.out.println(TAG + "Transporte detenido.");
     }
 }
