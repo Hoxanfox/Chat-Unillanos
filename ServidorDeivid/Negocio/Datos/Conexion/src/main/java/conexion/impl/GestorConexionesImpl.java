@@ -103,15 +103,15 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
 
         // 5. Ejecutar envío solo si tenemos datos válidos
         if (ipDestino != null && !ipDestino.equals("null") && puertoDestino > 0) {
-            // Log de depuración detallado para rastrear el origen de los datos
-            System.out.println(TAG + "Enviando a " + CYAN + targetId + RESET +
-                    " usando IP: " + VERDE + ipDestino + ":" + puertoDestino + RESET +
-                    " [Fuente: " + AMARILLO + fuenteDatos + RESET + "]");
+            // Log de depuración detallado
+            // System.out.println(TAG + "Enviando a " + CYAN + targetId + RESET +
+            //                    " usando IP: " + VERDE + ipDestino + ":" + puertoDestino + RESET +
+            //                    " [Fuente: " + AMARILLO + fuenteDatos + RESET + "]");
 
             transporte.enviarMensaje(ipDestino, puertoDestino, mensaje);
         } else {
             System.err.println(TAG + ROJO + "ERROR FATAL: No se pudo resolver IP para ID: " + targetId +
-                    ". Datos disponibles -> DTO_IP: " + peerDto.getIp() + ", EnPool: " + (peerEnMemoria!=null) + RESET);
+                    ". Datos disponibles -> DTO_IP: " + peerDto.getIp() + ", EnPool: " + (peerEnMemoria != null) + RESET);
         }
     }
 
@@ -119,7 +119,7 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
     public void broadcast(String mensaje) {
         System.out.println(TAG + "Iniciando BROADCAST a " + poolPeers.size() + " peers...");
         poolPeers.values().forEach(peer -> {
-            if(peer.getIp() != null) {
+            if (peer.getIp() != null) {
                 transporte.enviarMensaje(peer.getIp(), peer.getPuerto(), mensaje);
             }
         });
@@ -130,7 +130,13 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
         if (peerDto != null) {
             DTOPeerDetails removed = poolPeers.remove(peerDto.getId());
             if (removed != null) {
-                System.out.println(TAG + AMARILLO + "Peer desconectado y removido del pool: " + peerDto.getId() + RESET);
+                System.out.println(TAG + AMARILLO + "Desconectando peer: " + removed.getId() + RESET);
+
+                // --- ACTUALIZACIÓN CRÍTICA PARA SYNC & SPLASH ---
+                // Cortamos la conexión física en Netty
+                if (removed.getIp() != null && removed.getPuerto() > 0) {
+                    transporte.desconectar(removed.getIp(), removed.getPuerto());
+                }
             }
         }
     }
@@ -151,15 +157,12 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
 
     @Override
     public void onMensajeRecibido(String mensaje, String origen) {
-        // 'origen' es la llave ip:puerto_efimero
-        // System.out.println(TAG + "RAW recibido de " + origen + ": " + mensaje); // Debug muy verboso
-
         DTOPeerDetails peer = poolPeers.computeIfAbsent(origen, this::crearPeerDesdeOrigen);
 
         if (routerMensajes != null) {
             routerMensajes.procesarMensaje(mensaje, peer.getId());
         } else {
-            System.err.println(TAG + ROJO + "ALERTA: Mensaje recibido pero NO hay Router configurado para procesarlo." + RESET);
+            System.err.println(TAG + ROJO + "ALERTA: Mensaje recibido pero NO hay Router configurado." + RESET);
         }
     }
 
@@ -187,7 +190,7 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
 
             return new DTOPeerDetails(origen, ip, Integer.parseInt(parts[1]), "ONLINE", LocalDateTime.now().format(FORMATTER));
         } catch (Exception e) {
-            System.err.println(TAG + ROJO + "Excepción creando peer desde origen (" + origen + "): " + e.getMessage() + RESET);
+            System.err.println(TAG + ROJO + "Excepción creando peer: " + e.getMessage() + RESET);
             return new DTOPeerDetails(origen, "127.0.0.1", 0, "ERROR", "");
         }
     }

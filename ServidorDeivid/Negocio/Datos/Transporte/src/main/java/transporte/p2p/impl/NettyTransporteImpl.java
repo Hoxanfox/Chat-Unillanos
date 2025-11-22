@@ -57,9 +57,8 @@ public class NettyTransporteImpl implements ITransporteTcp {
 
     @Override
     public void conectarA(String host, int puerto) {
-        // PROTECCIÓN CONTRA NULL
         if (host == null || host.trim().isEmpty() || host.equals("null")) {
-            System.err.println(TAG + ROJO + "Error: Intento de conectar a HOST inválido (null)." + RESET);
+            System.err.println(TAG + ROJO + "Error: HOST nulo." + RESET);
             return;
         }
 
@@ -84,7 +83,6 @@ public class NettyTransporteImpl implements ITransporteTcp {
                 System.out.println(TAG + "Conectado a " + key);
                 canalesActivos.put(key, f.channel());
             } else {
-                // System.err.println(TAG + "Fallo al conectar a " + key);
                 group.shutdownGracefully();
             }
         });
@@ -92,19 +90,25 @@ public class NettyTransporteImpl implements ITransporteTcp {
 
     @Override
     public void enviarMensaje(String host, int puerto, String mensaje) {
-        if (host == null) {
-            System.err.println(TAG + "No se puede enviar mensaje: Host es NULL.");
-            return;
-        }
-
+        if (host == null) return;
         String key = host + ":" + puerto;
         Channel canal = canalesActivos.get(key);
 
         if (canal != null && canal.isActive()) {
             canal.writeAndFlush(mensaje);
         } else {
-            // System.out.println(TAG + "Reconectando para enviar a " + key);
             conectarA(host, puerto);
+        }
+    }
+
+    // --- NUEVO: Implementación de desconexión física ---
+    @Override
+    public void desconectar(String host, int puerto) {
+        String key = host + ":" + puerto;
+        Channel canal = canalesActivos.remove(key);
+        if (canal != null) {
+            System.out.println(TAG + "Cerrando conexión con " + key);
+            canal.close();
         }
     }
 
@@ -112,6 +116,7 @@ public class NettyTransporteImpl implements ITransporteTcp {
     public void detener() {
         if (workerGroup != null) workerGroup.shutdownGracefully();
         if (bossGroup != null) bossGroup.shutdownGracefully();
+        canalesActivos.values().forEach(Channel::close);
         canalesActivos.clear();
     }
 }
