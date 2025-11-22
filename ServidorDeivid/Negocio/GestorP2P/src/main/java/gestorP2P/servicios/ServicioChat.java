@@ -2,8 +2,8 @@ package gestorP2P.servicios;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import comunicacion.IRouterMensajes;
-import conexion.IGestorConexiones;
+import conexion.interfaces.IRouterMensajes;
+import conexion.interfaces.IGestorConexiones;
 import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
 import dto.p2p.DTOPeerDetails;

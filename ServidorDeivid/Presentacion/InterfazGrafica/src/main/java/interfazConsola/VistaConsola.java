@@ -1,38 +1,90 @@
 package interfazConsola;
 
-import controlador.p2p.ControladorP2P;
+import controlador.p2p.ControladorConsola;
 import java.util.Scanner;
 
+/**
+ * Interfaz de usuario (CLI) con estilo hacker/profesional y trazas de debug.
+ */
 public class VistaConsola {
 
-    private final ControladorP2P controlador;
+    // Usamos el controlador específico de consola (el intérprete)
+    private final ControladorConsola controladorConsola;
 
-    /**
-     * Constructor SIN parámetros (El que usará el Main).
-     * Se encarga de crear la instancia del Controlador automáticamente.
-     */
+    // --- CÓDIGOS DE COLOR ANSI PARA ESTILO ---
+    private static final String RESET = "\u001B[0m";
+    private static final String ROJO = "\u001B[31m";
+    private static final String VERDE = "\u001B[32m";
+    private static final String AMARILLO = "\u001B[33m";
+    private static final String AZUL = "\u001B[34m";
+    private static final String CYAN = "\u001B[36m";
+    private static final String BLANCO_BRILLANTE = "\033[1;37m";
+
     public VistaConsola() {
-        // Aquí inicializamos la dependencia hacia abajo
-        this.controlador = new ControladorP2P();
-    }
-
-    /**
-     * Constructor CON parámetros (Para pruebas o inyección manual).
-     */
-    public VistaConsola(ControladorP2P controlador) {
-        this.controlador = controlador;
+        printDebug("Instanciando VistaConsola...");
+        this.controladorConsola = new ControladorConsola();
+        printDebug("ControladorConsola conectado correctamente.");
     }
 
     public void mostrarInterfaz() {
         Scanner scanner = new Scanner(System.in);
-        System.out.println("=== SISTEMA P2P ===");
-        System.out.println("Escribe 'START' para iniciar o 'EXIT' para salir.");
+        printDebug("Scanner de entrada inicializado.");
+
+        imprimirBanner();
+        printDebug("Banner renderizado. Entrando al bucle principal (Event Loop).");
 
         while (true) {
-            System.out.print("> ");
-            String input = scanner.nextLine();
-            // Ahora es seguro usar controlador, nunca será null
-            controlador.procesarComando(input);
+            // Prompt estilo terminal Linux/Hacker
+            System.out.print(CYAN + "\n┌──(Peer" + AMARILLO + "㉿" + CYAN + "Usuario)-[RedP2P]" + RESET);
+            System.out.print(CYAN + "\n└─$ " + RESET);
+
+            String input;
+            try {
+                input = scanner.nextLine();
+            } catch (Exception e) {
+                printError("Error crítico leyendo entrada: " + e.getMessage());
+                break;
+            }
+
+            // Si es enter vacío, saltamos
+            if (input == null || input.trim().isEmpty()) {
+                continue;
+            }
+
+            printDebug("Input capturado (Raw): '" + input + "'");
+
+            long inicio = System.currentTimeMillis();
+
+            // Delegamos el procesamiento de texto al Controlador de Consola
+            controladorConsola.procesarComando(input);
+
+            long fin = System.currentTimeMillis();
+            printDebug("Comando procesado en " + (fin - inicio) + "ms");
         }
+        scanner.close();
+    }
+
+    private void imprimirBanner() {
+        System.out.println(AZUL);
+        System.out.println("██████╗ ██████╗ ██████╗     ███╗   ██╗███████╗████████╗");
+        System.out.println("██╔══██╗╚════██╗██╔══██╗    ████╗  ██║██╔════╝╚══██╔══╝");
+        System.out.println("██████╔╝ █████╔╝██████╔╝    ██╔██╗ ██║█████╗     ██║   ");
+        System.out.println("██╔═══╝  ╚═══██╗██╔═══╝     ██║╚██╗██║██╔══╝     ██║   ");
+        System.out.println("██║     ██████╔╝██║         ██║ ╚████║███████╗   ██║   ");
+        System.out.println("╚═╝     ╚═════╝ ╚═╝         ╚═╝  ╚═══╝╚══════╝   ╚═╝   ");
+        System.out.println(RESET);
+        System.out.println(BLANCO_BRILLANTE + "       >>> SISTEMA P2P DESCENTRALIZADO v2.0 <<<       " + RESET);
+        System.out.println(VERDE + "   Escribe 'HELP' para ver la lista de comandos." + RESET);
+        System.out.println("========================================================");
+    }
+
+    // Método helper para imprimir trazas de debug amarillas
+    private void printDebug(String msg) {
+        System.out.println(AMARILLO + "[DEBUG-UI] " + msg + RESET);
+    }
+
+    // Método helper para errores
+    private void printError(String msg) {
+        System.out.println(ROJO + "[ERROR-UI] " + msg + RESET);
     }
 }

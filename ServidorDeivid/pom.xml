@@ -20,10 +20,9 @@
         <module>Persistencia/Repositorio</module>
         <module>Negocio/Datos/Transporte</module>
         <module>Negocio/Datos/Conexion</module>
-        <module>Negocio/Datos/Comunicacion</module>
         <module>Negocio/GestorP2P</module>
-        <module>Negocio/Datos/Common</module>
         <module>Infraestructura/Configuracion</module>
+        <module>Negocio/Datos/Comun</module>
     </modules>
 
     <properties>
