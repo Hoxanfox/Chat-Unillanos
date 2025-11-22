@@ -1,14 +1,13 @@
 package controlador.p2p;
 
 import dto.p2p.DTOPeerDetails;
-
 import java.util.Arrays;
 import java.util.List;
 
 /**
  * Controlador específico para la interfaz de texto.
  * Su única responsabilidad es parsear Strings y llamar al ControladorP2P puro.
- * INCLUYE DEPURACIÓN VISUAL.
+ * INCLUYE DEPURACIÓN VISUAL Y SOPORTE PARA PUERTOS LÓGICOS.
  */
 public class ControladorConsola {
 
@@ -21,6 +20,7 @@ public class ControladorConsola {
     private static final String AMARILLO = "\u001B[33m";
     private static final String ROJO = "\u001B[31m";
     private static final String MAGENTA = "\u001B[35m";
+    private static final String BLANCO = "\u001B[37m";
 
     public ControladorConsola() {
         printDebug("Inicializando el intérprete de comandos (ControladorConsola)...");
@@ -28,26 +28,15 @@ public class ControladorConsola {
         printDebug("Enlace con ControladorP2P puro establecido.");
     }
 
-    /**
-     * Parsea la línea de texto y ejecuta la acción en el controlador puro.
-     */
     public void procesarComando(String lineaCompleta) {
         if (lineaCompleta == null || lineaCompleta.trim().isEmpty()) return;
-
-        // Debug del parsing
-        printDebug("Procesando línea cruda: '" + lineaCompleta + "'");
 
         String[] partes = lineaCompleta.trim().split("\\s+");
         String comando = partes[0].toUpperCase();
 
-        // Obtener argumentos si existen
         String argumentos = partes.length > 1
                 ? String.join(" ", Arrays.copyOfRange(partes, 1, partes.length))
                 : "";
-
-        if (!argumentos.isEmpty()) {
-            printDebug("Argumentos detectados: [" + argumentos + "]");
-        }
 
         try {
             switch (comando) {
@@ -55,7 +44,7 @@ public class ControladorConsola {
                 case "INICIAR":
                     printInfo("Ejecutando secuencia de inicio...");
                     controladorPuro.iniciarRed();
-                    printSuccess("Orden de inicio enviada.");
+                    printSuccess("Orden de inicio enviada (Check logs para estado).");
                     break;
 
                 case "CHAT":
@@ -68,7 +57,6 @@ public class ControladorConsola {
                     break;
 
                 case "PRIVADO":
-                    // Formato: PRIVADO <idPeer> <mensaje>
                     if (partes.length < 3) {
                         printError("Uso incorrecto. Formato: PRIVADO <id> <mensaje>");
                     } else {
@@ -81,15 +69,23 @@ public class ControladorConsola {
 
                 case "LIST":
                 case "LISTA":
-                    printInfo("Solicitando lista de peers...");
+                    // printInfo("Solicitando lista de peers...");
                     List<DTOPeerDetails> peers = controladorPuro.obtenerListaPeers();
                     System.out.println(MAGENTA + "\n--- Peers Conectados (" + peers.size() + ") ---" + RESET);
                     if (peers.isEmpty()) {
                         System.out.println(AMARILLO + " (Ninguno) " + RESET);
                     } else {
-                        peers.forEach(p -> System.out.println(
-                                VERDE + " ➤ " + RESET + p.getId() + " | " + p.getIp() + ":" + p.getPuerto()
-                        ));
+                        // AQUI MOSTRAMOS EL PUERTO SERVIDOR (EL REAL DE ESCUCHA)
+                        peers.forEach(p -> {
+                            int puertoMostrar = p.getPuertoServidor() > 0 ? p.getPuertoServidor() : p.getPuerto();
+                            String estadoColor = "ONLINE".equals(p.getEstado()) ? VERDE : ROJO;
+
+                            System.out.println(
+                                    VERDE + " ➤ " + RESET + BLANCO + p.getId() + RESET +
+                                            " | " + CYAN + p.getIp() + ":" + puertoMostrar + RESET +
+                                            " [" + estadoColor + p.getEstado() + RESET + "]"
+                            );
+                        });
                     }
                     System.out.println(MAGENTA + "--------------------------------" + RESET);
                     break;
@@ -115,14 +111,7 @@ public class ControladorConsola {
 
                 case "HELP":
                 case "AYUDA":
-                    System.out.println(CYAN + "\n┌──[AYUDA DE COMANDOS]──────────────────────────────┐" + RESET);
-                    System.out.println("│ " + VERDE + "START" + RESET + "            : Inicia el nodo y conecta.      │");
-                    System.out.println("│ " + VERDE + "CHAT <msg>" + RESET + "       : Chat global (Broadcast).       │");
-                    System.out.println("│ " + VERDE + "PRIVADO <id> <m>" + RESET + " : Chat privado.                  │");
-                    System.out.println("│ " + VERDE + "LIST" + RESET + "             : Ver lista de peers.            │");
-                    System.out.println("│ " + VERDE + "CONNECT <ip> <p>" + RESET + " : Conexión manual.               │");
-                    System.out.println("│ " + ROJO + "EXIT" + RESET + "             : Salir.                         │");
-                    System.out.println(CYAN + "└───────────────────────────────────────────────────┘" + RESET);
+                    mostrarAyuda();
                     break;
 
                 default:
@@ -130,29 +119,35 @@ public class ControladorConsola {
             }
         } catch (Exception e) {
             printError("Excepción al ejecutar comando: " + e.getMessage());
-            // e.printStackTrace(); // Descomentar si quieres ver el stacktrace completo en rojo
         }
     }
 
-    // --- MÉTODOS AUXILIARES DE PRINT CON ESTILO ---
+    private void mostrarAyuda() {
+        System.out.println(CYAN + "\n┌──[AYUDA DE COMANDOS]──────────────────────────────┐" + RESET);
+        System.out.println("│ " + VERDE + "START" + RESET + "            : Inicia el nodo y conecta.      │");
+        System.out.println("│ " + VERDE + "CHAT <msg>" + RESET + "       : Chat global (Broadcast).       │");
+        System.out.println("│ " + VERDE + "PRIVADO <id> <m>" + RESET + " : Chat privado.                  │");
+        System.out.println("│ " + VERDE + "LIST" + RESET + "             : Ver lista de peers.            │");
+        System.out.println("│ " + VERDE + "CONNECT <ip> <p>" + RESET + " : Conexión manual.               │");
+        System.out.println("│ " + ROJO + "EXIT" + RESET + "             : Salir.                         │");
+        System.out.println(CYAN + "└───────────────────────────────────────────────────┘" + RESET);
+    }
+
+    // --- MÉTODOS AUXILIARES ---
 
     private void printDebug(String msg) {
-        // Color Magenta oscurito para debug interno del controlador
         System.out.println(MAGENTA + "[DEBUG-CMD] " + msg + RESET);
     }
 
     private void printInfo(String msg) {
-        // Color Cyan para información de proceso normal
         System.out.println(CYAN + "[CMD] " + msg + RESET);
     }
 
     private void printSuccess(String msg) {
-        // Verde para éxito
         System.out.println(VERDE + "[OK] " + msg + RESET);
     }
 
     private void printError(String msg) {
-        // Rojo brillante para errores
         System.out.println(ROJO + "[ERROR] " + msg + RESET);
     }
 }

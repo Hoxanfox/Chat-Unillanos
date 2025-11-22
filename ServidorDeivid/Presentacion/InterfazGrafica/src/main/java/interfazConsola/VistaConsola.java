@@ -8,7 +8,6 @@ import java.util.Scanner;
  */
 public class VistaConsola {
 
-    // Usamos el controlador específico de consola (el intérprete)
     private final ControladorConsola controladorConsola;
 
     // --- CÓDIGOS DE COLOR ANSI PARA ESTILO ---
@@ -46,12 +45,11 @@ public class VistaConsola {
                 break;
             }
 
-            // Si es enter vacío, saltamos
             if (input == null || input.trim().isEmpty()) {
                 continue;
             }
 
-            printDebug("Input capturado (Raw): '" + input + "'");
+            // printDebug("Input capturado (Raw): '" + input + "'");
 
             long inicio = System.currentTimeMillis();
 
@@ -59,7 +57,7 @@ public class VistaConsola {
             controladorConsola.procesarComando(input);
 
             long fin = System.currentTimeMillis();
-            printDebug("Comando procesado en " + (fin - inicio) + "ms");
+            // printDebug("Comando procesado en " + (fin - inicio) + "ms");
         }
         scanner.close();
     }
@@ -78,12 +76,10 @@ public class VistaConsola {
         System.out.println("========================================================");
     }
 
-    // Método helper para imprimir trazas de debug amarillas
     private void printDebug(String msg) {
         System.out.println(AMARILLO + "[DEBUG-UI] " + msg + RESET);
     }
 
-    // Método helper para errores
     private void printError(String msg) {
         System.out.println(ROJO + "[ERROR-UI] " + msg + RESET);
     }

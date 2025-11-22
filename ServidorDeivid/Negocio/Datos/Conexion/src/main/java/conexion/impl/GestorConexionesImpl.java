@@ -61,6 +61,17 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
         transporte.conectarA(host, puerto);
     }
 
+    // --- NUEVO: Actualiza la "Cara Pública" del peer cuando recibimos Heartbeat ---
+    // Esto permite mostrar el puerto 7000 en lugar del 54321 en la lista visual
+    @Override
+    public void actualizarPuertoServidor(String connectionId, int puertoReal) {
+        DTOPeerDetails peer = poolPeers.get(connectionId);
+        if (peer != null) {
+            System.out.println(TAG + "Actualizando identidad visual: " + connectionId + " es servidor en puerto " + VERDE + puertoReal + RESET);
+            peer.setPuertoServidor(puertoReal);
+        }
+    }
+
     @Override
     public void enviarMensaje(DTOPeerDetails peerDto, String mensaje) {
         // 1. Validación de entrada
@@ -188,6 +199,7 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
             String ip = parts[0];
             if (ip.startsWith("/")) ip = ip.substring(1);
 
+            // Inicialmente el puerto servidor es el mismo que el físico hasta que el Heartbeat lo actualice
             return new DTOPeerDetails(origen, ip, Integer.parseInt(parts[1]), "ONLINE", LocalDateTime.now().format(FORMATTER));
         } catch (Exception e) {
             System.err.println(TAG + ROJO + "Excepción creando peer: " + e.getMessage() + RESET);
