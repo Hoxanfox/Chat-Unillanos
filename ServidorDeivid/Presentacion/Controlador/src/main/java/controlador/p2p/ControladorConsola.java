@@ -4,15 +4,11 @@ import dto.p2p.DTOPeerDetails;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Controlador específico para la interfaz de texto.
- * Se encarga de la lógica de visualización y parsing de comandos.
- */
 public class ControladorConsola {
 
     private final ControladorP2P controladorPuro;
 
-    // --- ESTILOS ANSI ---
+    // Colores ANSI
     private static final String RESET = "\u001B[0m";
     private static final String CYAN = "\u001B[36m";
     private static final String VERDE = "\u001B[32m";
@@ -44,12 +40,21 @@ public class ControladorConsola {
                     printSuccess("Comando de inicio enviado.");
                     break;
 
+                // NUEVO COMANDO SYNC
+                case "SYNC":
+                case "SINCRONIZAR":
+                    if (!controladorPuro.isRedIniciada()) {
+                        printError("La red no está iniciada.");
+                    } else {
+                        printInfo("Forzando sincronización de datos (Merkle Tree)...");
+                        controladorPuro.sincronizarManual();
+                        printSuccess("Solicitud de sincronización enviada a la red.");
+                    }
+                    break;
+
                 case "CHAT":
                     if (argumentos.isEmpty()) printError("Falta mensaje. Uso: CHAT <msg>");
-                    else {
-                        controladorPuro.enviarMensajeChat(argumentos);
-                        // printInfo("Mensaje enviado.");
-                    }
+                    else controladorPuro.enviarMensajeChat(argumentos);
                     break;
 
                 case "PRIVADO":
@@ -58,30 +63,24 @@ public class ControladorConsola {
                         String id = partes[1];
                         String msg = String.join(" ", Arrays.copyOfRange(partes, 2, partes.length));
                         controladorPuro.enviarMensajePrivado(id, msg);
-                        printInfo("Mensaje privado enviado a " + id);
+                        printInfo("Mensaje privado enviado.");
                     }
                     break;
 
                 case "LIST":
                 case "LISTA":
                     List<DTOPeerDetails> peers = controladorPuro.obtenerListaPeers();
-                    System.out.println(MAGENTA + "\n=== PEERS EN LA RED (" + peers.size() + ") ===" + RESET);
-
+                    System.out.println(MAGENTA + "\n=== PEERS CONOCIDOS (" + peers.size() + ") ===" + RESET);
                     if (peers.isEmpty()) {
-                        System.out.println(GRIS + " (No hay peers conocidos)" + RESET);
+                        System.out.println(GRIS + " (Base de datos vacía)" + RESET);
                     } else {
                         for (DTOPeerDetails p : peers) {
-                            // LÓGICA VISUAL: Mostrar puerto real de escucha si está disponible
                             int puertoReal = p.getPuertoServidor() > 0 ? p.getPuertoServidor() : p.getPuerto();
                             boolean isOnline = "ONLINE".equalsIgnoreCase(p.getEstado());
-                            String colorEstado = isOnline ? VERDE : ROJO;
+                            String color = isOnline ? VERDE : ROJO;
                             String icono = isOnline ? "●" : "○";
-
                             System.out.printf(" %s%s%s %s%-36s%s | %s%s:%d%s\n",
-                                    colorEstado, icono, RESET,
-                                    BLANCO, p.getId(), RESET,
-                                    CYAN, p.getIp(), puertoReal, RESET
-                            );
+                                    color, icono, RESET, BLANCO, p.getId(), RESET, CYAN, p.getIp(), puertoReal, RESET);
                         }
                     }
                     System.out.println(MAGENTA + "================================" + RESET);
@@ -96,9 +95,8 @@ public class ControladorConsola {
                     break;
 
                 case "EXIT":
-                    printInfo("Cerrando sistema...");
+                    printInfo("Cerrando...");
                     controladorPuro.detenerRed();
-                    printSuccess("Bye!");
                     System.exit(0);
                     break;
 
@@ -117,9 +115,9 @@ public class ControladorConsola {
     private void mostrarAyuda() {
         System.out.println(CYAN + "\n┌── COMANDOS ───────────────────────┐" + RESET);
         System.out.println("│ " + VERDE + "START" + RESET + "   : Iniciar red P2P.        │");
+        System.out.println("│ " + VERDE + "SYNC" + RESET + "    : Sincronizar datos BD.   │");
         System.out.println("│ " + VERDE + "CHAT" + RESET + "    : Enviar mensaje global.  │");
         System.out.println("│ " + VERDE + "LIST" + RESET + "    : Ver lista de peers.     │");
-        System.out.println("│ " + VERDE + "PRIVADO" + RESET + " : Mensaje directo.        │");
         System.out.println("│ " + ROJO + "EXIT" + RESET + "    : Salir.                  │");
         System.out.println(CYAN + "└───────────────────────────────────┘" + RESET);
     }

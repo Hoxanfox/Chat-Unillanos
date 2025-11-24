@@ -1,18 +1,19 @@
 package dominio.clienteServidor;
 
+import dominio.merkletree.IMerkleEntity;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-public class Usuario implements Serializable {
+public class Usuario implements Serializable, IMerkleEntity {
 
     private static final long serialVersionUID = 1L;
 
     private UUID id;
     private String nombre;
     private String email;
-    private String foto; // puede ser URL o ruta
+    private String foto;
     private UUID peerPadre;
     private String contrasena;
     private String ip;
@@ -40,78 +41,45 @@ public class Usuario implements Serializable {
         this.fechaCreacion = fechaCreacion == null ? Instant.now() : fechaCreacion;
     }
 
+    // --- IMPLEMENTACIÓN MERKLE ---
+    @Override
+    public String getId() {
+        return id.toString();
+    }
+
+    @Override
+    public String getDatosParaHash() {
+        // Hash basado en los datos persistentes e importantes de identidad.
+        // Excluimos 'estado' e 'ip' si cambian mucho y no quieres que disparen una sincronización masiva
+        // cada vez que alguien se desconecta. Pero si quieres sincronizar el estado, inclúyelos.
+        // Aquí asumo que sincronizamos el perfil base:
+        return id.toString() + "|" +
+                (nombre != null ? nombre : "") + "|" +
+                (email != null ? email : "") + "|" +
+                (foto != null ? foto : "") + "|" +
+                (peerPadre != null ? peerPadre.toString() : "") + "|" +
+                (contrasena != null ? contrasena : "") + "|" +
+                (fechaCreacion != null ? fechaCreacion.toString() : "");
+    }
+
     // Getters y setters
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getNombre() {
-        return nombre;
-    }
-
-    public void setNombre(String nombre) {
-        this.nombre = nombre;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getFoto() {
-        return foto;
-    }
-
-    public void setFoto(String foto) {
-        this.foto = foto;
-    }
-
-    public UUID getPeerPadre() {
-        return peerPadre;
-    }
-
-    public void setPeerPadre(UUID peerPadre) {
-        this.peerPadre = peerPadre;
-    }
-
-    public String getContrasena() {
-        return contrasena;
-    }
-
-    public void setContrasena(String contrasena) {
-        this.contrasena = contrasena;
-    }
-
-    public String getIp() {
-        return ip;
-    }
-
-    public void setIp(String ip) {
-        this.ip = ip;
-    }
-
-    public Estado getEstado() {
-        return estado;
-    }
-
-    public void setEstado(Estado estado) {
-        this.estado = estado;
-    }
-
-    public Instant getFechaCreacion() {
-        return fechaCreacion;
-    }
-
-    public void setFechaCreacion(Instant fechaCreacion) {
-        this.fechaCreacion = fechaCreacion;
-    }
+    public void setId(UUID id) { this.id = id; }
+    public String getNombre() { return nombre; }
+    public void setNombre(String nombre) { this.nombre = nombre; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getFoto() { return foto; }
+    public void setFoto(String foto) { this.foto = foto; }
+    public UUID getPeerPadre() { return peerPadre; }
+    public void setPeerPadre(UUID peerPadre) { this.peerPadre = peerPadre; }
+    public String getContrasena() { return contrasena; }
+    public void setContrasena(String contrasena) { this.contrasena = contrasena; }
+    public String getIp() { return ip; }
+    public void setIp(String ip) { this.ip = ip; }
+    public Estado getEstado() { return estado; }
+    public void setEstado(Estado estado) { this.estado = estado; }
+    public Instant getFechaCreacion() { return fechaCreacion; }
+    public void setFechaCreacion(Instant fechaCreacion) { this.fechaCreacion = fechaCreacion; }
 
     @Override
     public boolean equals(Object o) {
@@ -122,18 +90,10 @@ public class Usuario implements Serializable {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
+    public int hashCode() { return Objects.hash(id); }
 
     @Override
     public String toString() {
-        return "Usuario{" +
-                "id=" + id +
-                ", nombre='" + nombre + '\'' +
-                ", email='" + email + '\'' +
-                ", ip='" + ip + '\'' +
-                ", estado=" + estado +
-                '}';
+        return "Usuario{" + "id=" + id + ", nombre='" + nombre + '\'' + '}';
     }
 }

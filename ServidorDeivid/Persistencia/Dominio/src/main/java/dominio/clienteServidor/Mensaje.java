@@ -1,11 +1,12 @@
 package dominio.clienteServidor;
 
+import dominio.merkletree.IMerkleEntity;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-public class Mensaje implements Serializable {
+public class Mensaje implements Serializable, IMerkleEntity {
 
     private static final long serialVersionUID = 1L;
 
@@ -36,61 +37,48 @@ public class Mensaje implements Serializable {
         this.fechaEnvio = fechaEnvio == null ? Instant.now() : fechaEnvio;
     }
 
-    public UUID getId() {
-        return id;
+    // --- IMPLEMENTACIÓN MERKLE ---
+
+    @Override
+    public String getId() {
+        return id.toString();
     }
 
-    public void setId(UUID id) {
-        this.id = id;
+    @Override
+    public String getDatosParaHash() {
+        return id.toString() + "|" +
+                (remitenteId != null ? remitenteId.toString() : "") + "|" +
+                (destinatarioUsuarioId != null ? destinatarioUsuarioId.toString() : "") + "|" +
+                (canalId != null ? canalId.toString() : "") + "|" +
+                (tipo != null ? tipo.name() : "") + "|" +
+                (contenido != null ? contenido : "") + "|" +
+                (fechaEnvio != null ? fechaEnvio.toString() : "");
     }
 
-    public UUID getRemitenteId() {
-        return remitenteId;
-    }
+    // --- Getters y Setters ---
 
-    public void setRemitenteId(UUID remitenteId) {
-        this.remitenteId = remitenteId;
-    }
+    public void setId(UUID id) { this.id = id; }
 
-    public UUID getDestinatarioUsuarioId() {
-        return destinatarioUsuarioId;
-    }
+    // Helper para obtener el UUID tipado cuando sea necesario en la lógica de negocio
+    public UUID getUuid() { return id; }
 
-    public void setDestinatarioUsuarioId(UUID destinatarioUsuarioId) {
-        this.destinatarioUsuarioId = destinatarioUsuarioId;
-    }
+    public UUID getRemitenteId() { return remitenteId; }
+    public void setRemitenteId(UUID remitenteId) { this.remitenteId = remitenteId; }
 
-    public UUID getCanalId() {
-        return canalId;
-    }
+    public UUID getDestinatarioUsuarioId() { return destinatarioUsuarioId; }
+    public void setDestinatarioUsuarioId(UUID destinatarioUsuarioId) { this.destinatarioUsuarioId = destinatarioUsuarioId; }
 
-    public void setCanalId(UUID canalId) {
-        this.canalId = canalId;
-    }
+    public UUID getCanalId() { return canalId; }
+    public void setCanalId(UUID canalId) { this.canalId = canalId; }
 
-    public Tipo getTipo() {
-        return tipo;
-    }
+    public Tipo getTipo() { return tipo; }
+    public void setTipo(Tipo tipo) { this.tipo = tipo; }
 
-    public void setTipo(Tipo tipo) {
-        this.tipo = tipo;
-    }
+    public String getContenido() { return contenido; }
+    public void setContenido(String contenido) { this.contenido = contenido; }
 
-    public String getContenido() {
-        return contenido;
-    }
-
-    public void setContenido(String contenido) {
-        this.contenido = contenido;
-    }
-
-    public Instant getFechaEnvio() {
-        return fechaEnvio;
-    }
-
-    public void setFechaEnvio(Instant fechaEnvio) {
-        this.fechaEnvio = fechaEnvio;
-    }
+    public Instant getFechaEnvio() { return fechaEnvio; }
+    public void setFechaEnvio(Instant fechaEnvio) { this.fechaEnvio = fechaEnvio; }
 
     @Override
     public boolean equals(Object o) {
@@ -101,9 +89,7 @@ public class Mensaje implements Serializable {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
+    public int hashCode() { return Objects.hash(id); }
 
     @Override
     public String toString() {

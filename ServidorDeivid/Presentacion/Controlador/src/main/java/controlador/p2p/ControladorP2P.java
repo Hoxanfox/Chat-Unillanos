@@ -2,15 +2,10 @@ package controlador.p2p;
 
 import dto.p2p.DTOPeerDetails;
 import servicio.p2p.ServicioP2P;
-// CORRECCIÓN: Importar desde el paquete correcto
 import servicio.p2p.IServicioP2PControl;
 
 import java.util.List;
 
-/**
- * Controlador P2P Puro.
- * Actúa como puente entre la Vista y el Servicio.
- */
 public class ControladorP2P {
 
     private final IServicioP2PControl servicio;
@@ -23,12 +18,19 @@ public class ControladorP2P {
         this.servicio = servicio;
     }
 
+    // --- MÉTODOS DE CONTROL ---
+
     public void iniciarRed() {
         servicio.iniciarRed();
     }
 
     public void detenerRed() {
         servicio.detenerRed();
+    }
+
+    // NUEVO: Método puente para la sincronización
+    public void sincronizarManual() {
+        servicio.sincronizarManual();
     }
 
     public void enviarMensajeChat(String mensaje) {

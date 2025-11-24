@@ -4,39 +4,42 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import conexion.interfaces.IRouterMensajes;
-import conexion.interfaces.IGestorConexiones;
+import conexion.p2p.interfaces.IRouterMensajes;
+import conexion.p2p.interfaces.IGestorConexiones;
 import configuracion.Configuracion;
 import dominio.p2p.Peer;
 import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
 import dto.p2p.DTOPeerDetails;
 import gestorP2P.interfaces.IServicioP2P;
+import logger.LoggerCentral;
 import observador.IObservador;
 import observador.ISujeto;
 import repositorio.p2p.PeerRepositorio;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class ServicioGestionRed implements IServicioP2P, ISujeto {
 
-    private static final String TAG = "\u001B[36m[GestionRed] \u001B[0m";
+    private static final String TAG = "GestionRed";
+
+    // --- COLORES PARA EL CONTENIDO DEL MENSAJE ---
+    private static final String RESET = "\u001B[0m";
     private static final String AMARILLO = "\u001B[33m";
     private static final String VERDE = "\u001B[32m";
     private static final String ROJO = "\u001B[31m";
-    private static final String RESET = "\u001B[0m";
+    private static final String CYAN = "\u001B[36m";
 
     private IGestorConexiones gestorConexiones;
     private final Configuracion config;
     private final PeerRepositorio repositorio;
     private final Gson gson;
     private Timer timerMantenimiento;
-
     private final List<IObservador> observadores;
 
     public ServicioGestionRed() {
@@ -53,20 +56,96 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
     public void inicializar(IGestorConexiones gestor, IRouterMensajes router) {
         this.gestorConexiones = gestor;
 
-        // -------------------------------------------------------------------------
-        // RUTA 1: PING (Solicitud de estado)
-        // El otro peer nos pregunta "¿Estás vivo?" y nos da su info de retorno.
-        // -------------------------------------------------------------------------
+        // =========================================================================
+        // RUTA 1: AÑADIR PEER (Fase 1.a - Presentación)
+        // =========================================================================
+        router.registrarAccion("añadirPeer", (datosJson, origenId) -> {
+            // Solo respondemos OK para que el cliente sepa que puede pedir la lista
+            return new DTOResponse("añadirPeer", "success", "OK. Solicita sync.", null);
+        });
+
+        router.registrarManejadorRespuesta("añadirPeer", (response) -> {
+            if (response.fueExitoso()) {
+                LoggerCentral.info(TAG, "Admitido en la red. Solicitando sincronización...");
+                notificarObservadores("ESTADO", "Admitido. Sincronizando...");
+
+                // Enviamos petición 'sincronizar' a la semilla
+                DTORequest req = new DTORequest("sincronizar", null);
+                gestorConexiones.broadcast(gson.toJson(req));
+            }
+        });
+
+        // =========================================================================
+        // RUTA 2: SINCRONIZAR (Fase 1.b - Intercambio y Desconexión Bilateral)
+        // =========================================================================
+
+        // --- SERVIDOR (La Semilla) ---
+        router.registrarAccion("sincronizar", (datosJson, origenId) -> {
+            LoggerCentral.debug(TAG, "Petición 'sincronizar' de " + origenId);
+
+            // Guardar IP temporal del solicitante si viene
+            try {
+                if (datosJson != null && datosJson.isJsonObject()) {
+                    JsonObject obj = datosJson.getAsJsonObject();
+                    String ip = obj.get("ip").getAsString();
+                    int puerto = obj.get("puerto").getAsInt();
+                    Peer p = new Peer(); p.setIp(ip); p.setEstado(Peer.Estado.ONLINE);
+                    repositorio.guardarOActualizarPeer(p, ip + ":" + puerto);
+                }
+            } catch (Exception e) {}
+
+            // Preparar Lista
+            List<PeerRepositorio.PeerInfo> peersDb = repositorio.listarPeersInfo();
+            List<DTOPeerDetails> lista = peersDb.stream()
+                    .map(p -> new DTOPeerDetails(p.id.toString(), p.ip, p.puerto, "ONLINE", ""))
+                    .collect(Collectors.toList());
+
+            // AUTODESTRUCCIÓN (Servidor cierra socket tras responder)
+            new Thread(() -> {
+                try { Thread.sleep(500); } catch (Exception e) {}
+                LoggerCentral.warn(TAG, "Cerrando socket efímero cliente: " + origenId);
+                gestorConexiones.obtenerDetallesPeers().stream()
+                        .filter(p -> p.getId().equals(origenId))
+                        .findFirst().ifPresent(p -> gestorConexiones.desconectar(p));
+            }).start();
+
+            return new DTOResponse("sincronizar", "success", "Lista entregada.", gson.toJsonTree(lista));
+        });
+
+        // --- CLIENTE (El Nuevo) ---
+        router.registrarManejadorRespuesta("sincronizar", (response) -> {
+            if (response.fueExitoso() && response.getData() != null) {
+                LoggerCentral.info(TAG, VERDE + "Sync exitoso." + RESET + " Procesando lista...");
+                notificarObservadores("SYNC_COMPLETO", "Lista recibida");
+
+                JsonArray lista = response.getData().getAsJsonArray();
+                guardarPeersEnBD(lista);
+
+                LoggerCentral.warn(TAG, ">>> SPLASH! Cortando conexión... <<<");
+                List<DTOPeerDetails> activos = gestorConexiones.obtenerDetallesPeers();
+                for(DTOPeerDetails p : activos) gestorConexiones.desconectar(p);
+
+                // FASE 2: Iniciar Mantenimiento (Ping-Pong)
+                new Thread(() -> {
+                    try { Thread.sleep(2000); } catch (Exception e) {}
+                    LoggerCentral.info(TAG, "Iniciando Fase 2: Verificación de estado...");
+                    verificarEstadoPeers();
+                }).start();
+            }
+        });
+
+        // =========================================================================
+        // RUTA 3: PING (Solicitud de estado activo)
+        // =========================================================================
         router.registrarAccion("ping", (datosJson, origenId) -> {
             try {
                 if (datosJson == null) return null;
                 JsonObject obj = datosJson.getAsJsonObject();
 
-                // Info de quien nos hace ping (para saber cómo devolverle la llamada si hiciera falta)
                 String ipRemota = origenId.split(":")[0];
                 if(ipRemota.startsWith("/")) ipRemota = ipRemota.substring(1);
 
-                // Si el ping trae info de escucha del remitente, actualizamos nuestra BD
+                // Actualizar datos del remitente
                 if (obj.has("listenPort") && obj.has("uuid")) {
                     int portRemoto = obj.get("listenPort").getAsInt();
                     String uuidRemoto = obj.get("uuid").getAsString();
@@ -77,11 +156,13 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
                     p.setEstado(Peer.Estado.ONLINE);
                     repositorio.guardarOActualizarPeer(p, ipRemota + ":" + portRemoto);
 
-                    // Actualizamos visualmente el puerto
+                    // Actualizar puerto visual en memoria
                     gestorConexiones.actualizarPuertoServidor(origenId, portRemoto);
+
+                    LoggerCentral.info(TAG, "PING recibido de " + AMARILLO + uuidRemoto + RESET + " @ " + ipRemota + ":" + portRemoto);
                 }
 
-                // PREPARAR RESPUESTA (PONG)
+                // RESPONDER PONG con mis datos
                 String miIp = config.getPeerHost();
                 int miPuerto = config.getPeerPuerto();
                 Peer yo = repositorio.obtenerPorSocketInfo(miIp + ":" + miPuerto);
@@ -92,7 +173,6 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
                 pongData.addProperty("listenPort", miPuerto);
                 pongData.addProperty("mensaje", "pong");
 
-                // System.out.println(TAG + "Respondiendo PONG a " + origenId);
                 return new DTOResponse("ping", "success", "PONG", pongData);
 
             } catch (Exception e) {
@@ -100,93 +180,24 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
             }
         });
 
-        // -------------------------------------------------------------------------
-        // RUTA 2: PONG (Respuesta recibida)
-        // El peer nos respondió "Sí, estoy vivo".
-        // -------------------------------------------------------------------------
+        // =========================================================================
+        // RUTA 4: PONG (Respuesta al Ping)
+        // =========================================================================
         router.registrarManejadorRespuesta("ping", (response) -> {
             if (response.fueExitoso() && response.getData() != null) {
                 try {
                     JsonObject data = response.getData().getAsJsonObject();
                     String uuid = data.get("uuid").getAsString();
-                    int puertoListen = data.get("listenPort").getAsInt();
+                    // int puertoListen = data.get("listenPort").getAsInt();
 
-                    // No tenemos la IP en el body de respuesta usualmente, pero podemos inferirla
-                    // del contexto si tuviéramos acceso al origenId aquí.
-                    // Como limitante del router actual, asumimos que actualizamos basado en lo que sabemos.
-                    // OJO: Para ser precisos, necesitamos la IP.
-                    // Truco: El router procesa mensajes de una conexión.
-                    // Si no tenemos la IP aquí, solo podemos actualizar por UUID si ya existe,
-                    // o confiar en que la IP no cambió.
+                    LoggerCentral.info(TAG, VERDE + "¡PONG! Peer " + uuid + " está ONLINE." + RESET);
+                    notificarObservadores("PEER_ONLINE", uuid);
 
-                    // Asumiremos actualización de estado "VIVO"
-                    System.out.println(TAG + VERDE + "¡PONG Recibido! Peer " + uuid + " está ONLINE." + RESET);
-
-                    // Notificar UI
-                    notificarObservadores("PEER_ONLINE", "UUID: " + uuid);
-
-                    // Actualizar en BD a ONLINE (Búsqueda por UUID sería ideal, pero usamos socketInfo conocido)
-                    // Como no tenemos la IP aquí fácil (limitación de interfaz), notificamos que "alguien" respondió.
-
-                    // MEJORA: Si podemos, actualizamos el peer en la BD
-                    // (Requiere buscar por UUID en la BD)
-                    // repositorio.marcarComoOnline(UUID.fromString(uuid));
-
+                    // Aquí podríamos actualizar BD a ONLINE si tuviéramos la IP segura,
+                    // pero la lógica de 'verificarEstadoPeers' ya asume éxito si no falló la conexión.
                 } catch (Exception e) {
-                    System.err.println(TAG + ROJO + "Error procesando PONG: " + e.getMessage() + RESET);
+                    LoggerCentral.error(TAG, "Error procesando PONG: " + e.getMessage());
                 }
-            }
-        });
-
-        // --- RUTAS DE INICIO (Añadir/Sync) SE MANTIENEN IGUAL ---
-        router.registrarAccion("añadirPeer", (datosJson, origenId) -> {
-            return new DTOResponse("añadirPeer", "success", "OK", null);
-        });
-
-        router.registrarManejadorRespuesta("añadirPeer", (response) -> {
-            if (response.fueExitoso()) {
-                DTORequest req = new DTORequest("sincronizar", null);
-                gestorConexiones.broadcast(gson.toJson(req));
-            }
-        });
-
-        router.registrarAccion("sincronizar", (datosJson, origenId) -> {
-            try {
-                if(datosJson!=null && datosJson.isJsonObject()){
-                    JsonObject o = datosJson.getAsJsonObject();
-                    repositorio.guardarOActualizarPeer(new Peer(null, o.get("ip").getAsString(), null, Peer.Estado.ONLINE, null),
-                            o.get("ip").getAsString() + ":" + o.get("puerto").getAsInt());
-                }
-            } catch(Exception e){}
-
-            List<DTOPeerDetails> lista = repositorio.listarPeersInfo().stream()
-                    .map(p -> new DTOPeerDetails(p.id.toString(), p.ip, p.puerto, "ONLINE", ""))
-                    .collect(Collectors.toList());
-
-            // Auto-disconnect server side
-            new Thread(() -> {
-                try { Thread.sleep(500); } catch(Exception e){}
-                gestorConexiones.obtenerDetallesPeers().stream()
-                        .filter(p -> p.getId().equals(origenId))
-                        .findFirst().ifPresent(p -> gestorConexiones.desconectar(p));
-            }).start();
-
-            return new DTOResponse("sincronizar", "success", "Lista", gson.toJsonTree(lista));
-        });
-
-        router.registrarManejadorRespuesta("sincronizar", (response) -> {
-            if (response.fueExitoso() && response.getData() != null) {
-                JsonArray lista = response.getData().getAsJsonArray();
-                guardarPeersEnBD(lista);
-
-                // Desconectar todo para iniciar limpio
-                gestorConexiones.obtenerDetallesPeers().forEach(p -> gestorConexiones.desconectar(p));
-
-                // Iniciar mantenimiento
-                new Thread(() -> {
-                    try { Thread.sleep(2000); } catch (Exception e) {}
-                    verificarEstadoPeers(); // Primer chequeo
-                }).start();
             }
         });
     }
@@ -206,7 +217,7 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
                 Peer peer = new Peer();
                 peer.setId(UUID.fromString(idStr));
                 peer.setIp(ip);
-                // Al recibir la lista, no sabemos si están online AHORA, asumimos offline hasta el ping
+                // Asumimos offline hasta verificar con Ping
                 peer.setEstado(Peer.Estado.OFFLINE);
                 if(repositorio.guardarOActualizarPeer(peer, ip + ":" + puerto)) nuevos++;
             } catch (Exception e) {}
@@ -215,16 +226,12 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
     }
 
     /**
-     * Tarea: Verificar quién está vivo.
-     * 1. Marcar todos como sospechosos (o usar timeout).
-     * 2. Enviar Ping.
-     * 3. Si responden (PONG), se marcan ONLINE en el handler.
+     * Tarea Mantenimiento: Verificar quién está vivo mediante Ping-Pong.
      */
     private void verificarEstadoPeers() {
         String miIp = config.getPeerHost();
         int miPuerto = config.getPeerPuerto();
 
-        // Datos propios para el Ping
         Peer yo = repositorio.obtenerPorSocketInfo(miIp + ":" + miPuerto);
         if (yo == null) return;
 
@@ -235,36 +242,38 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
         String jsonPing = gson.toJson(reqPing);
 
         List<PeerRepositorio.PeerInfo> conocidos = repositorio.listarPeersInfo();
-
-        System.out.println(TAG + "Ejecutando ronda de PING a " + conocidos.size() + " candidatos...");
+        LoggerCentral.debug(TAG, "Ejecutando ronda de PING a " + conocidos.size() + " peers conocidos.");
 
         for (PeerRepositorio.PeerInfo destino : conocidos) {
             if (destino.ip.equals(miIp) && destino.puerto == miPuerto) continue;
 
-            // Intentamos conectar y pingear
-            // Si falla la conexión, nunca recibiremos el Pong, y se quedará en su estado actual (o podemos marcar offline aqui)
-
+            // Conectamos proactivamente
             gestorConexiones.conectarAPeer(destino.ip, destino.puerto);
 
             new Thread(() -> {
                 try {
-                    Thread.sleep(1500); // Esperar conexión
+                    Thread.sleep(1500); // Esperar handshake TCP
                     String targetId = destino.ip + ":" + destino.puerto;
 
-                    // Buscar si logramos conectar
                     DTOPeerDetails conexionActiva = gestorConexiones.obtenerDetallesPeers().stream()
                             .filter(p -> p.getId().equals(targetId))
                             .findFirst().orElse(null);
 
                     if (conexionActiva != null) {
-                        System.out.println(TAG + "Enviando PING a " + targetId);
+                        // Conexión OK -> Enviar Ping
+                        // LoggerCentral.debug(TAG, "Enviando PING a " + targetId);
                         gestorConexiones.enviarMensaje(conexionActiva, jsonPing);
 
-                        // Opcional: Si queremos ser estrictos, marcamos OFFLINE aquí y esperamos que el PONG lo pase a ONLINE
-                        // Pero puede causar parpadeo en la UI.
+                        // Actualizar BD a ONLINE (provisional, el Pong confirma la lógica)
+                        Peer pOnline = new Peer();
+                        pOnline.setId(destino.id);
+                        pOnline.setIp(destino.ip);
+                        pOnline.setEstado(Peer.Estado.ONLINE);
+                        repositorio.guardarOActualizarPeer(pOnline, targetId);
+
                     } else {
-                        // No pudimos conectar -> Definitivamente OFFLINE
-                        System.out.println(TAG + ROJO + "Fallo conexión con " + targetId + " -> OFFLINE" + RESET);
+                        // Conexión Fallida -> Marcar OFFLINE
+                        LoggerCentral.warn(TAG, "Fallo conexión con " + targetId + " -> " + ROJO + "OFFLINE" + RESET);
                         Peer pOffline = new Peer();
                         pOffline.setId(destino.id);
                         pOffline.setIp(destino.ip);
@@ -279,7 +288,7 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
 
     @Override
     public void iniciar() {
-        System.out.println(TAG + "Iniciando...");
+        LoggerCentral.info(TAG, "Iniciando...");
         String miIp = config.getPeerHost();
         int miPuerto = config.getPeerPuerto();
         String miSocketInfo = miIp + ":" + miPuerto;
@@ -296,16 +305,19 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
         int seedPort = config.getPeerInicialPuerto();
 
         if (seedHost != null && seedPort > 0) {
+            LoggerCentral.info(TAG, "Fase 1: Sync con Semilla " + AMARILLO + seedHost + ":" + seedPort + RESET);
             solicitarSync(seedHost, seedPort, miIp, miPuerto);
+        } else {
+            LoggerCentral.info(TAG, "Modo Génesis.");
         }
 
-        // Tarea periódica de verificación
+        // Activar tarea repetitiva
         if (timerMantenimiento == null) {
             timerMantenimiento = new Timer();
             timerMantenimiento.scheduleAtFixedRate(new TimerTask() {
                 @Override
                 public void run() { verificarEstadoPeers(); }
-            }, 30000, 30000); // Cada 30s
+            }, 30000, 30000); // Cada 30 segundos
         }
     }
 

@@ -1,12 +1,12 @@
 package gestorP2P;
 
 // Implementaciones del módulo Conexion
-import conexion.impl.GestorConexionesImpl;
-import conexion.impl.RouterMensajesImpl;
+import conexion.p2p.impl.GestorConexionesImpl;
+import conexion.p2p.impl.RouterMensajesImpl;
 
 // Interfaces del módulo Conexion
-import conexion.interfaces.IGestorConexiones;
-import conexion.interfaces.IRouterMensajes;
+import conexion.p2p.interfaces.IGestorConexiones;
+import conexion.p2p.interfaces.IRouterMensajes;
 
 import dto.p2p.DTOPeerDetails;
 import gestorP2P.interfaces.IServicioP2P;

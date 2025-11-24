@@ -22,6 +22,7 @@
         <module>Negocio/Datos/Conexion</module>
         <module>Negocio/GestorP2P</module>
         <module>Infraestructura/Configuracion</module>
+        <module>Negocio/GestorClientes</module>
     </modules>
 
     <properties>
