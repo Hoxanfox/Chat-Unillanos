@@ -7,6 +7,8 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.DelimiterBasedFrameDecoder;
+import io.netty.handler.codec.Delimiters;
 import io.netty.handler.codec.string.StringDecoder;
 import io.netty.handler.codec.string.StringEncoder;
 import transporte.p2p.interfaces.IMensajeListener;
@@ -20,6 +22,9 @@ public class NettyTransporteImpl implements ITransporteTcp {
     private static final String TAG = "\u001B[34m[Netty-Core] \u001B[0m";
     private static final String ROJO = "\u001B[31m";
     private static final String RESET = "\u001B[0m";
+
+    // Tamaño máximo de un mensaje JSON (ej. 128KB). Aumentar si la BD crece mucho.
+    private static final int MAX_FRAME_SIZE = 131072;
 
     private IMensajeListener listener;
     private EventLoopGroup bossGroup;
@@ -45,6 +50,11 @@ public class NettyTransporteImpl implements ITransporteTcp {
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     public void initChannel(SocketChannel ch) {
+                        // 1. DECODIFICADOR DE FRAMES (CRÍTICO PARA JSON)
+                        // Corta el flujo cuando encuentra un \n o \r\n
+                        ch.pipeline().addLast(new DelimiterBasedFrameDecoder(MAX_FRAME_SIZE, Delimiters.lineDelimiter()));
+
+                        // 2. Decodificador de String normal
                         ch.pipeline().addLast(new StringDecoder());
                         ch.pipeline().addLast(new StringEncoder());
                         ch.pipeline().addLast(new P2PInboundHandler(listener, canalesActivos));
@@ -57,9 +67,8 @@ public class NettyTransporteImpl implements ITransporteTcp {
 
     @Override
     public void conectarA(String host, int puerto) {
-        // VALIDACIÓN ROBUSTA: Evita loops de conexión a "null"
         if (host == null || host.trim().isEmpty() || host.equalsIgnoreCase("null")) {
-            System.err.println(TAG + ROJO + "Error: Intento de conectar a HOST inválido (" + host + ")." + RESET);
+            System.err.println(TAG + ROJO + "Error: Intento de conectar a HOST inválido." + RESET);
             return;
         }
 
@@ -73,6 +82,8 @@ public class NettyTransporteImpl implements ITransporteTcp {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     public void initChannel(SocketChannel ch) {
+                        // MISMA CONFIGURACIÓN EN EL CLIENTE
+                        ch.pipeline().addLast(new DelimiterBasedFrameDecoder(MAX_FRAME_SIZE, Delimiters.lineDelimiter()));
                         ch.pipeline().addLast(new StringDecoder());
                         ch.pipeline().addLast(new StringEncoder());
                         ch.pipeline().addLast(new P2PInboundHandler(listener, canalesActivos));
@@ -84,7 +95,6 @@ public class NettyTransporteImpl implements ITransporteTcp {
                 System.out.println(TAG + "Conectado a " + key);
                 canalesActivos.put(key, f.channel());
             } else {
-                // Fallo silencioso o log ligero para no saturar
                 group.shutdownGracefully();
             }
         });
@@ -92,18 +102,17 @@ public class NettyTransporteImpl implements ITransporteTcp {
 
     @Override
     public void enviarMensaje(String host, int puerto, String mensaje) {
-        if (host == null || host.equals("null")) {
-            System.err.println(TAG + "No se puede enviar mensaje: Host es NULL.");
-            return;
-        }
+        if (host == null) return;
 
         String key = host + ":" + puerto;
         Channel canal = canalesActivos.get(key);
 
         if (canal != null && canal.isActive()) {
-            canal.writeAndFlush(mensaje);
+            // IMPORTANTÍSIMO: Agregar salto de línea al final para que el receptor sepa dónde termina el JSON.
+            // Si el mensaje ya tiene \n, Netty lo manejará bien, pero aseguramos el delimitador.
+            String mensajeConDelimitador = mensaje + "\r\n";
+            canal.writeAndFlush(mensajeConDelimitador);
         } else {
-            // Si no hay canal, intentamos abrir uno nuevo
             conectarA(host, puerto);
         }
     }
@@ -113,7 +122,7 @@ public class NettyTransporteImpl implements ITransporteTcp {
         String key = host + ":" + puerto;
         Channel canal = canalesActivos.remove(key);
         if (canal != null) {
-            System.out.println(TAG + "Cerrando conexión con " + key);
+            // System.out.println(TAG + "Cerrando conexión con " + key);
             canal.close();
         }
     }
