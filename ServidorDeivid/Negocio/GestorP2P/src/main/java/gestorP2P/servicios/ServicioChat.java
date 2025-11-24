@@ -108,11 +108,16 @@ public class ServicioChat implements IServicioP2P {
             return;
         }
 
+        // Crear el mensaje con ID único PRIMERO
         Mensaje m = new Mensaje();
+        m.setId(UUID.randomUUID()); // Generar ID antes de todo
         m.setContenido(texto);
         m.setFechaEnvio(Instant.now());
 
+        // Guardar en BD local
         boolean guardado = repositorio.guardar(m);
+
+        LoggerCentral.debug(TAG, "Mensaje guardado localmente: " + guardado + " | ID: " + m.getId());
 
         // Notificar cambio local
         if (guardado && notificador != null) {
@@ -122,32 +127,46 @@ public class ServicioChat implements IServicioP2P {
             );
         }
 
+        // Preparar JSON con todos los datos necesarios
         JsonObject msg = new JsonObject();
         msg.addProperty("id", m.getId().toString());
-        msg.addProperty("usuario", miNombreUsuario);
-        msg.addProperty("texto", texto);
+        msg.addProperty("usuario", miNombreUsuario != null ? miNombreUsuario : "Anónimo");
+        msg.addProperty("texto", texto != null ? texto : "");
 
         DTORequest req = new DTORequest("mensajeChat", msg);
-        gestorConexiones.broadcast(gson.toJson(req));
+        String jsonMensaje = gson.toJson(req);
+
+        LoggerCentral.info(TAG, CYAN + "Enviando mensaje público: " + RESET + texto);
+        LoggerCentral.debug(TAG, "JSON enviado: " + jsonMensaje);
+
+        gestorConexiones.broadcast(jsonMensaje);
     }
 
     public void enviarMensajePrivado(String peerId, String miNombreUsuario, String texto) {
-        if (gestorConexiones == null) return;
+        if (gestorConexiones == null) {
+            LoggerCentral.error(TAG, "No hay conexión de red.");
+            return;
+        }
 
+        // Crear mensaje con ID único
         Mensaje m = new Mensaje();
+        m.setId(UUID.randomUUID());
         m.setContenido(texto);
         m.setFechaEnvio(Instant.now());
 
         boolean guardado = repositorio.guardar(m);
 
+        LoggerCentral.debug(TAG, "Mensaje privado guardado: " + guardado + " | ID: " + m.getId());
+
         if (guardado && notificador != null) {
             notificador.notificarCambio(ServicioNotificacionCambios.TipoEvento.NUEVO_MENSAJE, m);
         }
 
+        // Preparar JSON
         JsonObject msg = new JsonObject();
         msg.addProperty("id", m.getId().toString());
-        msg.addProperty("usuario", miNombreUsuario);
-        msg.addProperty("texto", texto);
+        msg.addProperty("usuario", miNombreUsuario != null ? miNombreUsuario : "Anónimo");
+        msg.addProperty("texto", texto != null ? texto : "");
 
         DTORequest req = new DTORequest("mensajeChat", msg);
 
@@ -156,7 +175,7 @@ public class ServicioChat implements IServicioP2P {
 
         if (destino != null) {
             gestorConexiones.enviarMensaje(destino, gson.toJson(req));
-            LoggerCentral.info(TAG, "Enviado privado a " + peerId);
+            LoggerCentral.info(TAG, CYAN + "Enviado privado a " + peerId + ": " + RESET + texto);
         } else {
             LoggerCentral.error(TAG, "Peer destino no encontrado: " + peerId);
         }

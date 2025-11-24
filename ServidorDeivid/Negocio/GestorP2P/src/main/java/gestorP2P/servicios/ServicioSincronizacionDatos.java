@@ -72,49 +72,80 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
     public String getNombre() { return "ServicioSincronizacionDatos"; }
 
     public void forzarSincronizacion() {
-        if (gestor == null) return;
+        if (gestor == null) {
+            LoggerCentral.error(TAG, ROJO + "No se puede forzar sincronización: gestor es null" + RESET);
+            return;
+        }
         LoggerCentral.warn(TAG, "Forzando sincronización manual...");
         huboCambiosEnEsteCiclo = false; // Reset flag
         iniciarSincronizacionGeneral();
     }
 
     public void onBaseDeDatosCambio() {
+        LoggerCentral.info(TAG, AZUL + "Base de datos cambió. Reconstruyendo árboles Merkle..." + RESET);
         new Thread(this::reconstruirTodosLosArboles).start();
     }
 
     private void reconstruirTodosLosArboles() {
+        LoggerCentral.debug(TAG, "Iniciando reconstrucción de todos los árboles Merkle...");
+
         bosqueMerkle.put("USUARIO", new MerkleTree(repoUsuario.obtenerTodosParaSync()));
+        String hashUsuario = bosqueMerkle.get("USUARIO").getRootHash();
+        LoggerCentral.debug(TAG, "- Árbol USUARIO reconstruido. Hash: " +
+            hashUsuario.substring(0, Math.min(8, hashUsuario.length())));
+
         bosqueMerkle.put("CANAL", new MerkleTree(repoCanal.obtenerTodosParaSync()));
+        String hashCanal = bosqueMerkle.get("CANAL").getRootHash();
+        LoggerCentral.debug(TAG, "- Árbol CANAL reconstruido. Hash: " +
+            hashCanal.substring(0, Math.min(8, hashCanal.length())));
+
         bosqueMerkle.put("MIEMBRO", new MerkleTree(repoMiembro.obtenerTodosParaSync()));
+        String hashMiembro = bosqueMerkle.get("MIEMBRO").getRootHash();
+        LoggerCentral.debug(TAG, "- Árbol MIEMBRO reconstruido. Hash: " +
+            hashMiembro.substring(0, Math.min(8, hashMiembro.length())));
+
         bosqueMerkle.put("MENSAJE", new MerkleTree(repoMensaje.obtenerTodosParaSync()));
+        String hashMensaje = bosqueMerkle.get("MENSAJE").getRootHash();
+        LoggerCentral.debug(TAG, "- Árbol MENSAJE reconstruido. Hash: " +
+            hashMensaje.substring(0, Math.min(8, hashMensaje.length())));
+
+        LoggerCentral.info(TAG, VERDE + "Todos los árboles Merkle reconstruidos exitosamente" + RESET);
     }
 
     @Override
     public void inicializar(IGestorConexiones gestor, IRouterMensajes router) {
+        LoggerCentral.info(TAG, AZUL + "Inicializando ServicioSincronizacionDatos..." + RESET);
         this.gestor = gestor;
 
         // 1. CHECK MULTIPLE
         router.registrarAccion("sync_check_all", (datos, origen) -> {
+            LoggerCentral.debug(TAG, "Recibido sync_check_all desde: " + origen);
             reconstruirTodosLosArboles();
             JsonObject hashes = new JsonObject();
             for(String tipo : ORDEN_SYNC) {
                 hashes.addProperty(tipo, bosqueMerkle.get(tipo).getRootHash());
             }
+            LoggerCentral.debug(TAG, "Enviando hashes locales a: " + origen);
             return new DTOResponse("sync_check_all", "success", "Hashes Locales", hashes);
         });
 
         router.registrarManejadorRespuesta("sync_check_all", (resp) -> {
             if(resp.fueExitoso() && resp.getData() != null) {
+                LoggerCentral.info(TAG, "Respuesta sync_check_all recibida. Procesando diferencias...");
                 procesarDiferenciasEnOrden(resp.getData().getAsJsonObject());
+            } else {
+                LoggerCentral.warn(TAG, AMARILLO + "Respuesta sync_check_all no exitosa o sin datos" + RESET);
             }
         });
 
         // 2. GET IDs
         router.registrarAccion("sync_get_ids", (datos, origen) -> {
             String tipo = datos.getAsString();
+            LoggerCentral.debug(TAG, "Recibido sync_get_ids para tipo: " + CYAN + tipo + RESET + " desde: " + origen);
             List<? extends IMerkleEntity> lista = obtenerListaPorTipo(tipo);
             JsonArray ids = new JsonArray();
             lista.forEach(e -> ids.add(e.getId()));
+            LoggerCentral.debug(TAG, "Enviando " + ids.size() + " IDs de tipo " + tipo);
             JsonObject result = new JsonObject();
             result.addProperty("tipo", tipo);
             result.add("ids", ids);
@@ -124,7 +155,12 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         router.registrarManejadorRespuesta("sync_get_ids", (resp) -> {
             if(resp.fueExitoso()) {
                 JsonObject res = resp.getData().getAsJsonObject();
-                solicitarEntidadesFaltantes(res.get("tipo").getAsString(), res.get("ids").getAsJsonArray());
+                String tipo = res.get("tipo").getAsString();
+                int cantidadIds = res.get("ids").getAsJsonArray().size();
+                LoggerCentral.info(TAG, "Recibidos " + cantidadIds + " IDs de tipo " + CYAN + tipo + RESET);
+                solicitarEntidadesFaltantes(tipo, res.get("ids").getAsJsonArray());
+            } else {
+                LoggerCentral.error(TAG, ROJO + "Error en respuesta sync_get_ids" + RESET);
             }
         });
 
@@ -132,30 +168,45 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         router.registrarAccion("sync_get_entity", (datos, origen) -> {
             JsonObject req = datos.getAsJsonObject();
             String tipo = req.get("tipo").getAsString();
-            IMerkleEntity entidad = buscarEntidad(tipo, req.get("id").getAsString());
+            String id = req.get("id").getAsString();
+            LoggerCentral.debug(TAG, "Recibido sync_get_entity: " + CYAN + tipo + RESET + " ID: " + id);
+            IMerkleEntity entidad = buscarEntidad(tipo, id);
             if (entidad != null) {
+                LoggerCentral.debug(TAG, "Entidad encontrada. Enviando " + tipo + " ID: " + id);
                 JsonObject env = new JsonObject();
                 env.addProperty("tipo", tipo);
                 env.add("data", gson.toJsonTree(entidad));
                 return new DTOResponse("sync_get_entity", "success", "Found", env);
             }
+            LoggerCentral.warn(TAG, AMARILLO + "Entidad NO encontrada: " + tipo + " ID: " + id + RESET);
             return new DTOResponse("sync_get_entity", "error", "Not found", null);
         });
 
         router.registrarManejadorRespuesta("sync_get_entity", (resp) -> {
             if(resp.fueExitoso()) {
                 JsonObject env = resp.getData().getAsJsonObject();
-                guardarEntidadGenerica(env.get("tipo").getAsString(), env.get("data"));
+                String tipo = env.get("tipo").getAsString();
+                LoggerCentral.info(TAG, VERDE + "Entidad recibida para guardar: " + tipo + RESET);
+                guardarEntidadGenerica(tipo, env.get("data"));
                 // Marcamos que hubo cambios, pero NO notificamos aún
                 huboCambiosEnEsteCiclo = true;
                 iniciarSincronizacionGeneral(); // Siguiente ciclo de verificación
+            } else {
+                LoggerCentral.error(TAG, ROJO + "Error en respuesta sync_get_entity: " + resp.getStatus() + RESET);
             }
         });
+
+        LoggerCentral.info(TAG, VERDE + "ServicioSincronizacionDatos inicializado correctamente" + RESET);
     }
 
     private void procesarDiferenciasEnOrden(JsonObject hashesRemotos) {
+        LoggerCentral.info(TAG, AZUL + "=== Procesando diferencias en orden ===" + RESET);
+
         for (String tipo : ORDEN_SYNC) {
-            if (!hashesRemotos.has(tipo)) continue;
+            if (!hashesRemotos.has(tipo)) {
+                LoggerCentral.warn(TAG, AMARILLO + "Tipo " + tipo + " no presente en hashes remotos" + RESET);
+                continue;
+            }
 
             String hashRemoto = hashesRemotos.get(tipo).getAsString();
             String hashLocal = bosqueMerkle.get(tipo).getRootHash();
@@ -167,7 +218,11 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
 
                 DTORequest req = new DTORequest("sync_get_ids", gson.toJsonTree(tipo));
                 gestor.broadcast(gson.toJson(req));
+                LoggerCentral.info(TAG, "Solicitando IDs para tipo: " + CYAN + tipo + RESET);
                 return; // Detener aquí y reparar este nivel
+            } else {
+                String hCorto = hashLocal.length() > 8 ? hashLocal.substring(0, 8) : hashLocal;
+                LoggerCentral.debug(TAG, VERDE + "✓ " + tipo + " sincronizado (Hash: " + hCorto + ")" + RESET);
             }
         }
 
@@ -176,18 +231,24 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
 
         // Aquí enviamos el PUSH solo si realmente trajimos datos nuevos
         if (huboCambiosEnEsteCiclo && notificador != null) {
-            LoggerCentral.info(TAG, "Notificando actualización masiva a clientes CS...");
+            LoggerCentral.info(TAG, AZUL + "Notificando actualización masiva a clientes CS..." + RESET);
             notificador.notificarCambio(
                     ServicioNotificacionCambios.TipoEvento.ACTUALIZACION_ESTADO,
                     null
             );
             huboCambiosEnEsteCiclo = false; // Reset para el futuro
+            LoggerCentral.info(TAG, VERDE + "Notificación de cambios enviada exitosamente" + RESET);
+        } else if (huboCambiosEnEsteCiclo && notificador == null) {
+            LoggerCentral.warn(TAG, AMARILLO + "Hubo cambios pero el notificador es null" + RESET);
         }
     }
 
     private void solicitarEntidadesFaltantes(String tipo, JsonArray idsRemotos) {
+        LoggerCentral.info(TAG, "Verificando entidades faltantes para tipo: " + CYAN + tipo + RESET);
         List<? extends IMerkleEntity> locales = obtenerListaPorTipo(tipo);
         List<String> misIds = locales.stream().map(IMerkleEntity::getId).collect(Collectors.toList());
+
+        LoggerCentral.debug(TAG, "IDs locales: " + misIds.size() + ", IDs remotos: " + idsRemotos.size());
 
         int faltantes = 0;
         for(JsonElement el : idsRemotos) {
@@ -202,69 +263,130 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
                 gestor.broadcast(gson.toJson(req));
             }
         }
+
         if (faltantes == 0) {
-            LoggerCentral.info(TAG, "Tenemos todos los IDs de " + tipo + ". (Diferencia de contenido).");
+            LoggerCentral.info(TAG, AMARILLO + "Tenemos todos los IDs de " + tipo + ". (Diferencia de contenido)." + RESET);
+        } else {
+            LoggerCentral.info(TAG, VERDE + "Solicitadas " + faltantes + " entidades faltantes de tipo " + tipo + RESET);
         }
     }
 
     // --- Helpers y Guardado ---
 
     private List<? extends IMerkleEntity> obtenerListaPorTipo(String tipo) {
+        LoggerCentral.debug(TAG, "Obteniendo lista para tipo: " + tipo);
+        List<? extends IMerkleEntity> lista;
         switch (tipo) {
-            case "USUARIO": return repoUsuario.obtenerTodosParaSync();
-            case "CANAL": return repoCanal.obtenerTodosParaSync();
-            case "MIEMBRO": return repoMiembro.obtenerTodosParaSync();
-            case "MENSAJE": return repoMensaje.obtenerTodosParaSync();
-            default: return List.of();
+            case "USUARIO": lista = repoUsuario.obtenerTodosParaSync(); break;
+            case "CANAL": lista = repoCanal.obtenerTodosParaSync(); break;
+            case "MIEMBRO": lista = repoMiembro.obtenerTodosParaSync(); break;
+            case "MENSAJE": lista = repoMensaje.obtenerTodosParaSync(); break;
+            default:
+                LoggerCentral.error(TAG, ROJO + "Tipo desconocido: " + tipo + RESET);
+                lista = List.of();
         }
+        LoggerCentral.debug(TAG, "Lista obtenida para " + tipo + ": " + lista.size() + " elementos");
+        return lista;
     }
 
     private IMerkleEntity buscarEntidad(String tipo, String id) {
-        return obtenerListaPorTipo(tipo).stream().filter(e -> e.getId().equals(id)).findFirst().orElse(null);
+        LoggerCentral.debug(TAG, "Buscando entidad " + tipo + " con ID: " + id);
+        IMerkleEntity resultado = obtenerListaPorTipo(tipo).stream()
+            .filter(e -> e.getId().equals(id))
+            .findFirst()
+            .orElse(null);
+
+        if (resultado != null) {
+            LoggerCentral.debug(TAG, VERDE + "Entidad encontrada: " + tipo + " ID: " + id + RESET);
+        } else {
+            LoggerCentral.debug(TAG, AMARILLO + "Entidad no encontrada: " + tipo + " ID: " + id + RESET);
+        }
+
+        return resultado;
     }
 
     private void guardarEntidadGenerica(String tipo, JsonElement data) {
+        LoggerCentral.debug(TAG, "Intentando guardar entidad de tipo: " + CYAN + tipo + RESET);
         try {
             boolean guardado = false;
             switch (tipo) {
-                case "USUARIO": guardado = repoUsuario.guardar(gson.fromJson(data, Usuario.class)); break;
-                case "CANAL": guardado = repoCanal.guardar(gson.fromJson(data, Canal.class)); break;
-                case "MIEMBRO": guardado = repoMiembro.guardar(gson.fromJson(data, CanalMiembro.class)); break;
-                case "MENSAJE": guardado = repoMensaje.guardar(gson.fromJson(data, Mensaje.class)); break;
+                case "USUARIO":
+                    Usuario usuario = gson.fromJson(data, Usuario.class);
+                    LoggerCentral.debug(TAG, "Guardando Usuario: " + usuario.getId());
+                    guardado = repoUsuario.guardar(usuario);
+                    break;
+                case "CANAL":
+                    Canal canal = gson.fromJson(data, Canal.class);
+                    LoggerCentral.debug(TAG, "Guardando Canal: " + canal.getId());
+                    guardado = repoCanal.guardar(canal);
+                    break;
+                case "MIEMBRO":
+                    CanalMiembro miembro = gson.fromJson(data, CanalMiembro.class);
+                    LoggerCentral.debug(TAG, "Guardando Miembro: " + miembro.getId());
+                    guardado = repoMiembro.guardar(miembro);
+                    break;
+                case "MENSAJE":
+                    Mensaje mensaje = gson.fromJson(data, Mensaje.class);
+                    LoggerCentral.debug(TAG, "Guardando Mensaje: " + mensaje.getId());
+                    guardado = repoMensaje.guardar(mensaje);
+                    break;
+                default:
+                    LoggerCentral.error(TAG, ROJO + "Tipo desconocido para guardar: " + tipo + RESET);
             }
 
             if (guardado) {
-                LoggerCentral.info(TAG, "Guardado exitoso (Sync): " + CYAN + tipo + RESET);
+                LoggerCentral.info(TAG, VERDE + "✓ Guardado exitoso (Sync): " + CYAN + tipo + RESET);
                 // NOTA: Ya NO notificamos aquí individualmente para evitar spam de push
+            } else {
+                LoggerCentral.warn(TAG, AMARILLO + "No se guardó (posiblemente ya existía): " + tipo + RESET);
             }
         } catch (Exception e) {
-            LoggerCentral.error(TAG, "Error guardando " + tipo + ": " + e.getMessage());
+            LoggerCentral.error(TAG, ROJO + "Error guardando " + tipo + ": " + e.getMessage() + RESET);
+            e.printStackTrace();
         }
     }
 
     @Override
     public void iniciar() {
-        LoggerCentral.info(TAG, "Iniciando servicio de sincronización...");
+        LoggerCentral.info(TAG, AZUL + "======================================" + RESET);
+        LoggerCentral.info(TAG, AZUL + "Iniciando servicio de sincronización..." + RESET);
+        LoggerCentral.info(TAG, AZUL + "======================================" + RESET);
         reconstruirTodosLosArboles();
+        LoggerCentral.info(TAG, VERDE + "Servicio de sincronización iniciado correctamente" + RESET);
     }
 
-    @Override public void detener() {}
+    @Override
+    public void detener() {
+        LoggerCentral.info(TAG, ROJO + "Deteniendo servicio de sincronización..." + RESET);
+    }
 
     private void iniciarSincronizacionGeneral() {
+        LoggerCentral.info(TAG, AZUL + "Programando sincronización general..." + RESET);
         new Thread(() -> {
-            try { Thread.sleep(500); } catch (Exception e) {}
+            try {
+                Thread.sleep(500);
+                LoggerCentral.debug(TAG, "Esperando 500ms antes de sincronizar...");
+            } catch (Exception e) {
+                LoggerCentral.error(TAG, "Error en sleep: " + e.getMessage());
+            }
             reconstruirTodosLosArboles();
             DTORequest req = new DTORequest("sync_check_all", null);
             gestor.broadcast(gson.toJson(req));
+            LoggerCentral.info(TAG, VERDE + "Broadcast de sync_check_all enviado" + RESET);
         }).start();
     }
 
     @Override
     public void actualizar(String tipo, Object datos) {
+        LoggerCentral.debug(TAG, "Actualización recibida - Tipo: " + tipo + ", Datos: " + datos);
         if ("PEER_CONECTADO".equals(tipo)) {
-            LoggerCentral.info(TAG, "Peer conectado (" + datos + "). Verificando integridad...");
+            LoggerCentral.info(TAG, VERDE + "=== Peer conectado (" + datos + ") ===" + RESET);
+            LoggerCentral.info(TAG, "Verificando integridad con el nuevo peer...");
             huboCambiosEnEsteCiclo = false; // Iniciamos ciclo limpio
             iniciarSincronizacionGeneral();
+        } else {
+            LoggerCentral.debug(TAG, "Tipo de actualización no manejado: " + tipo);
         }
     }
 }
+

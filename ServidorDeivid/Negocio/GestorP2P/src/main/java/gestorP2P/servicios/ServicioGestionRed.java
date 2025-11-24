@@ -329,6 +329,11 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
         new Thread(() -> gestorConexiones.iniciarServidor(miPuerto)).start();
         notificarObservadores("RED_INICIADA", "Puerto " + miPuerto);
 
+        // 2.5. NOTIFICAR QUE EL PEER LOCAL ESTÁ ACTIVO
+        // Esto permite que ServicioSincronizacionDatos reconstruya sus árboles Merkle
+        LoggerCentral.info(TAG, VERDE + "Peer local registrado. Notificando sistema..." + RESET);
+        notificarObservadores("PEER_CONECTADO", miPeer.getId().toString());
+
         // 3. BOOTSTRAPPING (Lógica unificada)
         // Si hay semilla configurada, SIEMPRE intentamos conectar,
         // sin importar si somos nuevos o reiniciados.
