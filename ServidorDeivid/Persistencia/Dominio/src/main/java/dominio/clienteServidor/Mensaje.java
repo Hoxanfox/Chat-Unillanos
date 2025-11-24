@@ -51,8 +51,8 @@ public class Mensaje implements Serializable, IMerkleEntity {
                 (destinatarioUsuarioId != null ? destinatarioUsuarioId.toString() : "") + "|" +
                 (canalId != null ? canalId.toString() : "") + "|" +
                 (tipo != null ? tipo.name() : "") + "|" +
-                (contenido != null ? contenido : "") + "|" +
-                (fechaEnvio != null ? fechaEnvio.toString() : "");
+                (contenido != null ? contenido : "");
+                // fechaEnvio excluido para evitar diferencias de sincronización entre peers
     }
 
     // --- Getters y Setters ---

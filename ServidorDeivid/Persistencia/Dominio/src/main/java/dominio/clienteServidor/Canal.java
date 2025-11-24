@@ -49,12 +49,13 @@ public class Canal implements Serializable, IMerkleEntity {
     @Override
     public String getDatosParaHash() {
         // Solo hasheamos los datos planos de la tabla 'canales'
+        // Excluimos fechaCreacion para evitar diferencias de sincronización entre peers
         return id.toString() + "|" +
                 (peerPadre != null ? peerPadre.toString() : "") + "|" +
-                (creador != null ? creador.getId().toString() : "") + "|" + // Usamos el ID del creador
+                (creador != null ? creador.getId().toString() : "") + "|" +
                 (nombre != null ? nombre : "") + "|" +
-                (tipo != null ? tipo.name() : "") + "|" +
-                (fechaCreacion != null ? fechaCreacion.toString() : "");
+                (tipo != null ? tipo.name() : "");
+                // fechaCreacion excluido para evitar diferencias de sincronización entre peers
     }
 
     // Getters y setters
