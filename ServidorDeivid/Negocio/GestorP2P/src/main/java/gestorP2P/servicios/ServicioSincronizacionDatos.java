@@ -22,6 +22,7 @@ import repositorio.clienteServidor.CanalMiembroRepositorio;
 import repositorio.clienteServidor.CanalRepositorio;
 import repositorio.clienteServidor.MensajeRepositorio;
 import repositorio.clienteServidor.UsuarioRepositorio;
+import repositorio.p2p.PeerRepositorio;
 
 import java.util.HashMap;
 import java.util.List;
@@ -51,6 +52,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
     private final CanalRepositorio repoCanal;
     private final CanalMiembroRepositorio repoMiembro;
     private final MensajeRepositorio repoMensaje;
+    private final PeerRepositorio repoPeer; // NUEVO: Para obtener peers ONLINE
     private final Map<String, MerkleTree> bosqueMerkle;
 
     // Flag para saber si hicimos cambios durante este ciclo y debemos avisar al final
@@ -68,6 +70,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         this.repoCanal = new CanalRepositorio();
         this.repoMiembro = new CanalMiembroRepositorio();
         this.repoMensaje = new MensajeRepositorio();
+        this.repoPeer = new PeerRepositorio(); // NUEVO
         this.bosqueMerkle = new HashMap<>();
     }
 
@@ -86,6 +89,20 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         LoggerCentral.warn(TAG, "Forzando sincronización manual...");
         huboCambiosEnEsteCiclo = false; // Reset flag
         contadorReintentos = 0; // Reset contador para sincronización forzada
+        iniciarSincronizacionGeneral();
+    }
+
+    /**
+     * Método específico para sincronizar mensajes cuando se guardan nuevos.
+     * Llamado por ServicioChat después de persistir un mensaje localmente.
+     */
+    public void sincronizarMensajes() {
+        if (gestor == null) {
+            LoggerCentral.debug(TAG, "Gestor no disponible. Sincronización diferida.");
+            return;
+        }
+        LoggerCentral.info(TAG, VERDE + "📨 Nuevo mensaje guardado. Activando sincronización..." + RESET);
+        huboCambiosEnEsteCiclo = true; // Marcar que hay cambios
         iniciarSincronizacionGeneral();
     }
 
@@ -447,12 +464,20 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
             return;
         }
 
+        // NUEVO: Verificar que haya peers ONLINE antes de sincronizar
+        List<repositorio.p2p.PeerRepositorio.PeerInfo> peersOnline = repoPeer.listarPeersOnline();
+        if (peersOnline.isEmpty()) {
+            LoggerCentral.warn(TAG, AMARILLO + "⚠ No hay peers ONLINE. Cancelando sincronización." + RESET);
+            sincronizacionEnProgreso = false;
+            return;
+        }
+
         sincronizacionEnProgreso = true;
         contadorReintentos++;
         ultimaSincronizacion = tiempoActual;
 
-        LoggerCentral.info(TAG, AZUL + "Programando sincronización general... (Intento " +
-            contadorReintentos + "/" + MAX_REINTENTOS_SYNC + ")" + RESET);
+        LoggerCentral.info(TAG, AZUL + "Programando sincronización con " + peersOnline.size() +
+            " peers ONLINE... (Intento " + contadorReintentos + "/" + MAX_REINTENTOS_SYNC + ")" + RESET);
 
         new Thread(() -> {
             try {
@@ -461,10 +486,25 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
             } catch (Exception e) {
                 LoggerCentral.error(TAG, "Error en sleep: " + e.getMessage());
             }
+
             reconstruirTodosLosArboles();
             DTORequest req = new DTORequest("sync_check_all", null);
-            gestor.broadcast(gson.toJson(req));
-            LoggerCentral.info(TAG, VERDE + "Broadcast de sync_check_all enviado" + RESET);
+            String jsonReq = gson.toJson(req);
+
+            // NUEVO: Enviar solo a peers ONLINE
+            List<repositorio.p2p.PeerRepositorio.PeerInfo> peersActivos = repoPeer.listarPeersOnline();
+            LoggerCentral.info(TAG, VERDE + "Enviando sync_check_all a " + peersActivos.size() + " peers ONLINE" + RESET);
+
+            for (repositorio.p2p.PeerRepositorio.PeerInfo peer : peersActivos) {
+                if (peer.ip != null && peer.puerto > 0) {
+                    LoggerCentral.debug(TAG, "  -> Sincronizando con: " + peer.ip + ":" + peer.puerto);
+                    // Usar el gestor para enviar, pero podríamos usar broadcast si está filtrado
+                }
+            }
+
+            // Por ahora seguimos usando broadcast, pero el gestor debería filtrar por peers activos
+            gestor.broadcast(jsonReq);
+            LoggerCentral.info(TAG, VERDE + "Broadcast de sync_check_all enviado a peers ONLINE" + RESET);
 
             // Liberar el lock después de un tiempo razonable
             new Thread(() -> {

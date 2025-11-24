@@ -21,13 +21,14 @@ public class ServicioChat implements IServicioP2P {
     private static final String TAG = "ServicioChat";
     private static final String CYAN = "\u001B[36m";
     private static final String RESET = "\u001B[0m";
+    private static final String VERDE = "\u001B[32m";
 
     private IGestorConexiones gestorConexiones;
     private final Gson gson;
     private final MensajeRepositorio repositorio;
 
-    // Referencia al bus de eventos (Reemplaza a servicioSync directo)
-    private ServicioNotificacionCambios notificador;
+    // Referencia al servicio de sincronización para activar sync en lugar de notificar
+    private ServicioSincronizacionDatos servicioSync;
 
     public ServicioChat() {
         this.gson = GsonUtil.crearGson();
@@ -35,17 +36,10 @@ public class ServicioChat implements IServicioP2P {
     }
 
     /**
-     * Inyecta el Notificador para avisar de cambios en la BD.
-     * Esto soluciona el error "Cannot resolve method setNotificador".
+     * Inyecta el servicio de sincronización para activar sync automático.
      */
-    public void setNotificador(ServicioNotificacionCambios notificador) {
-        this.notificador = notificador;
-    }
-
-    // Mantenemos este por compatibilidad si aún lo usas en alguna parte,
-    // pero idealmente ya no se debería usar.
     public void setServicioSync(ServicioSincronizacionDatos sync) {
-        // Deprecado en favor de setNotificador
+        this.servicioSync = sync;
     }
 
     @Override
@@ -78,12 +72,9 @@ public class ServicioChat implements IServicioP2P {
                 // Guardar
                 boolean guardado = repositorio.guardar(m);
 
-                // Notificar al sistema (Sync y UI)
-                if (guardado && notificador != null) {
-                    notificador.notificarCambio(
-                            ServicioNotificacionCambios.TipoEvento.NUEVO_MENSAJE,
-                            m
-                    );
+                // Activar sincronización automática si está disponible
+                if (guardado && servicioSync != null) {
+                    servicioSync.sincronizarMensajes();
                 }
 
                 String logMsg = String.format("%sMensaje de %s:%s %s", CYAN, usuario, RESET, texto);
@@ -119,12 +110,9 @@ public class ServicioChat implements IServicioP2P {
 
         LoggerCentral.debug(TAG, "Mensaje guardado localmente: " + guardado + " | ID: " + m.getId());
 
-        // Notificar cambio local
-        if (guardado && notificador != null) {
-            notificador.notificarCambio(
-                    ServicioNotificacionCambios.TipoEvento.NUEVO_MENSAJE,
-                    m
-            );
+        // Activar sincronización automática si está disponible
+        if (guardado && servicioSync != null) {
+            servicioSync.sincronizarMensajes();
         }
 
         // Preparar JSON con todos los datos necesarios
@@ -158,8 +146,9 @@ public class ServicioChat implements IServicioP2P {
 
         LoggerCentral.debug(TAG, "Mensaje privado guardado: " + guardado + " | ID: " + m.getId());
 
-        if (guardado && notificador != null) {
-            notificador.notificarCambio(ServicioNotificacionCambios.TipoEvento.NUEVO_MENSAJE, m);
+        // Activar sincronización automática si está disponible
+        if (guardado && servicioSync != null) {
+            servicioSync.sincronizarMensajes();
         }
 
         // Preparar JSON

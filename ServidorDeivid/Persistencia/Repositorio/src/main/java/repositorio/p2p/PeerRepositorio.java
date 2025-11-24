@@ -154,4 +154,56 @@ public class PeerRepositorio {
         }
         return lista;
     }
+
+    /**
+     * Devuelve solo los peers que están ONLINE.
+     * Útil para sincronización y broadcast selectivo.
+     */
+    public List<PeerInfo> listarPeersOnline() {
+        List<PeerInfo> lista = new ArrayList<>();
+        String sql = "SELECT id, ip, socket_info, estado, fecha_creacion FROM peers WHERE estado = 'ONLINE'";
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                UUID id = null;
+                try { id = UUID.fromString(rs.getString("id")); } catch (Exception ignored) {}
+                String ip = rs.getString("ip");
+                String socketInfo = rs.getString("socket_info");
+                int puerto = -1;
+                if (socketInfo != null && socketInfo.contains(":")) {
+                    try {
+                        String[] parts = socketInfo.split(":");
+                        puerto = Integer.parseInt(parts[1]);
+                    } catch (Exception ignored) {}
+                }
+                String estadoStr = rs.getString("estado");
+                Estado estado = Estado.ONLINE; // Ya sabemos que es ONLINE por el WHERE
+                Timestamp ts = rs.getTimestamp("fecha_creacion");
+                Instant fecha = ts != null ? ts.toInstant() : Instant.now();
+                lista.add(new PeerInfo(id, ip, puerto, estado, fecha));
+            }
+        } catch (SQLException e) {
+            System.err.println("[PeerRepositorio] Error listarPeersOnline: " + e.getMessage());
+        }
+        return lista;
+    }
+
+    /**
+     * Actualiza el estado de un peer por su socketInfo.
+     */
+    public boolean actualizarEstado(String socketInfo, Estado nuevoEstado) {
+        if (socketInfo == null || nuevoEstado == null) return false;
+        String sql = "UPDATE peers SET estado = ? WHERE socket_info = ?";
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, nuevoEstado.name());
+            ps.setString(2, socketInfo);
+            int rows = ps.executeUpdate();
+            return rows > 0;
+        } catch (SQLException e) {
+            System.err.println("[PeerRepositorio] Error actualizarEstado: " + e.getMessage());
+            return false;
+        }
+    }
 }
