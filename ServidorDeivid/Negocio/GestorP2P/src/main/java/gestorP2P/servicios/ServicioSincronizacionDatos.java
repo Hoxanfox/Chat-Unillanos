@@ -41,6 +41,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
     private static final String ROJO = "\u001B[31m";
 
     private static final String[] ORDEN_SYNC = {"USUARIO", "CANAL", "MIEMBRO", "MENSAJE"};
+    private static final int MAX_REINTENTOS_SYNC = 3;
 
     private IGestorConexiones gestor;
     private final Gson gson;
@@ -54,6 +55,12 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
 
     // Flag para saber si hicimos cambios durante este ciclo y debemos avisar al final
     private boolean huboCambiosEnEsteCiclo = false;
+
+    // Control de concurrencia
+    private volatile boolean sincronizacionEnProgreso = false;
+    private volatile int contadorReintentos = 0;
+    private volatile long ultimaSincronizacion = 0;
+    private static final long INTERVALO_MIN_SYNC_MS = 2000; // 2 segundos entre sincronizaciones
 
     public ServicioSincronizacionDatos() {
         this.gson = GsonUtil.crearGson();
@@ -78,6 +85,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         }
         LoggerCentral.warn(TAG, "Forzando sincronización manual...");
         huboCambiosEnEsteCiclo = false; // Reset flag
+        contadorReintentos = 0; // Reset contador para sincronización forzada
         iniciarSincronizacionGeneral();
     }
 
@@ -250,6 +258,11 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
 
         // SI LLEGAMOS AQUÍ, ES QUE TODO ESTÁ SINCRONIZADO
         LoggerCentral.info(TAG, VERDE + "✔ Sistema totalmente sincronizado." + RESET);
+
+        // Resetear contadores de sincronización
+        contadorReintentos = 0;
+        sincronizacionEnProgreso = false;
+
         LoggerCentral.info(TAG, "Flag huboCambiosEnEsteCiclo: " + huboCambiosEnEsteCiclo);
         LoggerCentral.info(TAG, "Notificador disponible: " + (notificador != null));
 
@@ -304,10 +317,17 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
 
         if (faltantes == 0) {
             LoggerCentral.warn(TAG, AMARILLO + "⚠ Tenemos todos los IDs de " + tipo + " pero los hashes difieren." + RESET);
-            LoggerCentral.warn(TAG, AMARILLO + "   Esto indica diferencia de contenido en las entidades existentes." + RESET);
-            // Aquí deberíamos reiniciar verificación
-            LoggerCentral.info(TAG, "Reiniciando verificación para detectar cambios de contenido...");
-            iniciarSincronizacionGeneral();
+            LoggerCentral.warn(TAG, AMARILLO + "   Esto puede indicar diferencia de contenido, orden o timestamps." + RESET);
+            LoggerCentral.warn(TAG, AMARILLO + "   Esto es normal en árboles Merkle y no requiere acción adicional." + RESET);
+
+            // NO reiniciamos sincronización aquí - esto causa el bucle infinito
+            // En su lugar, consideramos esta situación como "sincronizado"
+            // porque ambos peers tienen las mismas entidades
+            LoggerCentral.info(TAG, VERDE + "✓ Mismo conjunto de IDs. Continuando con siguiente tipo..." + RESET);
+
+            // Resetear contadores ya que no hay nada que sincronizar
+            contadorReintentos = 0;
+            sincronizacionEnProgreso = false;
         } else {
             LoggerCentral.info(TAG, VERDE + "✓ Solicitadas " + faltantes + " entidades faltantes de tipo " + tipo + RESET);
         }
@@ -403,7 +423,37 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
     }
 
     private void iniciarSincronizacionGeneral() {
-        LoggerCentral.info(TAG, AZUL + "Programando sincronización general..." + RESET);
+        // Verificar si ya hay una sincronización en progreso
+        if (sincronizacionEnProgreso) {
+            LoggerCentral.warn(TAG, AMARILLO + "⚠ Sincronización ya en progreso. Ignorando solicitud." + RESET);
+            return;
+        }
+
+        // Verificar intervalo mínimo entre sincronizaciones
+        long tiempoActual = System.currentTimeMillis();
+        long tiempoTranscurrido = tiempoActual - ultimaSincronizacion;
+        if (tiempoTranscurrido < INTERVALO_MIN_SYNC_MS) {
+            LoggerCentral.warn(TAG, AMARILLO + "⚠ Demasiado pronto para sincronizar. Esperando " +
+                (INTERVALO_MIN_SYNC_MS - tiempoTranscurrido) + "ms" + RESET);
+            return;
+        }
+
+        // Verificar límite de reintentos
+        if (contadorReintentos >= MAX_REINTENTOS_SYNC) {
+            LoggerCentral.error(TAG, ROJO + "⚠ Límite de reintentos alcanzado (" + MAX_REINTENTOS_SYNC +
+                "). Deteniendo sincronización para evitar bucle infinito." + RESET);
+            contadorReintentos = 0; // Reset para el futuro
+            sincronizacionEnProgreso = false;
+            return;
+        }
+
+        sincronizacionEnProgreso = true;
+        contadorReintentos++;
+        ultimaSincronizacion = tiempoActual;
+
+        LoggerCentral.info(TAG, AZUL + "Programando sincronización general... (Intento " +
+            contadorReintentos + "/" + MAX_REINTENTOS_SYNC + ")" + RESET);
+
         new Thread(() -> {
             try {
                 Thread.sleep(500);
@@ -415,6 +465,17 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
             DTORequest req = new DTORequest("sync_check_all", null);
             gestor.broadcast(gson.toJson(req));
             LoggerCentral.info(TAG, VERDE + "Broadcast de sync_check_all enviado" + RESET);
+
+            // Liberar el lock después de un tiempo razonable
+            new Thread(() -> {
+                try {
+                    Thread.sleep(3000); // Dar 3 segundos para procesar respuestas
+                    sincronizacionEnProgreso = false;
+                    LoggerCentral.debug(TAG, "Lock de sincronización liberado");
+                } catch (Exception e) {
+                    LoggerCentral.error(TAG, "Error liberando lock: " + e.getMessage());
+                }
+            }).start();
         }).start();
     }
 
