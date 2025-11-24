@@ -7,8 +7,9 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.DelimiterBasedFrameDecoder;
-import io.netty.handler.codec.Delimiters;
+// IMPORTANTE: Nuevos decodificadores para evitar JSONs rotos
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.codec.string.StringDecoder;
 import io.netty.handler.codec.string.StringEncoder;
 import transporte.p2p.interfaces.IMensajeListener;
@@ -23,8 +24,8 @@ public class NettyTransporteImpl implements ITransporteTcp {
     private static final String ROJO = "\u001B[31m";
     private static final String RESET = "\u001B[0m";
 
-    // Tamaño máximo de un mensaje JSON (ej. 128KB). Aumentar si la BD crece mucho.
-    private static final int MAX_FRAME_SIZE = 131072;
+    // Aumentamos límite a 50MB para soportar listas grandes de sincronización
+    private static final int MAX_FRAME_SIZE = 50 * 1024 * 1024;
 
     private IMensajeListener listener;
     private EventLoopGroup bossGroup;
@@ -39,6 +40,27 @@ public class NettyTransporteImpl implements ITransporteTcp {
         this.listener = listener;
     }
 
+    /**
+     * Configuración centralizada del Pipeline para asegurar que Cliente y Servidor
+     * hablen el mismo idioma y no rompan los JSONs.
+     */
+    private void configurarPipeline(ChannelPipeline p) {
+        // 1. ENTRADA: Decodificador inteligente
+        // Lee los primeros 4 bytes para saber el tamaño y espera hasta tener todo el mensaje.
+        p.addLast(new LengthFieldBasedFrameDecoder(MAX_FRAME_SIZE, 0, 4, 0, 4));
+
+        // 2. SALIDA: Prepender automático
+        // Calcula el tamaño del String y le pega 4 bytes al inicio antes de enviarlo.
+        p.addLast(new LengthFieldPrepender(4));
+
+        // 3. Conversión Texto <-> Bytes
+        p.addLast(new StringDecoder());
+        p.addLast(new StringEncoder());
+
+        // 4. Tu lógica de negocio
+        p.addLast(new P2PInboundHandler(listener, canalesActivos));
+    }
+
     @Override
     public void iniciarEscucha(int puerto) throws InterruptedException {
         bossGroup = new NioEventLoopGroup(1);
@@ -50,14 +72,7 @@ public class NettyTransporteImpl implements ITransporteTcp {
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     public void initChannel(SocketChannel ch) {
-                        // 1. DECODIFICADOR DE FRAMES (CRÍTICO PARA JSON)
-                        // Corta el flujo cuando encuentra un \n o \r\n
-                        ch.pipeline().addLast(new DelimiterBasedFrameDecoder(MAX_FRAME_SIZE, Delimiters.lineDelimiter()));
-
-                        // 2. Decodificador de String normal
-                        ch.pipeline().addLast(new StringDecoder());
-                        ch.pipeline().addLast(new StringEncoder());
-                        ch.pipeline().addLast(new P2PInboundHandler(listener, canalesActivos));
+                        configurarPipeline(ch.pipeline());
                     }
                 });
 
@@ -68,7 +83,7 @@ public class NettyTransporteImpl implements ITransporteTcp {
     @Override
     public void conectarA(String host, int puerto) {
         if (host == null || host.trim().isEmpty() || host.equalsIgnoreCase("null")) {
-            System.err.println(TAG + ROJO + "Error: Intento de conectar a HOST inválido." + RESET);
+            System.err.println(TAG + ROJO + "Error: Intento de conectar a HOST inválido (" + host + ")." + RESET);
             return;
         }
 
@@ -82,11 +97,7 @@ public class NettyTransporteImpl implements ITransporteTcp {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     public void initChannel(SocketChannel ch) {
-                        // MISMA CONFIGURACIÓN EN EL CLIENTE
-                        ch.pipeline().addLast(new DelimiterBasedFrameDecoder(MAX_FRAME_SIZE, Delimiters.lineDelimiter()));
-                        ch.pipeline().addLast(new StringDecoder());
-                        ch.pipeline().addLast(new StringEncoder());
-                        ch.pipeline().addLast(new P2PInboundHandler(listener, canalesActivos));
+                        configurarPipeline(ch.pipeline());
                     }
                 });
 
@@ -102,17 +113,20 @@ public class NettyTransporteImpl implements ITransporteTcp {
 
     @Override
     public void enviarMensaje(String host, int puerto, String mensaje) {
-        if (host == null) return;
+        if (host == null || host.equals("null")) {
+            System.err.println(TAG + "No se puede enviar mensaje: Host es NULL.");
+            return;
+        }
 
         String key = host + ":" + puerto;
         Channel canal = canalesActivos.get(key);
 
         if (canal != null && canal.isActive()) {
-            // IMPORTANTÍSIMO: Agregar salto de línea al final para que el receptor sepa dónde termina el JSON.
-            // Si el mensaje ya tiene \n, Netty lo manejará bien, pero aseguramos el delimitador.
-            String mensajeConDelimitador = mensaje + "\r\n";
-            canal.writeAndFlush(mensajeConDelimitador);
+            // Al usar LengthFieldPrepender, ya no necesitas agregar \r\n manuales.
+            // Él se encarga de empaquetar el mensaje perfectamente.
+            canal.writeAndFlush(mensaje);
         } else {
+            // Reintento de conexión si se cayó
             conectarA(host, puerto);
         }
     }
@@ -122,7 +136,7 @@ public class NettyTransporteImpl implements ITransporteTcp {
         String key = host + ":" + puerto;
         Channel canal = canalesActivos.remove(key);
         if (canal != null) {
-            // System.out.println(TAG + "Cerrando conexión con " + key);
+            System.out.println(TAG + "Cerrando conexión con " + key);
             canal.close();
         }
     }
