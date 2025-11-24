@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import conexion.p2p.interfaces.IRouterMensajes;
 import conexion.p2p.interfaces.IGestorConexiones;
 import gestorP2P.interfaces.IServicioP2P;
+import gestorP2P.utils.GsonUtil;
 import logger.LoggerCentral;
 import observador.IObservador;
 import observador.ISujeto;
@@ -31,7 +32,7 @@ public class ServicioNotificacionCambios implements IServicioP2P, ISujeto {
 
     public ServicioNotificacionCambios() {
         this.observadores = new ArrayList<>();
-        this.gson = new Gson();
+        this.gson = GsonUtil.crearGson();
     }
 
     @Override

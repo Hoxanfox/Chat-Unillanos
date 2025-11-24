@@ -8,6 +8,7 @@ import dto.comunicacion.DTOResponse;
 import dto.comunicacion.DTORequest;
 import dto.p2p.DTOPeerDetails;
 import gestorP2P.interfaces.IServicioP2P;
+import gestorP2P.utils.GsonUtil;
 import logger.LoggerCentral; // Importar LoggerCentral
 
 import java.util.List;
@@ -24,7 +25,7 @@ public class ServicioDescubrimiento implements IServicioP2P {
 
     // Constructor vacío
     public ServicioDescubrimiento() {
-        this.gson = new Gson();
+        this.gson = GsonUtil.crearGson();
     }
 
     @Override

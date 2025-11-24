@@ -12,6 +12,7 @@ import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
 import dto.p2p.DTOPeerDetails;
 import gestorP2P.interfaces.IServicioP2P;
+import gestorP2P.utils.GsonUtil;
 import logger.LoggerCentral;
 import observador.IObservador;
 import observador.ISujeto;
@@ -28,12 +29,13 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
 
     private static final String TAG = "GestionRed";
 
-    // --- COLORES PARA EL CONTENIDO DEL MENSAJE ---
-    private static final String RESET = "\u001B[0m";
-    private static final String AMARILLO = "\u001B[33m";
-    private static final String VERDE = "\u001B[32m";
-    private static final String ROJO = "\u001B[31m";
-    private static final String CYAN = "\u001B[36m";
+    // --- COLORES ANSI PÚBLICOS (Paleta Global) ---
+    public static final String RESET = "\u001B[0m";
+    public static final String ROJO = "\u001B[31m";
+    public static final String VERDE = "\u001B[32m";
+    public static final String AMARILLO = "\u001B[33m";
+    public static final String AZUL = "\u001B[34m";
+    public static final String MAGENTA = "\u001B[35m";;
 
     private IGestorConexiones gestorConexiones;
     private final Configuracion config;
@@ -45,7 +47,7 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
     public ServicioGestionRed() {
         this.config = Configuracion.getInstance();
         this.repositorio = new PeerRepositorio();
-        this.gson = new Gson();
+        this.gson = GsonUtil.crearGson();
         this.observadores = new ArrayList<>();
     }
 
@@ -286,38 +288,64 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
         }
     }
 
+    // --- CORRECCIÓN CRÍTICA EN INICIAR ---
     @Override
     public void iniciar() {
-        LoggerCentral.info(TAG, "Iniciando...");
+        LoggerCentral.info(TAG, "Iniciando secuencia de arranque...");
         String miIp = config.getPeerHost();
         int miPuerto = config.getPeerPuerto();
         String miSocketInfo = miIp + ":" + miPuerto;
 
-        if(repositorio.obtenerPorSocketInfo(miSocketInfo) == null) {
-            Peer nuevo = new Peer(); nuevo.setIp(miIp); nuevo.setEstado(Peer.Estado.ONLINE);
-            repositorio.guardarOActualizarPeer(nuevo, miSocketInfo);
+        String seedHost = config.getPeerInicialHost();
+        int seedPort = config.getPeerInicialPuerto();
+        boolean haySemilla = (seedHost != null && seedPort > 0);
+
+        // 1. VERIFICACIÓN DE IDENTIDAD LOCAL
+        Peer miPeer = repositorio.obtenerPorSocketInfo(miSocketInfo);
+
+        if (miPeer != null) {
+            // CASO: REINICIO (Ya existía identidad)
+            System.out.println(TAG + VERDE + ">>> Identidad Recuperada <<<" + RESET);
+            System.out.println(TAG + "Soy: " + AZUL + miPeer.getId() + RESET + " en " + miSocketInfo);
+
+            // Importante: Actualizar estado a ONLINE
+            miPeer.setEstado(Peer.Estado.ONLINE);
+            repositorio.guardarOActualizarPeer(miPeer, miSocketInfo);
+        } else {
+            // CASO: NUEVA INSTALACIÓN
+            miPeer = new Peer();
+            miPeer.setIp(miIp);
+            miPeer.setEstado(Peer.Estado.ONLINE);
+            repositorio.guardarOActualizarPeer(miPeer, miSocketInfo);
+
+            if (haySemilla) {
+                System.out.println(TAG + AZUL + ">>> MODO JOINER (Nuevo Nodo) <<<" + RESET);
+            } else {
+                System.out.println(TAG + MAGENTA + ">>> MODO GÉNESIS ACTIVADO <<<" + RESET);
+            }
         }
 
+        // 2. LEVANTAR SERVIDOR
         new Thread(() -> gestorConexiones.iniciarServidor(miPuerto)).start();
         notificarObservadores("RED_INICIADA", "Puerto " + miPuerto);
 
-        String seedHost = config.getPeerInicialHost();
-        int seedPort = config.getPeerInicialPuerto();
-
-        if (seedHost != null && seedPort > 0) {
-            LoggerCentral.info(TAG, "Fase 1: Sync con Semilla " + AMARILLO + seedHost + ":" + seedPort + RESET);
+        // 3. BOOTSTRAPPING (Lógica unificada)
+        // Si hay semilla configurada, SIEMPRE intentamos conectar,
+        // sin importar si somos nuevos o reiniciados.
+        if (haySemilla) {
+            LoggerCentral.info(TAG, "Conectando a semilla maestra: " + AMARILLO + seedHost + ":" + seedPort + RESET);
             solicitarSync(seedHost, seedPort, miIp, miPuerto);
         } else {
-            LoggerCentral.info(TAG, "Modo Génesis.");
+            LoggerCentral.info(TAG, VERDE + "Nodo Maestro listo. Esperando conexiones." + RESET);
         }
 
-        // Activar tarea repetitiva
+        // 4. MANTENIMIENTO
         if (timerMantenimiento == null) {
             timerMantenimiento = new Timer();
             timerMantenimiento.scheduleAtFixedRate(new TimerTask() {
                 @Override
                 public void run() { verificarEstadoPeers(); }
-            }, 30000, 30000); // Cada 30 segundos
+            }, 30000, 30000);
         }
     }
 

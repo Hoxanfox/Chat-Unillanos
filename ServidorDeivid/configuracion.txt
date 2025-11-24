@@ -12,7 +12,7 @@ peer.host=192.168.1.9
 peer.puerto=9000
 
 # Peer inicial (opcional) - ejemplo
-peer.inicial.host=25.1.211.185
+peer.inicial.host=192.168.1.14
 peer.inicial.puerto=9000
 
 # Transporte a usar por defecto (FabricaTransporte.crearTransporte)

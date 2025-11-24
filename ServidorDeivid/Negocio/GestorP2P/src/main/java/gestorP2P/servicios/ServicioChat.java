@@ -9,6 +9,7 @@ import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
 import dto.p2p.DTOPeerDetails;
 import gestorP2P.interfaces.IServicioP2P;
+import gestorP2P.utils.GsonUtil;
 import logger.LoggerCentral;
 import repositorio.clienteServidor.MensajeRepositorio;
 
@@ -29,7 +30,7 @@ public class ServicioChat implements IServicioP2P {
     private ServicioNotificacionCambios notificador;
 
     public ServicioChat() {
-        this.gson = new Gson();
+        this.gson = GsonUtil.crearGson();
         this.repositorio = new MensajeRepositorio();
     }
 

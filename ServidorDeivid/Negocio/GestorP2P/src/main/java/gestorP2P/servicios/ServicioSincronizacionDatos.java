@@ -15,6 +15,7 @@ import dominio.merkletree.MerkleTree;
 import dto.comunicacion.DTORequest;
 import dto.comunicacion.DTOResponse;
 import gestorP2P.interfaces.IServicioP2P;
+import gestorP2P.utils.GsonUtil;
 import logger.LoggerCentral;
 import observador.IObservador;
 import repositorio.clienteServidor.CanalMiembroRepositorio;
@@ -55,7 +56,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
     private boolean huboCambiosEnEsteCiclo = false;
 
     public ServicioSincronizacionDatos() {
-        this.gson = new Gson();
+        this.gson = GsonUtil.crearGson();
         this.repoUsuario = new UsuarioRepositorio();
         this.repoCanal = new CanalRepositorio();
         this.repoMiembro = new CanalMiembroRepositorio();
