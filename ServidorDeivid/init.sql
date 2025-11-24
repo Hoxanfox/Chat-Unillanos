@@ -3,6 +3,7 @@
 DROP TABLE IF EXISTS canal_miembros;
 DROP TABLE IF EXISTS mensajes;
 DROP TABLE IF EXISTS canales;
+DROP TABLE IF EXISTS archivos;
 DROP TABLE IF EXISTS peers;
 DROP TABLE IF EXISTS usuarios;
 
@@ -10,7 +11,7 @@ CREATE TABLE usuarios (
   id CHAR(36) NOT NULL PRIMARY KEY,
   nombre VARCHAR(200) NOT NULL,
   email VARCHAR(200),
-  foto VARCHAR(500),
+  foto VARCHAR(500) COMMENT 'FileId relativo desde Bucket/ (ej: user_photos/uuid_foto.jpg)',
   peer_padre CHAR(36),
   contrasena VARCHAR(200),
   ip VARCHAR(100),
@@ -25,6 +26,20 @@ CREATE TABLE peers (
   estado ENUM('OFFLINE','ONLINE') NOT NULL DEFAULT 'OFFLINE',
   fecha_creacion DATETIME(6) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE archivos (
+  id CHAR(36) NOT NULL PRIMARY KEY,
+  file_id VARCHAR(255) NOT NULL UNIQUE COMMENT 'ID único del archivo (ej: user_photos/uuid_foto.jpg)',
+  nombre_archivo VARCHAR(255) NOT NULL,
+  ruta_relativa VARCHAR(500) NOT NULL COMMENT 'Ruta desde Bucket/',
+  mime_type VARCHAR(100),
+  tamanio BIGINT NOT NULL,
+  hash_sha256 VARCHAR(64),
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_file_id (file_id),
+  INDEX idx_fecha_creacion (fecha_creacion)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Metadatos de archivos. Binarios en Bucket/';
 
 CREATE TABLE canales (
   id CHAR(36) NOT NULL PRIMARY KEY,

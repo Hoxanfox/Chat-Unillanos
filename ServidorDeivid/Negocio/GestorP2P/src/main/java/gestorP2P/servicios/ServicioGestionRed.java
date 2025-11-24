@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class ServicioGestionRed implements IServicioP2P, ISujeto {
@@ -43,6 +44,10 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
     private final Gson gson;
     private Timer timerMantenimiento;
     private final List<IObservador> observadores;
+
+    // --- TRACKING DE PINGs PENDIENTES ---
+    private final ConcurrentHashMap<String, Long> pingsPendientes = new ConcurrentHashMap<>();
+    private static final long TIMEOUT_PING_MS = 5000; // 5 segundos
 
     public ServicioGestionRed() {
         this.config = Configuracion.getInstance();
@@ -176,6 +181,9 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
                     gestorConexiones.actualizarPuertoServidor(origenId, portRemoto);
 
                     LoggerCentral.info(TAG, "PING recibido de " + AMARILLO + uuidRemoto + RESET + " @ " + ipRemota + ":" + portRemoto);
+
+                    // Notificar que el peer está conectado
+                    notificarObservadores("PEER_CONECTADO", uuidRemoto);
                 }
 
                 // RESPONDER PONG con mis datos
@@ -204,13 +212,25 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
                 try {
                     JsonObject data = response.getData().getAsJsonObject();
                     String uuid = data.get("uuid").getAsString();
-                    // int puertoListen = data.get("listenPort").getAsInt();
+                    int puertoListen = data.get("listenPort").getAsInt();
 
-                    LoggerCentral.info(TAG, VERDE + "¡PONG! Peer " + uuid + " está ONLINE." + RESET);
-                    notificarObservadores("PEER_ONLINE", uuid);
+                    LoggerCentral.info(TAG, VERDE + "✓ PONG recibido de " + uuid + RESET);
 
-                    // Aquí podríamos actualizar BD a ONLINE si tuviéramos la IP segura,
-                    // pero la lógica de 'verificarEstadoPeers' ya asume éxito si no falló la conexión.
+                    // Buscar en la BD por UUID para obtener la IP
+                    Peer peerRemoto = repositorio.obtenerPorId(UUID.fromString(uuid));
+                    if (peerRemoto != null) {
+                        String targetId = peerRemoto.getIp() + ":" + puertoListen;
+
+                        // MARCAR PONG RECIBIDO (remover de pendientes)
+                        pingsPendientes.remove(targetId);
+
+                        // Actualizar estado a ONLINE
+                        repositorio.actualizarEstado(uuid, Peer.Estado.ONLINE);
+
+                        LoggerCentral.debug(TAG, VERDE + "Peer " + uuid + " marcado como ONLINE" + RESET);
+                        notificarObservadores("PEER_CONECTADO", uuid);
+                    }
+
                 } catch (Exception e) {
                     LoggerCentral.error(TAG, "Error procesando PONG: " + e.getMessage());
                 }
@@ -243,13 +263,17 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
 
     /**
      * Tarea Mantenimiento: Verificar quién está vivo mediante Ping-Pong.
+     * NUEVA VERSIÓN: Con tracking real de respuestas y timeout.
      */
     private void verificarEstadoPeers() {
         String miIp = config.getPeerHost();
         int miPuerto = config.getPeerPuerto();
 
         Peer yo = repositorio.obtenerPorSocketInfo(miIp + ":" + miPuerto);
-        if (yo == null) return;
+        if (yo == null) {
+            LoggerCentral.warn(TAG, ROJO + "No se pudo verificar peers: Identidad local no encontrada" + RESET);
+            return;
+        }
 
         JsonObject payload = new JsonObject();
         payload.addProperty("uuid", yo.getId().toString());
@@ -261,11 +285,12 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
         LoggerCentral.debug(TAG, "Ejecutando ronda de PING a " + conocidos.size() + " peers conocidos.");
 
         for (PeerRepositorio.PeerInfo destino : conocidos) {
+            // Saltar si soy yo mismo
             if (destino.ip.equals(miIp) && destino.puerto == miPuerto) continue;
 
             String targetId = destino.ip + ":" + destino.puerto;
 
-            // Verificar si ya está conectado antes de intentar reconectar
+            // Verificar si ya está conectado en el pool de conexiones
             DTOPeerDetails conexionExistente = gestorConexiones.obtenerDetallesPeers().stream()
                     .filter(p -> {
                         String pId = p.getId();
@@ -276,33 +301,17 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
                     .findFirst().orElse(null);
 
             if (conexionExistente != null) {
-                // Ya está conectado, solo enviar PING
+                // Ya está conectado, enviar PING y registrar timestamp
                 LoggerCentral.debug(TAG, "Enviando PING a peer conectado: " + targetId);
+
+                // Registrar PING pendiente con timestamp actual
+                pingsPendientes.put(targetId, System.currentTimeMillis());
+
                 gestorConexiones.enviarMensaje(conexionExistente, jsonPing);
 
-                // Programar verificación de timeout (si no llega PONG en 5 segundos -> OFFLINE)
-                new Thread(() -> {
-                    try {
-                        Thread.sleep(5000); // Timeout de 5 segundos
-
-                        // Verificar si sigue conectado
-                        boolean sigueConectado = gestorConexiones.obtenerDetallesPeers().stream()
-                                .anyMatch(p -> p.getId().equals(targetId) ||
-                                          (p.getIp() != null && p.getIp().equals(destino.ip) && p.getPuerto() == destino.puerto));
-
-                        if (!sigueConectado) {
-                            // Se desconectó sin responder - marcar OFFLINE
-                            LoggerCentral.warn(TAG, ROJO + "TIMEOUT: " + targetId + " no respondió PING -> OFFLINE" + RESET);
-                            repositorio.actualizarEstado(targetId, Peer.Estado.OFFLINE);
-                            notificarObservadores("PEER_OFFLINE", targetId);
-                        }
-                    } catch (Exception e) {
-                        LoggerCentral.error(TAG, "Error en timeout de PING: " + e.getMessage());
-                    }
-                }).start();
-
             } else {
-                // No está conectado, intentar conectar
+                // No está conectado, intentar reconectar
+                LoggerCentral.debug(TAG, AMARILLO + "Reconectando con " + targetId + RESET);
                 gestorConexiones.conectarAPeer(destino.ip, destino.puerto);
 
                 new Thread(() -> {
@@ -317,13 +326,24 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
                         if (conexionNueva != null) {
                             // Conexión exitosa -> Enviar PING
                             LoggerCentral.debug(TAG, VERDE + "Reconectado con " + targetId + " -> Enviando PING" + RESET);
+
+                            // Registrar PING pendiente
+                            pingsPendientes.put(targetId, System.currentTimeMillis());
+
                             gestorConexiones.enviarMensaje(conexionNueva, jsonPing);
-                            repositorio.actualizarEstado(targetId, Peer.Estado.ONLINE);
                         } else {
                             // Conexión falló -> OFFLINE
-                            LoggerCentral.warn(TAG, ROJO + "Fallo conexión con " + targetId + " -> OFFLINE" + RESET);
-                            repositorio.actualizarEstado(targetId, Peer.Estado.OFFLINE);
-                            notificarObservadores("PEER_OFFLINE", targetId);
+                            LoggerCentral.warn(TAG, ROJO + "✗ Fallo conexión con " + targetId + " -> OFFLINE" + RESET);
+
+                            // CORREGIDO: Actualizar por socketInfo (IP:puerto)
+                            boolean actualizado = repositorio.actualizarEstado(targetId, Peer.Estado.OFFLINE);
+                            if (actualizado) {
+                                LoggerCentral.info(TAG, "Estado actualizado en BD: " + targetId + " -> OFFLINE");
+                            } else {
+                                LoggerCentral.error(TAG, "No se pudo actualizar estado de: " + targetId);
+                            }
+
+                            notificarObservadores("PEER_OFFLINE", destino.id.toString());
                         }
                     } catch (Exception e) {
                         LoggerCentral.error(TAG, "Error verificando peer: " + e.getMessage());
@@ -331,6 +351,52 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
                 }).start();
             }
         }
+
+        // VERIFICACIÓN DE TIMEOUTS (después de enviar todos los PINGs)
+        new Thread(() -> {
+            try {
+                Thread.sleep(TIMEOUT_PING_MS); // Esperar 5 segundos
+
+                // Revisar cuáles PINGs siguen pendientes (no recibieron PONG)
+                long ahora = System.currentTimeMillis();
+                List<String> timedOut = new ArrayList<>();
+
+                for (String targetId : pingsPendientes.keySet()) {
+                    long timestampEnvio = pingsPendientes.get(targetId);
+                    if (ahora - timestampEnvio >= TIMEOUT_PING_MS) {
+                        timedOut.add(targetId);
+                    }
+                }
+
+                // Marcar como OFFLINE los que no respondieron
+                for (String targetId : timedOut) {
+                    pingsPendientes.remove(targetId);
+
+                    LoggerCentral.warn(TAG, ROJO + "✗ TIMEOUT: " + targetId + " no respondió PONG -> OFFLINE" + RESET);
+
+                    // CORREGIDO: Actualizar por socketInfo (IP:puerto)
+                    boolean actualizado = repositorio.actualizarEstado(targetId, Peer.Estado.OFFLINE);
+                    if (actualizado) {
+                        LoggerCentral.info(TAG, "Estado actualizado en BD: " + targetId + " -> OFFLINE");
+
+                        // Buscar UUID para notificar a observadores
+                        Peer peerOffline = repositorio.obtenerPorSocketInfo(targetId);
+                        if (peerOffline != null) {
+                            notificarObservadores("PEER_OFFLINE", peerOffline.getId().toString());
+                        }
+                    } else {
+                        LoggerCentral.error(TAG, "No se pudo actualizar estado de: " + targetId);
+                    }
+                }
+
+                if (timedOut.isEmpty()) {
+                    LoggerCentral.info(TAG, VERDE + "✓ Todos los peers respondieron PONG" + RESET);
+                }
+
+            } catch (Exception e) {
+                LoggerCentral.error(TAG, "Error en verificación de timeouts: " + e.getMessage());
+            }
+        }).start();
     }
 
     // --- CORRECCIÓN CRÍTICA EN INICIAR ---
@@ -377,7 +443,22 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
         // 2.5. NOTIFICAR QUE EL PEER LOCAL ESTÁ ACTIVO
         // Esto permite que ServicioSincronizacionDatos reconstruya sus árboles Merkle
         LoggerCentral.info(TAG, VERDE + "Peer local registrado. Notificando sistema..." + RESET);
+
+        // NUEVO: Crear DTO del peer local para notificación visual
+        DTOPeerDetails peerLocalDto = new DTOPeerDetails(
+            miPeer.getId().toString(),
+            miIp,
+            miPuerto,
+            "ONLINE",
+            miSocketInfo
+        );
+        peerLocalDto.setPuertoServidor(miPuerto); // Marcar puerto real
+
+        // Notificar con UUID (para ServicioSincronizacionDatos)
         notificarObservadores("PEER_CONECTADO", miPeer.getId().toString());
+
+        // NUEVO: También notificar visualmente a la consola (GestorConexiones maneja esto)
+        System.out.println(TAG + VERDE + "✓ Peer local ACTIVO: " + miPeer.getId() + " en " + miSocketInfo + RESET);
 
         // 3. BOOTSTRAPPING (Lógica unificada)
         // Si hay semilla configurada, SIEMPRE intentamos conectar,

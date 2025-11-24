@@ -51,6 +51,60 @@ public class UsuarioRepositorio {
         }
     }
 
+    /**
+     * Busca un usuario por su email (para login)
+     */
+    public Usuario buscarPorEmail(String email) {
+        String sql = "SELECT * FROM usuarios WHERE email = ?";
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, email);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return mapear(rs);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[RepoUsuario] Error buscando por email: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Busca un usuario por su ID
+     */
+    public Usuario buscarPorId(UUID id) {
+        String sql = "SELECT * FROM usuarios WHERE id = ?";
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, id.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return mapear(rs);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[RepoUsuario] Error buscando por ID: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Actualiza el estado de un usuario
+     */
+    public boolean actualizarEstado(UUID id, Usuario.Estado estado) {
+        String sql = "UPDATE usuarios SET estado = ? WHERE id = ?";
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, estado.name());
+            ps.setString(2, id.toString());
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("[RepoUsuario] Error actualizando estado: " + e.getMessage());
+            return false;
+        }
+    }
+
     private Usuario mapear(ResultSet rs) throws SQLException {
         Usuario u = new Usuario();
         u.setId(UUID.fromString(rs.getString("id")));

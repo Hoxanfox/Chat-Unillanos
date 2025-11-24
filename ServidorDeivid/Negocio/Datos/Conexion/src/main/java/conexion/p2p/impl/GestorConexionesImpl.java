@@ -3,6 +3,8 @@ package conexion.p2p.impl;
 import conexion.p2p.interfaces.IGestorConexiones;
 import conexion.p2p.interfaces.IRouterMensajes;
 import dto.p2p.DTOPeerDetails;
+import observador.IObservador;
+import observador.ISujeto;
 import transporte.p2p.interfaces.IMensajeListener;
 import transporte.p2p.interfaces.ITransporteTcp;
 import transporte.p2p.impl.NettyTransporteImpl;
@@ -13,9 +15,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
-public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener {
+public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener, ISujeto {
 
     // --- COLORES ANSI PARA DEBUGGING CHEBRE ---
     private static final String RESET = "\u001B[0m";
@@ -36,9 +39,13 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
     // NUEVO: Callback para notificar desconexiones
     private Consumer<String> onPeerDisconnectedCallback;
 
+    // NUEVO: Lista de observadores (thread-safe)
+    private final List<IObservador> observadores;
+
     public GestorConexionesImpl() {
         System.out.println(TAG + "Inicializando Gestor de Conexiones...");
         this.poolPeers = new ConcurrentHashMap<>();
+        this.observadores = new CopyOnWriteArrayList<>();
         // Nos pasamos a nosotros mismos como listener
         this.transporte = new NettyTransporteImpl(this);
     }
@@ -194,6 +201,10 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
         if (nuevoPeer.getIp() != null) {
             poolPeers.put(nuevoPeer.getId(), nuevoPeer);
             System.out.println(TAG + VERDE + "Nueva conexión registrada en Pool: " + origen + RESET);
+
+            // NUEVO: Notificar a los observadores sobre la nueva conexión
+            notificarObservadores("PEER_CONECTADO", nuevoPeer);
+            notificarObservadores("LISTA_PEERS", obtenerDetallesPeers());
         } else {
             System.err.println(TAG + ROJO + "Error al registrar conexión: IP nula para origen " + origen + RESET);
         }
@@ -203,6 +214,7 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
     @Override
     public void onDesconexion(String origen) {
         if (poolPeers.containsKey(origen)) {
+            DTOPeerDetails peerDesconectado = poolPeers.get(origen);
             System.out.println(TAG + AMARILLO + "Detectada caída/cierre de canal: " + origen + ". Eliminando del pool." + RESET);
             poolPeers.remove(origen);
 
@@ -210,6 +222,10 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
             if (onPeerDisconnectedCallback != null) {
                 onPeerDisconnectedCallback.accept(origen);
             }
+
+            // NUEVO: Notificar a los observadores sobre la desconexión
+            notificarObservadores("PEER_DESCONECTADO", peerDesconectado);
+            notificarObservadores("LISTA_PEERS", obtenerDetallesPeers());
         }
     }
 
@@ -230,4 +246,33 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
             return new DTOPeerDetails(origen, "127.0.0.1", 0, "ERROR", "");
         }
     }
+
+    // === IMPLEMENTACIÓN DEL PATRÓN OBSERVER ===
+
+    @Override
+    public void registrarObservador(IObservador observador) {
+        if (observador != null && !observadores.contains(observador)) {
+            observadores.add(observador);
+            System.out.println(TAG + CYAN + "Observador registrado. Total: " + observadores.size() + RESET);
+        }
+    }
+
+    @Override
+    public void removerObservador(IObservador observador) {
+        if (observadores.remove(observador)) {
+            System.out.println(TAG + AMARILLO + "Observador removido. Total: " + observadores.size() + RESET);
+        }
+    }
+
+    @Override
+    public void notificarObservadores(String tipoDeDato, Object datos) {
+        for (IObservador observador : observadores) {
+            try {
+                observador.actualizar(tipoDeDato, datos);
+            } catch (Exception e) {
+                System.err.println(TAG + ROJO + "Error al notificar observador: " + e.getMessage() + RESET);
+            }
+        }
+    }
 }
+

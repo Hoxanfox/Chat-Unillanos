@@ -29,6 +29,18 @@ public interface IGestorConexionesCliente {
      */
     boolean registrarUsuarioEnSesion(String idSesion, String idUsuario);
 
+    /**
+     * Desvincula un usuario de su sesión (logout).
+     */
+    void desregistrarUsuarioEnSesion(String idSesion);
+
+    /**
+     * Obtiene el ID del usuario asociado a una sesión.
+     * @param idSesion ID de la sesión
+     * @return ID del usuario o null si no está autenticado
+     */
+    String obtenerUsuarioDeSesion(String idSesion);
+
     DTOSesionCliente obtenerSesion(String idSesion);
     List<DTOSesionCliente> obtenerClientesConectados();
 

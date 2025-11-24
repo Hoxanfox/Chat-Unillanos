@@ -27,7 +27,10 @@ public class ServicioNotificacionCambios implements IServicioP2P, ISujeto {
         NUEVO_MENSAJE,
         NUEVO_USUARIO,
         NUEVO_CANAL,
-        ACTUALIZACION_ESTADO
+        ACTUALIZACION_ESTADO,
+        PROGRESO_DESCARGA,      // ✅ NUEVO: Para notificar progreso de descargas P2P
+        DESCARGA_COMPLETADA,    // ✅ NUEVO: Para notificar cuando una descarga termina
+        DESCARGA_FALLIDA        // ✅ NUEVO: Para notificar cuando una descarga falla
     }
 
     public ServicioNotificacionCambios() {

@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import conexion.p2p.interfaces.IRouterMensajes;
 import conexion.p2p.interfaces.IGestorConexiones;
+import dominio.clienteServidor.Archivo;
 import dominio.clienteServidor.Canal;
 import dominio.clienteServidor.relaciones.CanalMiembro;
 import dominio.clienteServidor.Mensaje;
@@ -18,6 +19,7 @@ import gestorP2P.interfaces.IServicioP2P;
 import gestorP2P.utils.GsonUtil;
 import logger.LoggerCentral;
 import observador.IObservador;
+import repositorio.clienteServidor.ArchivoRepositorio;
 import repositorio.clienteServidor.CanalMiembroRepositorio;
 import repositorio.clienteServidor.CanalRepositorio;
 import repositorio.clienteServidor.MensajeRepositorio;
@@ -41,7 +43,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
     private static final String VERDE = "\u001B[32m";
     private static final String ROJO = "\u001B[31m";
 
-    private static final String[] ORDEN_SYNC = {"USUARIO", "CANAL", "MIEMBRO", "MENSAJE"};
+    private static final String[] ORDEN_SYNC = {"USUARIO", "CANAL", "MIEMBRO", "MENSAJE", "ARCHIVO"};
     private static final int MAX_REINTENTOS_SYNC = 3;
 
     private IGestorConexiones gestor;
@@ -52,8 +54,12 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
     private final CanalRepositorio repoCanal;
     private final CanalMiembroRepositorio repoMiembro;
     private final MensajeRepositorio repoMensaje;
+    private final ArchivoRepositorio repoArchivo; // NUEVO: Para sincronizar archivos
     private final PeerRepositorio repoPeer; // NUEVO: Para obtener peers ONLINE
     private final Map<String, MerkleTree> bosqueMerkle;
+
+    // ✅ NUEVO: Servicio para transferir archivos físicos P2P
+    private ServicioTransferenciaArchivos servicioTransferenciaArchivos;
 
     // Flag para saber si hicimos cambios durante este ciclo y debemos avisar al final
     private boolean huboCambiosEnEsteCiclo = false;
@@ -70,12 +76,22 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         this.repoCanal = new CanalRepositorio();
         this.repoMiembro = new CanalMiembroRepositorio();
         this.repoMensaje = new MensajeRepositorio();
+        this.repoArchivo = new ArchivoRepositorio(); // NUEVO
         this.repoPeer = new PeerRepositorio(); // NUEVO
         this.bosqueMerkle = new HashMap<>();
     }
 
     public void setNotificador(ServicioNotificacionCambios notificador) {
         this.notificador = notificador;
+    }
+
+    /**
+     * ✅ NUEVO: Permite inyectar el servicio de transferencia de archivos P2P.
+     * Esto permite que los archivos físicos se descarguen automáticamente después de sincronizar metadatos.
+     */
+    public void setServicioTransferenciaArchivos(ServicioTransferenciaArchivos servicioTransferencia) {
+        this.servicioTransferenciaArchivos = servicioTransferencia;
+        LoggerCentral.info(TAG, "Servicio de transferencia de archivos P2P configurado");
     }
 
     @Override
@@ -133,6 +149,11 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         String hashMensaje = bosqueMerkle.get("MENSAJE").getRootHash();
         LoggerCentral.debug(TAG, "- Árbol MENSAJE reconstruido. Hash: " +
             hashMensaje.substring(0, Math.min(8, hashMensaje.length())));
+
+        bosqueMerkle.put("ARCHIVO", new MerkleTree(repoArchivo.obtenerTodosParaSync()));
+        String hashArchivo = bosqueMerkle.get("ARCHIVO").getRootHash();
+        LoggerCentral.debug(TAG, "- Árbol ARCHIVO reconstruido. Hash: " +
+            hashArchivo.substring(0, Math.min(8, hashArchivo.length())));
 
         LoggerCentral.info(TAG, VERDE + "Todos los árboles Merkle reconstruidos exitosamente" + RESET);
     }
@@ -280,6 +301,19 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         contadorReintentos = 0;
         sincronizacionEnProgreso = false;
 
+        // ✅ NUEVO: Activar descarga de archivos físicos después de sincronizar metadatos
+        if (servicioTransferenciaArchivos != null) {
+            LoggerCentral.info(TAG, AZUL + "🔄 Verificando archivos físicos faltantes en Bucket/..." + RESET);
+            new Thread(() -> {
+                try {
+                    Thread.sleep(1000); // Esperar 1 segundo para que se guarden los metadatos
+                    servicioTransferenciaArchivos.verificarYDescargarArchivosFaltantes();
+                } catch (Exception e) {
+                    LoggerCentral.error(TAG, "Error verificando archivos faltantes: " + e.getMessage());
+                }
+            }).start();
+        }
+
         LoggerCentral.info(TAG, "Flag huboCambiosEnEsteCiclo: " + huboCambiosEnEsteCiclo);
         LoggerCentral.info(TAG, "Notificador disponible: " + (notificador != null));
 
@@ -360,6 +394,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
             case "CANAL": lista = repoCanal.obtenerTodosParaSync(); break;
             case "MIEMBRO": lista = repoMiembro.obtenerTodosParaSync(); break;
             case "MENSAJE": lista = repoMensaje.obtenerTodosParaSync(); break;
+            case "ARCHIVO": lista = repoArchivo.obtenerTodosParaSync(); break; // NUEVO
             default:
                 LoggerCentral.error(TAG, ROJO + "Tipo desconocido: " + tipo + RESET);
                 lista = List.of();
@@ -408,6 +443,11 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
                     Mensaje mensaje = gson.fromJson(data, Mensaje.class);
                     LoggerCentral.debug(TAG, "Guardando Mensaje: " + mensaje.getId());
                     guardado = repoMensaje.guardar(mensaje);
+                    break;
+                case "ARCHIVO": // NUEVO
+                    Archivo archivo = gson.fromJson(data, Archivo.class);
+                    LoggerCentral.debug(TAG, "Guardando Archivo: " + archivo.getId());
+                    guardado = repoArchivo.guardar(archivo);
                     break;
                 default:
                     LoggerCentral.error(TAG, ROJO + "Tipo desconocido para guardar: " + tipo + RESET);

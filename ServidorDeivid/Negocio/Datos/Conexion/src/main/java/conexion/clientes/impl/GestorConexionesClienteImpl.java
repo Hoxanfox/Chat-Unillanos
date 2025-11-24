@@ -95,6 +95,23 @@ public class GestorConexionesClienteImpl implements IGestorConexionesCliente, IM
     }
 
     @Override
+    public void desregistrarUsuarioEnSesion(String idSesion) {
+        DTOSesionCliente sesion = poolSesiones.get(idSesion);
+        if (sesion != null && sesion.getIdUsuario() != null) {
+            String idUsuario = sesion.getIdUsuario();
+            mapaUsuarioSesion.remove(idUsuario);
+            sesion.setIdUsuario(null);
+            System.out.println(TAG + "Usuario " + idUsuario + " desvinculado de sesión " + idSesion);
+        }
+    }
+
+    @Override
+    public String obtenerUsuarioDeSesion(String idSesion) {
+        DTOSesionCliente sesion = poolSesiones.get(idSesion);
+        return (sesion != null) ? sesion.getIdUsuario() : null;
+    }
+
+    @Override
     public void broadcast(String mensaje) {
         poolSesiones.values().forEach(s ->
                 transporte.enviarMensaje(s.getIp(), s.getPuerto(), mensaje)

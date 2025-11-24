@@ -38,41 +38,40 @@ public class ServicioInformacion implements IServicioP2P {
 
     /**
      * Obtiene la lista completa de peers conocidos.
-     * Marca como "ONLINE" los que están en el pool de conexiones activo.
-     * Marca como "OFFLINE" el resto.
+     * Usa el estado de la BD como fuente de verdad.
+     * Si el peer está en memoria pero no en BD, se marca como ONLINE.
      */
     public List<DTOPeerDetails> obtenerHistorialCompleto() {
-        // LoggerCentral.debug(TAG, "Consultando historial de peers (BD + Memoria)...");
+        LoggerCentral.debug(TAG, "Consultando historial de peers (BD)...");
 
-        // 1. Obtener todos los de la BD (Historial)
+        // 1. Obtener todos los de la BD (Fuente de verdad para el estado)
         List<PeerRepositorio.PeerInfo> historico = repositorio.listarPeersInfo();
+        LoggerCentral.debug(TAG, "Peers obtenidos de BD: " + historico.size());
 
-        // 2. Obtener los activos en memoria
+        // 2. Obtener los activos en memoria (para actualizar puerto servidor si aplica)
         List<DTOPeerDetails> activos = gestorConexiones.obtenerDetallesPeers();
-        List<String> ipsActivas = activos.stream().map(DTOPeerDetails::getIp).collect(Collectors.toList());
+        LoggerCentral.debug(TAG, "Peers activos en memoria: " + activos.size());
 
         List<DTOPeerDetails> resultado = new ArrayList<>();
 
         for (PeerRepositorio.PeerInfo info : historico) {
-            // Determinamos estado real cruzando datos
-            // (Simplificación: si la IP está en los sockets abiertos, está online)
-            boolean isOnline = ipsActivas.contains(info.ip);
+            // CORREGIDO: Usar el estado de la BD como fuente de verdad
+            String estado = info.estado.name(); // Tomar directamente de la BD
 
-            String estado = isOnline ? "ONLINE" : "OFFLINE";
+            LoggerCentral.debug(TAG, "Procesando peer: " + info.id + " | " + info.ip + ":" + info.puerto + " | Estado BD: " + estado);
 
-            // Para los online, intentamos buscar el puerto servidor actualizado si está en memoria
-            // Esto es vital para mostrar el puerto real (ej. 9000) y no el efímero (ej. 54321)
+            // Para los online, buscar el puerto servidor actualizado si está en memoria
             int puertoMostrar = info.puerto;
-            if (isOnline) {
-                // Buscar en activos para ver si tiene un puerto servidor actualizado
-                DTOPeerDetails activo = activos.stream()
-                        .filter(a -> a.getIp().equals(info.ip))
-                        .findFirst()
-                        .orElse(null);
 
-                if (activo != null && activo.getPuertoServidor() > 0) {
-                    puertoMostrar = activo.getPuertoServidor();
-                }
+            // Buscar en activos para ver si tiene un puerto servidor actualizado
+            DTOPeerDetails activo = activos.stream()
+                    .filter(a -> a.getIp() != null && a.getIp().equals(info.ip))
+                    .findFirst()
+                    .orElse(null);
+
+            if (activo != null && activo.getPuertoServidor() > 0) {
+                puertoMostrar = activo.getPuertoServidor();
+                LoggerCentral.debug(TAG, "  -> Puerto actualizado de memoria: " + puertoMostrar);
             }
 
             resultado.add(new DTOPeerDetails(
@@ -84,7 +83,7 @@ public class ServicioInformacion implements IServicioP2P {
             ));
         }
 
-        // LoggerCentral.debug(TAG, "Consulta finalizada. Peers encontrados: " + resultado.size());
+        LoggerCentral.info(TAG, "Consulta finalizada. Peers retornados: " + resultado.size());
         return resultado;
     }
 
