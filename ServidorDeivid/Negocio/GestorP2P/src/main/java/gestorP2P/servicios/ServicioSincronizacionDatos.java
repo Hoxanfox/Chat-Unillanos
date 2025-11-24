@@ -130,11 +130,19 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         });
 
         router.registrarManejadorRespuesta("sync_check_all", (resp) -> {
+            LoggerCentral.info(TAG, CYAN + ">>> Manejador sync_check_all activado <<<" + RESET);
+            LoggerCentral.debug(TAG, "Respuesta exitosa: " + resp.fueExitoso());
+            LoggerCentral.debug(TAG, "Respuesta tiene datos: " + (resp.getData() != null));
+
             if(resp.fueExitoso() && resp.getData() != null) {
-                LoggerCentral.info(TAG, "Respuesta sync_check_all recibida. Procesando diferencias...");
+                LoggerCentral.info(TAG, "✓ Respuesta sync_check_all recibida. Procesando diferencias...");
+                LoggerCentral.debug(TAG, "Datos recibidos: " + resp.getData().toString());
                 procesarDiferenciasEnOrden(resp.getData().getAsJsonObject());
             } else {
                 LoggerCentral.warn(TAG, AMARILLO + "Respuesta sync_check_all no exitosa o sin datos" + RESET);
+                if (!resp.fueExitoso()) {
+                    LoggerCentral.warn(TAG, "Status: " + resp.getStatus());
+                }
             }
         });
 
@@ -146,6 +154,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
             JsonArray ids = new JsonArray();
             lista.forEach(e -> ids.add(e.getId()));
             LoggerCentral.debug(TAG, "Enviando " + ids.size() + " IDs de tipo " + tipo);
+            LoggerCentral.debug(TAG, "IDs: " + ids.toString());
             JsonObject result = new JsonObject();
             result.addProperty("tipo", tipo);
             result.add("ids", ids);
@@ -153,14 +162,18 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         });
 
         router.registrarManejadorRespuesta("sync_get_ids", (resp) -> {
+            LoggerCentral.info(TAG, CYAN + ">>> Manejador sync_get_ids activado <<<" + RESET);
+            LoggerCentral.debug(TAG, "Respuesta exitosa: " + resp.fueExitoso());
+
             if(resp.fueExitoso()) {
                 JsonObject res = resp.getData().getAsJsonObject();
                 String tipo = res.get("tipo").getAsString();
                 int cantidadIds = res.get("ids").getAsJsonArray().size();
-                LoggerCentral.info(TAG, "Recibidos " + cantidadIds + " IDs de tipo " + CYAN + tipo + RESET);
+                LoggerCentral.info(TAG, "✓ Recibidos " + cantidadIds + " IDs de tipo " + CYAN + tipo + RESET);
+                LoggerCentral.debug(TAG, "IDs recibidos: " + res.get("ids").toString());
                 solicitarEntidadesFaltantes(tipo, res.get("ids").getAsJsonArray());
             } else {
-                LoggerCentral.error(TAG, ROJO + "Error en respuesta sync_get_ids" + RESET);
+                LoggerCentral.error(TAG, ROJO + "Error en respuesta sync_get_ids: " + resp.getStatus() + RESET);
             }
         });
 
@@ -201,6 +214,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
 
     private void procesarDiferenciasEnOrden(JsonObject hashesRemotos) {
         LoggerCentral.info(TAG, AZUL + "=== Procesando diferencias en orden ===" + RESET);
+        LoggerCentral.debug(TAG, "Hashes remotos recibidos: " + hashesRemotos.toString());
 
         for (String tipo : ORDEN_SYNC) {
             if (!hashesRemotos.has(tipo)) {
@@ -211,14 +225,22 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
             String hashRemoto = hashesRemotos.get(tipo).getAsString();
             String hashLocal = bosqueMerkle.get(tipo).getRootHash();
 
+            LoggerCentral.debug(TAG, "Comparando " + tipo + ":");
+            LoggerCentral.debug(TAG, "  - Hash Local:  " + hashLocal);
+            LoggerCentral.debug(TAG, "  - Hash Remoto: " + hashRemoto);
+            LoggerCentral.debug(TAG, "  - Son iguales: " + hashLocal.equals(hashRemoto));
+
             if (!hashLocal.equals(hashRemoto)) {
                 String hLocalCorto = hashLocal.length() > 8 ? hashLocal.substring(0, 8) : hashLocal;
                 String hRemotoCorto = hashRemoto.length() > 8 ? hashRemoto.substring(0, 8) : hashRemoto;
                 LoggerCentral.warn(TAG, "Diferencia en " + AMARILLO + tipo + RESET + " (L:" + hLocalCorto + " != R:" + hRemotoCorto + "). Reparando...");
 
                 DTORequest req = new DTORequest("sync_get_ids", gson.toJsonTree(tipo));
-                gestor.broadcast(gson.toJson(req));
+                String jsonReq = gson.toJson(req);
+                LoggerCentral.debug(TAG, "Enviando request sync_get_ids: " + jsonReq);
+                gestor.broadcast(jsonReq);
                 LoggerCentral.info(TAG, "Solicitando IDs para tipo: " + CYAN + tipo + RESET);
+                LoggerCentral.info(TAG, AMARILLO + "⏸ Deteniendo verificación. Esperando respuesta de IDs para " + tipo + RESET);
                 return; // Detener aquí y reparar este nivel
             } else {
                 String hCorto = hashLocal.length() > 8 ? hashLocal.substring(0, 8) : hashLocal;
@@ -228,6 +250,8 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
 
         // SI LLEGAMOS AQUÍ, ES QUE TODO ESTÁ SINCRONIZADO
         LoggerCentral.info(TAG, VERDE + "✔ Sistema totalmente sincronizado." + RESET);
+        LoggerCentral.info(TAG, "Flag huboCambiosEnEsteCiclo: " + huboCambiosEnEsteCiclo);
+        LoggerCentral.info(TAG, "Notificador disponible: " + (notificador != null));
 
         // Aquí enviamos el PUSH solo si realmente trajimos datos nuevos
         if (huboCambiosEnEsteCiclo && notificador != null) {
@@ -240,6 +264,8 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
             LoggerCentral.info(TAG, VERDE + "Notificación de cambios enviada exitosamente" + RESET);
         } else if (huboCambiosEnEsteCiclo && notificador == null) {
             LoggerCentral.warn(TAG, AMARILLO + "Hubo cambios pero el notificador es null" + RESET);
+        } else if (!huboCambiosEnEsteCiclo) {
+            LoggerCentral.debug(TAG, "No hubo cambios en este ciclo. No se envía notificación.");
         }
     }
 
@@ -248,26 +274,42 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         List<? extends IMerkleEntity> locales = obtenerListaPorTipo(tipo);
         List<String> misIds = locales.stream().map(IMerkleEntity::getId).collect(Collectors.toList());
 
-        LoggerCentral.debug(TAG, "IDs locales: " + misIds.size() + ", IDs remotos: " + idsRemotos.size());
+        LoggerCentral.debug(TAG, "IDs locales (" + misIds.size() + "): " + misIds.toString());
+
+        // Convertir idsRemotos a lista para logging
+        List<String> idsRemotosList = new java.util.ArrayList<>();
+        for(JsonElement el : idsRemotos) {
+            idsRemotosList.add(el.getAsString());
+        }
+        LoggerCentral.debug(TAG, "IDs remotos (" + idsRemotosList.size() + "): " + idsRemotosList.toString());
 
         int faltantes = 0;
         for(JsonElement el : idsRemotos) {
             String idRemoto = el.getAsString();
-            if(!misIds.contains(idRemoto)) {
+            boolean loTengo = misIds.contains(idRemoto);
+            LoggerCentral.debug(TAG, "  Verificando ID remoto: " + idRemoto + " -> ¿Lo tengo?: " + loTengo);
+
+            if(!loTengo) {
                 faltantes++;
-                LoggerCentral.debug(TAG, "Solicitando " + CYAN + tipo + RESET + ": " + idRemoto);
+                LoggerCentral.info(TAG, AMARILLO + "⬇ Solicitando " + CYAN + tipo + RESET + AMARILLO + " faltante ID: " + idRemoto + RESET);
                 JsonObject reqPayload = new JsonObject();
                 reqPayload.addProperty("tipo", tipo);
                 reqPayload.addProperty("id", idRemoto);
                 DTORequest req = new DTORequest("sync_get_entity", reqPayload);
-                gestor.broadcast(gson.toJson(req));
+                String jsonReq = gson.toJson(req);
+                LoggerCentral.debug(TAG, "Request JSON: " + jsonReq);
+                gestor.broadcast(jsonReq);
             }
         }
 
         if (faltantes == 0) {
-            LoggerCentral.info(TAG, AMARILLO + "Tenemos todos los IDs de " + tipo + ". (Diferencia de contenido)." + RESET);
+            LoggerCentral.warn(TAG, AMARILLO + "⚠ Tenemos todos los IDs de " + tipo + " pero los hashes difieren." + RESET);
+            LoggerCentral.warn(TAG, AMARILLO + "   Esto indica diferencia de contenido en las entidades existentes." + RESET);
+            // Aquí deberíamos reiniciar verificación
+            LoggerCentral.info(TAG, "Reiniciando verificación para detectar cambios de contenido...");
+            iniciarSincronizacionGeneral();
         } else {
-            LoggerCentral.info(TAG, VERDE + "Solicitadas " + faltantes + " entidades faltantes de tipo " + tipo + RESET);
+            LoggerCentral.info(TAG, VERDE + "✓ Solicitadas " + faltantes + " entidades faltantes de tipo " + tipo + RESET);
         }
     }
 
@@ -389,4 +431,3 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         }
     }
 }
-
