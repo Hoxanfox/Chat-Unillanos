@@ -54,6 +54,20 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
     @Override
     public String getNombre() { return "ServicioGestionRed"; }
 
+    /**
+     * NUEVO: Método público para notificar cuando un peer se desconecta.
+     * Llamado por el callback de GestorConexiones.
+     */
+    public void onPeerDesconectado(String peerId) {
+        LoggerCentral.warn(TAG, ROJO + "🔴 Peer desconectado: " + peerId + " -> Actualizando BD a OFFLINE" + RESET);
+
+        // Actualizar estado en BD a OFFLINE
+        repositorio.actualizarEstado(peerId, Peer.Estado.OFFLINE);
+
+        // Notificar a observadores (por si ServicioSync quiere reaccionar)
+        notificarObservadores("PEER_OFFLINE", peerId);
+    }
+
     @Override
     public void inicializar(IGestorConexiones gestor, IRouterMensajes router) {
         this.gestorConexiones = gestor;
@@ -249,42 +263,73 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
         for (PeerRepositorio.PeerInfo destino : conocidos) {
             if (destino.ip.equals(miIp) && destino.puerto == miPuerto) continue;
 
-            // Conectamos proactivamente
-            gestorConexiones.conectarAPeer(destino.ip, destino.puerto);
+            String targetId = destino.ip + ":" + destino.puerto;
 
-            new Thread(() -> {
-                try {
-                    Thread.sleep(1500); // Esperar handshake TCP
-                    String targetId = destino.ip + ":" + destino.puerto;
+            // Verificar si ya está conectado antes de intentar reconectar
+            DTOPeerDetails conexionExistente = gestorConexiones.obtenerDetallesPeers().stream()
+                    .filter(p -> {
+                        String pId = p.getId();
+                        // Comparar con socket_info o con IP:puerto
+                        return pId.equals(targetId) ||
+                               (p.getIp() != null && p.getIp().equals(destino.ip) && p.getPuerto() == destino.puerto);
+                    })
+                    .findFirst().orElse(null);
 
-                    DTOPeerDetails conexionActiva = gestorConexiones.obtenerDetallesPeers().stream()
-                            .filter(p -> p.getId().equals(targetId))
-                            .findFirst().orElse(null);
+            if (conexionExistente != null) {
+                // Ya está conectado, solo enviar PING
+                LoggerCentral.debug(TAG, "Enviando PING a peer conectado: " + targetId);
+                gestorConexiones.enviarMensaje(conexionExistente, jsonPing);
 
-                    if (conexionActiva != null) {
-                        // Conexión OK -> Enviar Ping
-                        // LoggerCentral.debug(TAG, "Enviando PING a " + targetId);
-                        gestorConexiones.enviarMensaje(conexionActiva, jsonPing);
+                // Programar verificación de timeout (si no llega PONG en 5 segundos -> OFFLINE)
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(5000); // Timeout de 5 segundos
 
-                        // Actualizar BD a ONLINE (provisional, el Pong confirma la lógica)
-                        Peer pOnline = new Peer();
-                        pOnline.setId(destino.id);
-                        pOnline.setIp(destino.ip);
-                        pOnline.setEstado(Peer.Estado.ONLINE);
-                        repositorio.guardarOActualizarPeer(pOnline, targetId);
+                        // Verificar si sigue conectado
+                        boolean sigueConectado = gestorConexiones.obtenerDetallesPeers().stream()
+                                .anyMatch(p -> p.getId().equals(targetId) ||
+                                          (p.getIp() != null && p.getIp().equals(destino.ip) && p.getPuerto() == destino.puerto));
 
-                    } else {
-                        // Conexión Fallida -> Marcar OFFLINE
-                        LoggerCentral.warn(TAG, "Fallo conexión con " + targetId + " -> " + ROJO + "OFFLINE" + RESET);
-                        Peer pOffline = new Peer();
-                        pOffline.setId(destino.id);
-                        pOffline.setIp(destino.ip);
-                        pOffline.setEstado(Peer.Estado.OFFLINE);
-                        repositorio.guardarOActualizarPeer(pOffline, targetId);
-                        notificarObservadores("PEER_OFFLINE", targetId);
+                        if (!sigueConectado) {
+                            // Se desconectó sin responder - marcar OFFLINE
+                            LoggerCentral.warn(TAG, ROJO + "TIMEOUT: " + targetId + " no respondió PING -> OFFLINE" + RESET);
+                            repositorio.actualizarEstado(targetId, Peer.Estado.OFFLINE);
+                            notificarObservadores("PEER_OFFLINE", targetId);
+                        }
+                    } catch (Exception e) {
+                        LoggerCentral.error(TAG, "Error en timeout de PING: " + e.getMessage());
                     }
-                } catch (Exception e) {}
-            }).start();
+                }).start();
+
+            } else {
+                // No está conectado, intentar conectar
+                gestorConexiones.conectarAPeer(destino.ip, destino.puerto);
+
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(2000); // Esperar handshake TCP
+
+                        DTOPeerDetails conexionNueva = gestorConexiones.obtenerDetallesPeers().stream()
+                                .filter(p -> p.getId().equals(targetId) ||
+                                        (p.getIp() != null && p.getIp().equals(destino.ip) && p.getPuerto() == destino.puerto))
+                                .findFirst().orElse(null);
+
+                        if (conexionNueva != null) {
+                            // Conexión exitosa -> Enviar PING
+                            LoggerCentral.debug(TAG, VERDE + "Reconectado con " + targetId + " -> Enviando PING" + RESET);
+                            gestorConexiones.enviarMensaje(conexionNueva, jsonPing);
+                            repositorio.actualizarEstado(targetId, Peer.Estado.ONLINE);
+                        } else {
+                            // Conexión falló -> OFFLINE
+                            LoggerCentral.warn(TAG, ROJO + "Fallo conexión con " + targetId + " -> OFFLINE" + RESET);
+                            repositorio.actualizarEstado(targetId, Peer.Estado.OFFLINE);
+                            notificarObservadores("PEER_OFFLINE", targetId);
+                        }
+                    } catch (Exception e) {
+                        LoggerCentral.error(TAG, "Error verificando peer: " + e.getMessage());
+                    }
+                }).start();
+            }
         }
     }
 

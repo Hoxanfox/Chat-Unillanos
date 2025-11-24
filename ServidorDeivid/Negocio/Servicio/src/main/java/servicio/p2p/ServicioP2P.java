@@ -55,6 +55,12 @@ public class ServicioP2P implements IServicioP2PControl {
         ServicioGestionRed srvRed = new ServicioGestionRed();
         fachada.registrarServicio(srvRed);
 
+        // NUEVO: Registrar callback para detectar desconexiones automáticamente
+        fachada.obtenerGestorConexionesImpl().setOnPeerDisconnectedCallback(peerId -> {
+            LoggerCentral.warn(TAG, "🔴 Peer desconectado detectado: " + peerId);
+            srvRed.onPeerDesconectado(peerId);
+        });
+
         // 3. Sincronización (El Auditor - Observador)
         // Sabe comparar bases de datos usando Merkle Trees.
         LoggerCentral.info(TAG, "Registrando ServicioSincronizacionDatos...");

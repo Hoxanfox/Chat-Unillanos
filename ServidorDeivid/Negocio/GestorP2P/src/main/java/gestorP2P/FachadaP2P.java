@@ -113,4 +113,12 @@ public class FachadaP2P {
     public IGestorConexiones getGestorConexiones() {
         return gestorConexiones;
     }
+
+    /**
+     * Expone el GestorConexionesImpl para configuración avanzada.
+     * NUEVO: Permite registrar callbacks de desconexión.
+     */
+    public GestorConexionesImpl obtenerGestorConexionesImpl() {
+        return (GestorConexionesImpl) gestorConexiones;
+    }
 }

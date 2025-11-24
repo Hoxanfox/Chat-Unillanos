@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener {
 
@@ -32,11 +33,22 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
     private IRouterMensajes routerMensajes;
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    // NUEVO: Callback para notificar desconexiones
+    private Consumer<String> onPeerDisconnectedCallback;
+
     public GestorConexionesImpl() {
         System.out.println(TAG + "Inicializando Gestor de Conexiones...");
         this.poolPeers = new ConcurrentHashMap<>();
         // Nos pasamos a nosotros mismos como listener
         this.transporte = new NettyTransporteImpl(this);
+    }
+
+    /**
+     * Registra un callback que será llamado cuando un peer se desconecta.
+     * @param callback Función que recibe el ID del peer desconectado (formato "ip:puerto")
+     */
+    public void setOnPeerDisconnectedCallback(Consumer<String> callback) {
+        this.onPeerDisconnectedCallback = callback;
     }
 
     public void setRouterMensajes(IRouterMensajes router) {
@@ -193,6 +205,11 @@ public class GestorConexionesImpl implements IGestorConexiones, IMensajeListener
         if (poolPeers.containsKey(origen)) {
             System.out.println(TAG + AMARILLO + "Detectada caída/cierre de canal: " + origen + ". Eliminando del pool." + RESET);
             poolPeers.remove(origen);
+
+            // NUEVO: Llamar al callback de desconexión si está presente
+            if (onPeerDisconnectedCallback != null) {
+                onPeerDisconnectedCallback.accept(origen);
+            }
         }
     }
 
