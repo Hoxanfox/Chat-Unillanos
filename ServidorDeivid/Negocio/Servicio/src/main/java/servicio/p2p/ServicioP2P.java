@@ -76,8 +76,8 @@ public class ServicioP2P implements IServicioP2PControl {
         LoggerCentral.info(TAG, "Registrando ServicioChat...");
         this.servicioChat = new ServicioChat();
 
-        // Chat avisa al Notificador cuando escribe/recibe algo para disparar eventos
-        this.servicioChat.setNotificador(notificador);
+        // CORREGIDO: Chat ahora activa sincronización automática en lugar de notificar directamente
+        this.servicioChat.setServicioSync(servicioSync);
         fachada.registrarServicio(servicioChat);
 
         // 5. Descubrimiento (Gossip simple opcional)
