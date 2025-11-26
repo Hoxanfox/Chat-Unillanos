@@ -51,4 +51,14 @@ public class Configuracion {
         String port = props.getProperty("peer.inicial.puerto");
         return port != null && !port.isEmpty() ? Integer.parseInt(port) : 0;
     }
+
+    // --- Configuración para Clientes ---
+
+    public String getClienteHost() {
+        return props.getProperty("cliente.host", "127.0.0.1");
+    }
+
+    public int getClientePuerto() {
+        return Integer.parseInt(props.getProperty("cliente.puerto", "8000"));
+    }
 }

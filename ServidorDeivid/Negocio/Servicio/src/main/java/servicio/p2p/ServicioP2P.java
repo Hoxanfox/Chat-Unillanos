@@ -1,6 +1,8 @@
 package servicio.p2p;
 
 import dto.p2p.DTOPeerDetails;
+import dto.p2p.DTOPeerConClientes;
+import dto.cliente.DTOSesionCliente;
 import gestorP2P.FachadaP2P;
 import gestorP2P.servicios.ServicioChat;
 import gestorP2P.servicios.ServicioDescubrimiento;
@@ -9,6 +11,7 @@ import gestorP2P.servicios.ServicioInformacion;
 import gestorP2P.servicios.ServicioNotificacionCambios;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
 import gestorP2P.servicios.ServicioTransferenciaArchivos; // ✅ NUEVO
+import gestorP2P.servicios.ServicioTopologiaRed; // ✅ NUEVO
 import logger.LoggerCentral;
 
 import java.util.Collections;
@@ -28,6 +31,10 @@ public class ServicioP2P implements IServicioP2PControl {
     private ServicioInformacion servicioInfo;
     private ServicioSincronizacionDatos servicioSync;
     private ServicioNotificacionCambios notificador;
+    private ServicioTopologiaRed servicioTopologia; // ✅ NUEVO
+
+    // ✅ NUEVO: Referencia al servicio de clientes para obtener sesiones activas
+    private servicio.clienteServidor.IServicioClienteControl servicioCliente;
 
     private boolean running;
 
@@ -125,6 +132,16 @@ public class ServicioP2P implements IServicioP2PControl {
         fachada.registrarServicio(servicioInfo);
         LoggerCentral.debug(TAG, "✓ ServicioInformacion registrado.");
 
+        // ✅ 7. NUEVO: Topología de Red (El Cartógrafo)
+        // Sincroniza automáticamente la información de peers + clientes conectados
+        LoggerCentral.info(TAG, "Registrando ServicioTopologiaRed...");
+        this.servicioTopologia = new ServicioTopologiaRed();
+        fachada.registrarServicio(servicioTopologia);
+        LoggerCentral.debug(TAG, "✓ ServicioTopologiaRed registrado.");
+
+        // NOTA: El ServicioCliente se inyectará después desde el orquestador
+        LoggerCentral.debug(TAG, "ServicioTopologiaRed esperando inyección de ServicioCliente...");
+
         LoggerCentral.info(TAG, "Configuración de servicios completada exitosamente.");
     }
 
@@ -145,6 +162,13 @@ public class ServicioP2P implements IServicioP2PControl {
             LoggerCentral.error(TAG, "❌ Error fatal al iniciar red P2P: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    /**
+     * ✅ NUEVO: Expone el servicio de sincronización P2P para inyección en servicios CS.
+     */
+    public ServicioSincronizacionDatos getServicioSincronizacion() {
+        return servicioSync;
     }
 
     @Override
@@ -240,6 +264,126 @@ public class ServicioP2P implements IServicioP2PControl {
     public boolean estaCorriendo() {
         LoggerCentral.debug(TAG, "Estado consultado: " + (running ? "CORRIENDO" : "DETENIDA"));
         return running;
+    }
+
+    /**
+     * ✅ NUEVO: Inyecta la referencia al servicio de clientes.
+     * Necesario para obtener la lista de clientes locales cuando se consultan peers con clientes.
+     */
+    public void setServicioCliente(servicio.clienteServidor.IServicioClienteControl servicioCliente) {
+        this.servicioCliente = servicioCliente;
+        LoggerCentral.info(TAG, "✅ ServicioCliente inyectado en ServicioP2P.");
+
+        // También inyectar en el servicio de topología usando Supplier
+        if (servicioTopologia != null && servicioCliente != null) {
+            servicioTopologia.setProveedorClientes(() -> {
+                if (servicioCliente.estaCorriendo()) {
+                    return servicioCliente.getSesionesActivas();
+                }
+                return new java.util.ArrayList<>();
+            });
+            LoggerCentral.info(TAG, "✅ Proveedor de clientes inyectado en ServicioTopologiaRed.");
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene la topología completa de la red sincronizada automáticamente.
+     * Incluye información de TODOS los peers y sus clientes conectados.
+     * Se actualiza automáticamente cada 5 segundos vía P2P.
+     *
+     * @return Mapa con ID del peer como clave y DTOTopologiaRed como valor
+     */
+    public java.util.Map<String, dto.topologia.DTOTopologiaRed> obtenerTopologiaCompleta() {
+        if (servicioTopologia != null) {
+            return servicioTopologia.obtenerTopologiaCompleta();
+        }
+        LoggerCentral.warn(TAG, "ServicioTopologia no disponible");
+        return new java.util.HashMap<>();
+    }
+
+    /**
+     * ✅ NUEVO: Registra un observador en el servicio de topología.
+     * El observador será notificado cada vez que cambie la topología de la red.
+     *
+     * Eventos que notifica:
+     * - TOPOLOGIA_ACTUALIZADA: Se actualizó la topología (cada 5s o por eventos)
+     * - TOPOLOGIA_REMOTA_RECIBIDA: Se recibió topología de un peer remoto
+     * - PEER_DESCONECTADO: Un peer se desconectó de la red
+     */
+    public void registrarObservadorTopologia(observador.IObservador observador) {
+        if (servicioTopologia != null) {
+            servicioTopologia.registrarObservador(observador);
+            LoggerCentral.info(TAG, "✅ Observador registrado en ServicioTopologiaRed.");
+        } else {
+            LoggerCentral.error(TAG, "❌ ServicioTopologia no disponible.");
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Fuerza una actualización inmediata de la topología.
+     * Útil cuando se detecta un cambio y se quiere propagar inmediatamente
+     * sin esperar los 5 segundos del ciclo automático.
+     */
+    public void forzarActualizacionTopologia() {
+        if (servicioTopologia != null) {
+            servicioTopologia.forzarActualizacion();
+            LoggerCentral.info(TAG, "✅ Actualización de topología forzada.");
+        } else {
+            LoggerCentral.warn(TAG, "ServicioTopologia no disponible.");
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene la lista de peers con información de sus clientes conectados.
+     * Por ahora solo retorna información del servidor local, ya que los peers remotos
+     * no comparten automáticamente su lista de clientes.
+     *
+     * Para obtener clientes de peers remotos, necesitarías implementar un protocolo
+     * de consulta P2P adicional.
+     */
+    @Override
+    public List<DTOPeerConClientes> obtenerPeersConClientes() {
+        LoggerCentral.debug(TAG, "Obteniendo lista de peers con información de clientes...");
+
+        List<DTOPeerConClientes> resultado = new java.util.ArrayList<>();
+
+        // 1. Obtener lista de peers
+        List<DTOPeerDetails> peers = obtenerListaPeers();
+
+        for (DTOPeerDetails peer : peers) {
+            DTOPeerConClientes peerConClientes = new DTOPeerConClientes(peer);
+
+            // 2. Si es el servidor local, agregar los clientes conectados
+            if (esServidorLocal(peer) && servicioCliente != null) {
+                List<DTOSesionCliente> clientesLocales = servicioCliente.getSesionesActivas();
+                peerConClientes.setClientesConectados(clientesLocales);
+                LoggerCentral.debug(TAG, "Peer local: " + clientesLocales.size() + " clientes conectados");
+            }
+            // Para peers remotos, la lista de clientes estará vacía por ahora
+            // (requerirías un protocolo P2P para consultar clientes remotos)
+
+            resultado.add(peerConClientes);
+        }
+
+        LoggerCentral.info(TAG, "Lista de peers con clientes generada: " + resultado.size() + " peers");
+        return resultado;
+    }
+
+    /**
+     * Determina si un peer es el servidor local.
+     * Heurística: El peer local tiene ID "LOCAL" o coincide con la configuración local.
+     */
+    private boolean esServidorLocal(DTOPeerDetails peer) {
+        // El ID "LOCAL" es una convención que podrías estar usando
+        if ("LOCAL".equalsIgnoreCase(peer.getId())) {
+            return true;
+        }
+
+        // Alternativamente, podrías comparar con IP/Puerto local
+        // return peer.getIp().equals("127.0.0.1") || peer.getIp().equals("localhost");
+
+        // Por ahora, asumimos que el primer peer o el que tiene cierto patrón es local
+        return peer.getId() != null && peer.getId().startsWith("LOCAL");
     }
 
     // === NUEVO: MÉTODOS PARA SUSCRIPCIÓN DE OBSERVADORES ===

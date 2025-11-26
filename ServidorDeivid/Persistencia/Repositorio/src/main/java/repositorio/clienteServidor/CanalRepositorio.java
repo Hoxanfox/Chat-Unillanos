@@ -57,4 +57,35 @@ public class CanalRepositorio {
             return false;
         }
     }
+
+    /**
+     * Obtiene un canal por su ID.
+     */
+    public Canal obtenerPorId(UUID id) {
+        String sql = "SELECT * FROM canales WHERE id = ?";
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, id.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Canal c = new Canal();
+                    c.setId(UUID.fromString(rs.getString("id")));
+                    c.setNombre(rs.getString("nombre"));
+                    c.setPeerPadre(rs.getString("peer_padre") != null ? UUID.fromString(rs.getString("peer_padre")) : null);
+
+                    Usuario creador = new Usuario();
+                    creador.setId(UUID.fromString(rs.getString("creador_id")));
+                    c.setCreador(creador);
+
+                    try { c.setTipo(Canal.Tipo.valueOf(rs.getString("tipo"))); } catch (Exception e) {}
+                    c.setFechaCreacion(rs.getTimestamp("fecha_creacion").toInstant());
+                    return c;
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[RepoCanal] Error al obtener canal por ID: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return null;
+    }
 }

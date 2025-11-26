@@ -1,5 +1,6 @@
 -- init.sql: esquema inicial para MySQL
 
+DROP TABLE IF EXISTS canal_invitaciones;
 DROP TABLE IF EXISTS canal_miembros;
 DROP TABLE IF EXISTS mensajes;
 DROP TABLE IF EXISTS canales;
@@ -59,9 +60,13 @@ CREATE TABLE mensajes (
   tipo ENUM('AUDIO','TEXTO') NOT NULL DEFAULT 'TEXTO',
   contenido TEXT,
   fecha_envio DATETIME(6) NOT NULL,
+  peer_remitente_id VARCHAR(255) NULL COMMENT 'ID del peer WebRTC del remitente',
+  peer_destino_id VARCHAR(255) NULL COMMENT 'ID del peer WebRTC del destinatario',
   CONSTRAINT fk_mensajes_remitente FOREIGN KEY (remitente_id) REFERENCES usuarios(id) ON DELETE SET NULL,
   CONSTRAINT fk_mensajes_destinatario_usuario FOREIGN KEY (destinatario_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
-  CONSTRAINT fk_mensajes_canal FOREIGN KEY (canal_id) REFERENCES canales(id) ON DELETE CASCADE
+  CONSTRAINT fk_mensajes_canal FOREIGN KEY (canal_id) REFERENCES canales(id) ON DELETE CASCADE,
+  INDEX idx_peer_remitente (peer_remitente_id),
+  INDEX idx_peer_destino (peer_destino_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE canal_miembros (
@@ -71,6 +76,21 @@ CREATE TABLE canal_miembros (
   CONSTRAINT fk_miembros_canal FOREIGN KEY (canal_id) REFERENCES canales(id) ON DELETE CASCADE,
   CONSTRAINT fk_miembros_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE canal_invitaciones (
+  id CHAR(36) NOT NULL PRIMARY KEY,
+  canal_id CHAR(36) NOT NULL,
+  invitador_id CHAR(36) NOT NULL COMMENT 'Usuario que envía la invitación (admin del canal)',
+  invitado_id CHAR(36) NOT NULL COMMENT 'Usuario que recibe la invitación',
+  fecha_creacion DATETIME(6) NOT NULL,
+  estado ENUM('PENDIENTE','ACEPTADA','RECHAZADA') NOT NULL DEFAULT 'PENDIENTE',
+  CONSTRAINT fk_invitaciones_canal FOREIGN KEY (canal_id) REFERENCES canales(id) ON DELETE CASCADE,
+  CONSTRAINT fk_invitaciones_invitador FOREIGN KEY (invitador_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  CONSTRAINT fk_invitaciones_invitado FOREIGN KEY (invitado_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  INDEX idx_invitaciones_invitado (invitado_id),
+  INDEX idx_invitaciones_estado (estado),
+  INDEX idx_invitaciones_canal (canal_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Invitaciones a canales';
 
 -- Índices recomendados
 CREATE INDEX idx_usuarios_peerpadre ON usuarios(peer_padre);

@@ -23,6 +23,7 @@
         <module>Negocio/GestorP2P</module>
         <module>Infraestructura/Configuracion</module>
         <module>Negocio/GestorClientes</module>
+        <module>Negocio/GestorUsuarios</module>
     </modules>
 
     <properties>

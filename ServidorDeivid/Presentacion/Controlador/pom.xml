@@ -26,17 +26,26 @@
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
-        <!-- Dependencia al servicio P2P -->
+        <!-- Dependencia al servicio P2P y Usuario -->
         <dependency>
             <groupId>org.example</groupId>
             <artifactId>Servicio</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
+
         <!-- DTO dependency: usar DTOPeer del módulo DTO -->
         <dependency>
             <groupId>org.example</groupId>
             <artifactId>DTO</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <!-- Logger dependency -->
+        <dependency>
+            <groupId>org.example</groupId>
+            <artifactId>Logger</artifactId>
             <version>1.0-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>

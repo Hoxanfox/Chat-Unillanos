@@ -1,4 +1,4 @@
-package gestorClientes.servicios;
+package gestorClientes.servicios.usuario;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;

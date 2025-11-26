@@ -28,7 +28,7 @@ public class MensajeRepositorio {
     public List<Mensaje> obtenerTodosParaSync() {
         List<Mensaje> lista = new ArrayList<>();
         // Seleccionamos TODAS las columnas relevantes
-        String sql = "SELECT id, remitente_id, destinatario_usuario_id, canal_id, tipo, contenido, fecha_envio " +
+        String sql = "SELECT id, remitente_id, destinatario_usuario_id, canal_id, tipo, contenido, fecha_envio, peer_remitente_id, peer_destino_id " +
                 "FROM mensajes ORDER BY fecha_envio ASC, id ASC";
 
         try (Connection conn = mysql.getConnection();
@@ -45,15 +45,90 @@ public class MensajeRepositorio {
     }
 
     /**
+     * ✅ NUEVO: Obtiene el historial de mensajes entre dos usuarios.
+     * Retorna todos los mensajes donde uno es remitente y el otro destinatario (en ambas direcciones).
+     */
+    public List<Mensaje> obtenerHistorialEntre(String userId1, String userId2) {
+        List<Mensaje> lista = new ArrayList<>();
+
+        String sql = "SELECT id, remitente_id, destinatario_usuario_id, canal_id, tipo, contenido, fecha_envio, peer_remitente_id, peer_destino_id " +
+                "FROM mensajes " +
+                "WHERE (remitente_id = ? AND destinatario_usuario_id = ?) " +
+                "   OR (remitente_id = ? AND destinatario_usuario_id = ?) " +
+                "ORDER BY fecha_envio ASC, id ASC";
+
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            // Convertir a UUID
+            UUID uuid1 = UUID.fromString(userId1);
+            UUID uuid2 = UUID.fromString(userId2);
+
+            ps.setString(1, uuid1.toString());
+            ps.setString(2, uuid2.toString());
+            ps.setString(3, uuid2.toString());
+            ps.setString(4, uuid1.toString());
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    lista.add(mapearMensaje(rs));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[MensajeRepo] Error obteniendo historial entre usuarios: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            System.err.println("[MensajeRepo] Error convirtiendo IDs a UUID: " + e.getMessage());
+        }
+
+        return lista;
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene los mensajes de un canal específico con paginación.
+     * Retorna los mensajes ordenados cronológicamente.
+     */
+    public List<Mensaje> obtenerMensajesPorCanal(String canalId, int limite, int offset) {
+        List<Mensaje> lista = new ArrayList<>();
+
+        String sql = "SELECT id, remitente_id, destinatario_usuario_id, canal_id, tipo, contenido, fecha_envio, peer_remitente_id, peer_destino_id " +
+                "FROM mensajes " +
+                "WHERE canal_id = ? " +
+                "ORDER BY fecha_envio DESC, id DESC " +
+                "LIMIT ? OFFSET ?";
+
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            UUID canalUUID = UUID.fromString(canalId);
+            ps.setString(1, canalUUID.toString());
+            ps.setInt(2, limite);
+            ps.setInt(3, offset);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    lista.add(mapearMensaje(rs));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[MensajeRepo] Error obteniendo mensajes del canal: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            System.err.println("[MensajeRepo] Error convirtiendo canal ID a UUID: " + e.getMessage());
+        }
+
+        return lista;
+    }
+
+    /**
      * Guarda un nuevo mensaje o actualiza uno existente si el ID ya está en la base de datos.
-     * Vital para recibir mensajes del chat en tiempo real o de la sincronización.
+     * ✅ ACTUALIZADO: Ahora incluye los campos peer_remitente_id y peer_destino_id.
      */
     public boolean guardar(Mensaje m) {
         if (m == null || m.getId() == null) return false;
 
-        String sql = "INSERT INTO mensajes (id, remitente_id, destinatario_usuario_id, canal_id, tipo, contenido, fecha_envio) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?) " +
-                "ON DUPLICATE KEY UPDATE contenido = VALUES(contenido), fecha_envio = VALUES(fecha_envio)";
+        String sql = "INSERT INTO mensajes (id, remitente_id, destinatario_usuario_id, canal_id, tipo, contenido, fecha_envio, peer_remitente_id, peer_destino_id) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+                "ON DUPLICATE KEY UPDATE contenido = VALUES(contenido), fecha_envio = VALUES(fecha_envio), " +
+                "peer_remitente_id = VALUES(peer_remitente_id), peer_destino_id = VALUES(peer_destino_id)";
 
         try (Connection conn = mysql.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -65,6 +140,8 @@ public class MensajeRepositorio {
             ps.setString(5, m.getTipo() != null ? m.getTipo().name() : Mensaje.Tipo.TEXTO.name());
             ps.setString(6, m.getContenido());
             ps.setTimestamp(7, m.getFechaEnvio() != null ? Timestamp.from(m.getFechaEnvio()) : Timestamp.from(Instant.now()));
+            ps.setString(8, m.getPeerRemitenteId());
+            ps.setString(9, m.getPeerDestinoId());
 
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -75,7 +152,7 @@ public class MensajeRepositorio {
 
     /**
      * Método auxiliar para convertir un ResultSet en un objeto Mensaje.
-     * Centraliza la lógica de mapeo y evita duplicación de código.
+     * ✅ ACTUALIZADO: Ahora mapea también los campos de peer.
      */
     private Mensaje mapearMensaje(ResultSet rs) throws SQLException {
         Mensaje m = new Mensaje();
@@ -85,6 +162,10 @@ public class MensajeRepositorio {
         m.setRemitenteId(toUUID(rs.getString("remitente_id")));
         m.setDestinatarioUsuarioId(toUUID(rs.getString("destinatario_usuario_id")));
         m.setCanalId(toUUID(rs.getString("canal_id")));
+
+        // ✅ NUEVO: Mapear campos de peer
+        m.setPeerRemitenteId(rs.getString("peer_remitente_id"));
+        m.setPeerDestinoId(rs.getString("peer_destino_id"));
 
         // Enum Tipo
         String tipoStr = rs.getString("tipo");

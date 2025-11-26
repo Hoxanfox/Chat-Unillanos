@@ -15,6 +15,10 @@ public class Mensaje implements Serializable, IMerkleEntity {
     private UUID destinatarioUsuarioId; // null si el destinatario es un canal
     private UUID canalId; // null si el destinatario es un usuario
 
+    // ✅ NUEVOS CAMPOS: Identificadores de peers WebRTC para mensajería P2P
+    private String peerRemitenteId;
+    private String peerDestinoId;
+
     public enum Tipo { AUDIO, TEXTO }
 
     private Tipo tipo;
@@ -70,6 +74,13 @@ public class Mensaje implements Serializable, IMerkleEntity {
 
     public UUID getCanalId() { return canalId; }
     public void setCanalId(UUID canalId) { this.canalId = canalId; }
+
+    // ✅ GETTERS/SETTERS para campos de peer
+    public String getPeerRemitenteId() { return peerRemitenteId; }
+    public void setPeerRemitenteId(String peerRemitenteId) { this.peerRemitenteId = peerRemitenteId; }
+
+    public String getPeerDestinoId() { return peerDestinoId; }
+    public void setPeerDestinoId(String peerDestinoId) { this.peerDestinoId = peerDestinoId; }
 
     public Tipo getTipo() { return tipo; }
     public void setTipo(Tipo tipo) { this.tipo = tipo; }

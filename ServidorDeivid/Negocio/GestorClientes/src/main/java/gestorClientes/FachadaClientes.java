@@ -5,6 +5,7 @@ import conexion.clientes.impl.RouterMensajesClienteImpl;
 import conexion.clientes.interfaces.IGestorConexionesCliente;
 import conexion.clientes.interfaces.IRouterMensajesCliente;
 import gestorClientes.interfaces.IServicioCliente;
+import gestorClientes.servicios.ServicioGestionRed;
 import logger.LoggerCentral;
 
 import java.util.ArrayList;
@@ -21,6 +22,9 @@ public class FachadaClientes {
     private final IRouterMensajesCliente routerClientes;
     private final List<IServicioCliente> servicios;
 
+    // Referencia al servicio de gestión de red
+    private ServicioGestionRed servicioGestionRed;
+
     private boolean enEjecucion;
 
     public FachadaClientes() {
@@ -36,6 +40,10 @@ public class FachadaClientes {
 
         // Inyección circular (El gestor necesita el router para procesar mensajes entrantes)
         gestorImpl.setRouter(this.routerClientes);
+
+        // 2. Registrar automáticamente el ServicioGestionRed
+        this.servicioGestionRed = new ServicioGestionRed();
+        registrarServicio(this.servicioGestionRed);
     }
 
     public void iniciar(int puertoEscucha) {
@@ -55,8 +63,8 @@ public class FachadaClientes {
             }
         }
 
-        // Levantar el socket servidor (ej. puerto 8000)
-        new Thread(() -> gestorClientes.iniciarServidor(puertoEscucha)).start();
+        // NOTA: El ServicioGestionRed ya levanta el servidor en su método iniciar()
+        // No necesitamos llamar a gestorClientes.iniciarServidor() aquí
 
         enEjecucion = true;
         LoggerCentral.info(TAG, "Servidor de Clientes ONLINE en puerto " + puertoEscucha);
@@ -93,5 +101,13 @@ public class FachadaClientes {
 
     public IGestorConexionesCliente getGestorClientes() {
         return gestorClientes;
+    }
+
+    /**
+     * Obtiene el servicio de gestión de red CS.
+     * Útil para acceder a estadísticas o suscribirse a eventos.
+     */
+    public ServicioGestionRed getServicioGestionRed() {
+        return servicioGestionRed;
     }
 }

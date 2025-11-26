@@ -1,12 +1,17 @@
 package servicio.clienteServidor;
 
+import dto.cliente.DTOSesionCliente;
 import gestorClientes.servicios.ServicioNotificacionCliente;
+import gestorP2P.servicios.ServicioSincronizacionDatos;
+import observador.ISujeto;
+
+import java.util.List;
 
 /**
  * Contrato de Alto Nivel para el subsistema Cliente-Servidor.
  * Define las operaciones disponibles para controlar el servidor que atiende a los usuarios.
  */
-public interface IServicioClienteControl {
+public interface IServicioClienteControl extends ISujeto {
 
     /**
      * Inicia el servidor de sockets para aceptar conexiones de clientes (Apps/Web).
@@ -30,4 +35,19 @@ public interface IServicioClienteControl {
      * Necesario para que el Orquestador Global conecte el puente de eventos P2P -> Clientes.
      */
     ServicioNotificacionCliente getServicioNotificacion();
+
+    /**
+     * Inyecta el servicio de sincronización P2P en los servicios de mensajería.
+     */
+    void setServicioSincronizacionP2P(ServicioSincronizacionDatos servicioSyncP2P);
+
+    /**
+     * Obtiene el número de clientes conectados actualmente.
+     */
+    int getNumeroClientesConectados();
+
+    /**
+     * Obtiene la lista de sesiones activas (DTOs transversales).
+     */
+    List<DTOSesionCliente> getSesionesActivas();
 }

@@ -1,7 +1,6 @@
 package gestorClientes.servicios;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 import conexion.clientes.interfaces.IGestorConexionesCliente;
 import conexion.clientes.interfaces.IRouterMensajesCliente;
 import dominio.clienteServidor.Archivo;

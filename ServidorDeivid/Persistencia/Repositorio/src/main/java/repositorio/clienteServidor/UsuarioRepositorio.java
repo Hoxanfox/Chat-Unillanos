@@ -90,6 +90,19 @@ public class UsuarioRepositorio {
     }
 
     /**
+     * Busca un usuario por su ID (versión con String)
+     */
+    public Usuario buscarPorId(String id) {
+        if (id == null || id.isEmpty()) return null;
+        try {
+            return buscarPorId(UUID.fromString(id));
+        } catch (IllegalArgumentException e) {
+            System.err.println("[RepoUsuario] ID inválido: " + id);
+            return null;
+        }
+    }
+
+    /**
      * Actualiza el estado de un usuario
      */
     public boolean actualizarEstado(UUID id, Usuario.Estado estado) {

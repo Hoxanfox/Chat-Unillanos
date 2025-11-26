@@ -39,4 +39,50 @@ public class CanalMiembroRepositorio {
             return false;
         }
     }
+
+    /**
+     * ✅ NUEVO: Verifica si un usuario es miembro de un canal.
+     */
+    public boolean esMiembroDelCanal(String canalId, String usuarioId) {
+        String sql = "SELECT COUNT(*) FROM canal_miembros WHERE canal_id = ? AND usuario_id = ?";
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, UUID.fromString(canalId).toString());
+            ps.setString(2, UUID.fromString(usuarioId).toString());
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1) > 0;
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[RepoMiembro] Error verificando membresía: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            System.err.println("[RepoMiembro] Error convirtiendo IDs a UUID: " + e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene todos los usuarios miembros de un canal.
+     */
+    public List<String> obtenerMiembrosDelCanal(String canalId) {
+        List<String> miembros = new ArrayList<>();
+        String sql = "SELECT usuario_id FROM canal_miembros WHERE canal_id = ?";
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, UUID.fromString(canalId).toString());
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    miembros.add(rs.getString("usuario_id"));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[RepoMiembro] Error obteniendo miembros: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            System.err.println("[RepoMiembro] Error convirtiendo canal ID a UUID: " + e.getMessage());
+        }
+        return miembros;
+    }
 }

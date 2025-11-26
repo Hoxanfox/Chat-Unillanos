@@ -1,6 +1,10 @@
 package servicio.p2p;
 
 import dto.p2p.DTOPeerDetails;
+import dto.p2p.DTOPeerConClientes;
+import gestorP2P.servicios.ServicioSincronizacionDatos;
+import observador.IObservador;
+
 import java.util.List;
 
 /**
@@ -30,6 +34,12 @@ public interface IServicioP2PControl {
      */
     List<DTOPeerDetails> obtenerListaPeers();
 
+    /**
+     * ✅ NUEVO: Obtiene la lista de peers con información de sus clientes conectados.
+     * Útil para mostrar la topología completa de la red en la interfaz.
+     */
+    List<DTOPeerConClientes> obtenerPeersConClientes();
+
     void enviarMensajeGlobal(String usuario, String mensaje);
 
     void enviarMensajePrivado(String idPeerDestino, String usuario, String mensaje);
@@ -37,4 +47,15 @@ public interface IServicioP2PControl {
     void conectarManual(String ip, int puerto);
 
     boolean estaCorriendo();
+
+    /**
+     * ✅ NUEVO: Expone el servicio de sincronización P2P.
+     */
+    ServicioSincronizacionDatos getServicioSincronizacion();
+
+    /**
+     * Permite registrar un observador desde el controlador
+     * para monitorear conexiones/desconexiones de peers.
+     */
+    void registrarObservadorConexiones(IObservador obs);
 }

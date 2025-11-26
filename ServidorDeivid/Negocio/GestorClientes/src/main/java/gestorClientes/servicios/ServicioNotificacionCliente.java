@@ -35,6 +35,9 @@ public class ServicioNotificacionCliente implements IServicioCliente, IObservado
     /**
      * Método que recibe los eventos del núcleo (P2P, DB, etc.)
      * Implementa IObservador.
+     *
+     * Envía SIGNAL_UPDATE a todos los clientes para que actualicen todo:
+     * contactos, canales, mensajes, etc.
      */
     @Override
     public void actualizar(String tipoEvento, Object datos) {
@@ -47,6 +50,7 @@ public class ServicioNotificacionCliente implements IServicioCliente, IObservado
 
     /**
      * Envía el PUSH ligero (Signal) a todos los sockets conectados.
+     * El cliente recibe esto y actualiza toda su información: contactos, canales, mensajes.
      */
     private void enviarSenalDeActualizacion(String recursoAfectado) {
         if (gestorClientes == null) return;
@@ -59,9 +63,9 @@ public class ServicioNotificacionCliente implements IServicioCliente, IObservado
 
             String jsonPush = gson.toJson(signal);
 
-            // LoggerCentral.debug(TAG, "Enviando PUSH masivo: " + recursoAfectado);
+            LoggerCentral.debug(TAG, "📡 Enviando SIGNAL_UPDATE: " + recursoAfectado);
 
-            // Broadcast a todos los clientes conectados al puerto 8000
+            // Broadcast a todos los clientes conectados
             gestorClientes.broadcast(jsonPush);
 
         } catch (Exception e) {

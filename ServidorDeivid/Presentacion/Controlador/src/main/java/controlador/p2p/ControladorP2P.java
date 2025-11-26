@@ -1,6 +1,7 @@
 package controlador.p2p;
 
 import dto.p2p.DTOPeerDetails;
+import dto.p2p.DTOPeerConClientes;
 import logger.LoggerCentral;
 import observador.IObservador;
 import servicio.p2p.ServicioP2P;
@@ -32,6 +33,18 @@ public class ControladorP2P implements IObservador {
     }
 
     // --- MÉTODOS DE CONTROL ---
+
+    /**
+     * ✅ NUEVO: Expone el servicio P2P interno para configuración avanzada.
+     * Útil para conectar con otros servicios (ej: Cliente-Servidor para topología).
+     */
+    public ServicioP2P getServicioP2PInterno() {
+        if (servicio instanceof ServicioP2P) {
+            return (ServicioP2P) servicio;
+        }
+        LoggerCentral.warn(TAG, "El servicio no es una instancia de ServicioP2P");
+        return null;
+    }
 
     public void iniciarRed() {
         LoggerCentral.info(TAG, "Iniciando red P2P...");
@@ -69,6 +82,64 @@ public class ControladorP2P implements IObservador {
         List<DTOPeerDetails> peers = servicio.obtenerListaPeers();
         LoggerCentral.debug(TAG, "Lista obtenida: " + peers.size() + " peers");
         return peers;
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene la lista de peers con información de sus clientes conectados.
+     * Útil para mostrar la topología completa de la red en la interfaz.
+     *
+     * NOTA: Por ahora solo retorna clientes del servidor local.
+     * Los peers remotos aparecerán con lista de clientes vacía.
+     */
+    public List<DTOPeerConClientes> obtenerPeersConClientes() {
+        LoggerCentral.debug(TAG, "Obteniendo lista de peers con información de clientes...");
+        List<DTOPeerConClientes> peersConClientes = servicio.obtenerPeersConClientes();
+        LoggerCentral.info(TAG, "Lista obtenida: " + peersConClientes.size() + " peers con información de clientes");
+        return peersConClientes;
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene la topología completa de la red sincronizada vía P2P.
+     * Incluye todos los peers con sus clientes conectados (de TODOS los peers, no solo local).
+     * Se actualiza automáticamente cada 5 segundos.
+     */
+    public java.util.Map<String, dto.topologia.DTOTopologiaRed> obtenerTopologiaCompleta() {
+        LoggerCentral.debug(TAG, "Obteniendo topología completa de la red...");
+
+        if (servicio instanceof ServicioP2P) {
+            ServicioP2P servicioP2P = (ServicioP2P) servicio;
+            return servicioP2P.obtenerTopologiaCompleta();
+        }
+
+        LoggerCentral.warn(TAG, "No se pudo obtener topología: servicio no es ServicioP2P");
+        return new java.util.HashMap<>();
+    }
+
+    /**
+     * ✅ NUEVO: Registra un observador para recibir actualizaciones de topología en tiempo real.
+     * Se notifica cada vez que cambia la topología (cada 5 segundos o cuando hay eventos).
+     */
+    public void suscribirseATopologia(observador.IObservador observador) {
+        LoggerCentral.info(TAG, "Suscribiendo observador a cambios de topología...");
+        if (servicio instanceof ServicioP2P) {
+            ServicioP2P servicioP2P = (ServicioP2P) servicio;
+            servicioP2P.registrarObservadorTopologia(observador);
+            LoggerCentral.info(TAG, "✅ Observador registrado en ServicioTopologiaRed");
+        } else {
+            LoggerCentral.error(TAG, "❌ No se pudo suscribir a topología");
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Fuerza una actualización inmediata de la topología.
+     * Útil cuando se detecta un cambio importante.
+     */
+    public void forzarActualizacionTopologia() {
+        LoggerCentral.info(TAG, "Forzando actualización de topología...");
+        if (servicio instanceof ServicioP2P) {
+            ServicioP2P servicioP2P = (ServicioP2P) servicio;
+            servicioP2P.forzarActualizacionTopologia();
+        }
     }
 
     public void conectarManual(String ip, int puerto) {
