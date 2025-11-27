@@ -24,6 +24,7 @@
         <module>Infraestructura/Configuracion</module>
         <module>Negocio/GestorClientes</module>
         <module>Negocio/GestorUsuarios</module>
+        <module>Negocio/GestorLogs</module>
     </modules>
 
     <properties>

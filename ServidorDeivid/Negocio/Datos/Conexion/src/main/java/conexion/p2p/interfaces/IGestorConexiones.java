@@ -17,6 +17,7 @@ public interface IGestorConexiones {
      */
     void actualizarPuertoServidor(String connectionId, int puertoReal);
 
+
     List<DTOPeerDetails> obtenerDetallesPeers();
     void apagar();
 }

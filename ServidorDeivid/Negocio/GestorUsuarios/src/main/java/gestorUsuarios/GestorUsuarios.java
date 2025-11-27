@@ -33,10 +33,22 @@ public class GestorUsuarios {
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneId.systemDefault());
 
+    // ✅ NUEVO: ID del peer local para asignarlo automáticamente a nuevos usuarios
+    private UUID peerLocalId;
+
     public GestorUsuarios() {
         this.repositorio = new UsuarioRepositorio();
         this.observadores = new ArrayList<>();
         LoggerCentral.info(TAG, "GestorUsuarios inicializado");
+    }
+
+    /**
+     * ✅ NUEVO: Configura el ID del peer local que se asignará automáticamente
+     * a los usuarios creados.
+     */
+    public void setPeerLocalId(UUID peerLocalId) {
+        this.peerLocalId = peerLocalId;
+        LoggerCentral.info(TAG, "Peer local configurado: " + peerLocalId);
     }
 
     /**
@@ -105,13 +117,21 @@ public class GestorUsuarios {
         usuario.setEstado(Usuario.Estado.OFFLINE);
         usuario.setFechaCreacion(Instant.now());
 
-        // Establecer peer padre si se proporciona
+        // ✅ ESTABLECER PEER PADRE AUTOMÁTICAMENTE
+        // Prioridad: 1) DTO, 2) Peer Local configurado, 3) null
         if (dto.getPeerPadreId() != null && !dto.getPeerPadreId().isEmpty()) {
             try {
                 usuario.setPeerPadre(UUID.fromString(dto.getPeerPadreId()));
+                LoggerCentral.debug(TAG, "Peer padre asignado desde DTO: " + dto.getPeerPadreId());
             } catch (IllegalArgumentException e) {
-                LoggerCentral.warn(TAG, "PeerPadreId inválido: " + dto.getPeerPadreId());
+                LoggerCentral.warn(TAG, "PeerPadreId inválido en DTO: " + dto.getPeerPadreId());
             }
+        } else if (peerLocalId != null) {
+            // Asignar automáticamente el peer local como padre
+            usuario.setPeerPadre(peerLocalId);
+            LoggerCentral.info(TAG, "✅ Peer padre asignado automáticamente (peer local): " + peerLocalId);
+        } else {
+            LoggerCentral.warn(TAG, "⚠️ No se pudo asignar peer padre: ni en DTO ni peer local configurado");
         }
 
         // Persistir
@@ -238,6 +258,47 @@ public class GestorUsuarios {
             return actualizado;
         } catch (IllegalArgumentException e) {
             LoggerCentral.error(TAG, "ID de usuario inválido: " + id);
+            return false;
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Registra un archivo en la base de datos
+     * @param fileId ID del archivo (ruta relativa desde Bucket/)
+     * @param nombreOriginal Nombre original del archivo
+     * @param mimeType Tipo MIME del archivo
+     * @param tamanio Tamaño en bytes
+     * @param hash Hash SHA-256 del archivo
+     * @return true si se registró correctamente
+     */
+    public boolean registrarArchivo(String fileId, String nombreOriginal, String mimeType, long tamanio, String hash) {
+        try {
+            LoggerCentral.info(TAG, "📝 Registrando archivo en repositorio: " + fileId);
+
+            // Crear entidad Archivo
+            dominio.clienteServidor.Archivo archivo = new dominio.clienteServidor.Archivo(
+                fileId, nombreOriginal, mimeType, tamanio
+            );
+            archivo.setRutaRelativa(fileId);
+            archivo.setHashSHA256(hash);
+            archivo.setFechaUltimaActualizacion(java.time.Instant.now());
+
+            // Guardar en repositorio
+            repositorio.clienteServidor.ArchivoRepositorio repoArchivo =
+                new repositorio.clienteServidor.ArchivoRepositorio();
+            boolean guardado = repoArchivo.guardar(archivo);
+
+            if (guardado) {
+                LoggerCentral.info(TAG, "✅ Archivo registrado en BD: " + fileId);
+                notificarObservadores("ARCHIVO_REGISTRADO", fileId);
+            } else {
+                LoggerCentral.error(TAG, "❌ Error al guardar archivo en BD: " + fileId);
+            }
+
+            return guardado;
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "❌ Error al registrar archivo: " + e.getMessage());
+            e.printStackTrace();
             return false;
         }
     }

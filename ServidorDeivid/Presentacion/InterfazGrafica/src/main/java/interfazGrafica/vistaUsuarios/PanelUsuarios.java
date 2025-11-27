@@ -9,6 +9,7 @@ import interfazGrafica.vistaUsuarios.componentes.DialogoUsuario;
 import interfazGrafica.vistaUsuarios.componentes.TablaUsuarios;
 import interfazGrafica.util.GestorArchivosLocal;
 import logger.LoggerCentral;
+import observador.IObservador;
 
 import javax.swing.*;
 import java.awt.*;
@@ -18,8 +19,9 @@ import java.util.List;
 /**
  * Panel principal que orquesta los componentes de la vista de usuarios
  * Ahora integrado con el controlador para usar la arquitectura completa
+ * ✅ NUEVO: Implementa IObservador para recibir notificaciones de cambios
  */
-public class PanelUsuarios extends JPanel {
+public class PanelUsuarios extends JPanel implements IObservador {
 
     private static final String TAG = "PanelUsuarios";
     private BarraHerramientasUsuarios barraHerramientas;
@@ -70,19 +72,42 @@ public class PanelUsuarios extends JPanel {
             String status = dialogo.getStatus();
             File archivoFoto = dialogo.getArchivoFotoSeleccionado();
 
-            // Guardar foto en Bucket si fue seleccionada
+            // ✅ ARQUITECTURA CORRECTA: Vista -> Controlador -> Servicio -> Gestor -> Repositorio
             String fileIdFoto = null;
             if (archivoFoto != null) {
-                LoggerCentral.info(TAG, "Guardando foto de perfil para usuario: " + username);
-                fileIdFoto = GestorArchivosLocal.guardarFotoUsuario(archivoFoto);
+                LoggerCentral.info(TAG, "📸 Procesando foto de perfil para usuario: " + username);
 
-                if (fileIdFoto == null) {
+                // 1. Guardar archivo FÍSICO (solo en Bucket/)
+                GestorArchivosLocal.ArchivoInfo archivoInfo = GestorArchivosLocal.guardarFotoUsuario(archivoFoto);
+
+                if (archivoInfo == null) {
                     JOptionPane.showMessageDialog(this,
                         "Error al guardar la foto de perfil. El usuario se creará sin foto.",
                         "Advertencia",
                         JOptionPane.WARNING_MESSAGE);
                 } else {
-                    LoggerCentral.info(TAG, "✓ Foto guardada con ID: " + fileIdFoto);
+                    LoggerCentral.info(TAG, "✓ Archivo físico guardado: " + archivoInfo.fileId);
+
+                    // 2. Registrar archivo en BD usando el CONTROLADOR (respeta arquitectura)
+                    boolean registrado = controlador.registrarArchivo(
+                        archivoInfo.fileId,
+                        archivoInfo.nombreOriginal,
+                        archivoInfo.mimeType,
+                        archivoInfo.tamanio,
+                        archivoInfo.hash
+                    );
+
+                    if (registrado) {
+                        fileIdFoto = archivoInfo.fileId;
+                        LoggerCentral.info(TAG, "✅ Foto registrada completamente (físico + BD): " + fileIdFoto);
+                    } else {
+                        LoggerCentral.error(TAG, "❌ Error al registrar archivo en BD, eliminando archivo físico...");
+                        GestorArchivosLocal.eliminarFotoUsuario(archivoInfo.fileId);
+                        JOptionPane.showMessageDialog(this,
+                            "Error al registrar la foto en la base de datos. El usuario se creará sin foto.",
+                            "Advertencia",
+                            JOptionPane.WARNING_MESSAGE);
+                    }
                 }
             }
 
@@ -179,18 +204,41 @@ public class PanelUsuarios extends JPanel {
             File archivoFoto = dialogo.getArchivoFotoSeleccionado();
             String fileIdFoto = null;
 
-            // Si se seleccionó una nueva foto, guardarla
+            // ✅ ARQUITECTURA CORRECTA: Si se seleccionó una nueva foto, procesarla
             if (archivoFoto != null) {
-                LoggerCentral.info(TAG, "Actualizando foto de perfil para usuario: " + usuario[0]);
-                fileIdFoto = GestorArchivosLocal.guardarFotoUsuario(archivoFoto);
+                LoggerCentral.info(TAG, "📸 Actualizando foto de perfil para usuario: " + usuario[0]);
 
-                if (fileIdFoto == null) {
+                // 1. Guardar archivo FÍSICO
+                GestorArchivosLocal.ArchivoInfo archivoInfo = GestorArchivosLocal.guardarFotoUsuario(archivoFoto);
+
+                if (archivoInfo == null) {
                     JOptionPane.showMessageDialog(this,
                         "Error al guardar la nueva foto. El usuario se actualizará sin cambiar la foto.",
                         "Advertencia",
                         JOptionPane.WARNING_MESSAGE);
                 } else {
-                    LoggerCentral.info(TAG, "✓ Nueva foto guardada con ID: " + fileIdFoto);
+                    LoggerCentral.info(TAG, "✓ Archivo físico guardado: " + archivoInfo.fileId);
+
+                    // 2. Registrar archivo en BD usando el CONTROLADOR
+                    boolean registrado = controlador.registrarArchivo(
+                        archivoInfo.fileId,
+                        archivoInfo.nombreOriginal,
+                        archivoInfo.mimeType,
+                        archivoInfo.tamanio,
+                        archivoInfo.hash
+                    );
+
+                    if (registrado) {
+                        fileIdFoto = archivoInfo.fileId;
+                        LoggerCentral.info(TAG, "✅ Nueva foto registrada completamente: " + fileIdFoto);
+                    } else {
+                        LoggerCentral.error(TAG, "❌ Error al registrar archivo en BD, eliminando archivo físico...");
+                        GestorArchivosLocal.eliminarFotoUsuario(archivoInfo.fileId);
+                        JOptionPane.showMessageDialog(this,
+                            "Error al registrar la foto en la base de datos. El usuario se actualizará sin cambiar la foto.",
+                            "Advertencia",
+                            JOptionPane.WARNING_MESSAGE);
+                    }
                 }
             }
 
@@ -264,6 +312,40 @@ public class PanelUsuarios extends JPanel {
      */
     public void refrescarTabla() {
         cargarUsuariosDesdeBaseDatos();
+    }
+
+    @Override
+    public void actualizar(String tipo, Object datos) {
+        LoggerCentral.debug(TAG, "📢 Evento recibido: " + tipo + " | Datos: " + datos);
+
+        switch (tipo) {
+            case "USUARIO_AUTENTICADO":
+            case "USUARIO_ONLINE":
+            case "USUARIO_OFFLINE":
+            case "USUARIO_DESCONECTADO":
+            case "CLIENTE_OFFLINE":
+            case "CLIENTE_CONECTADO":
+            case "CLIENTE_DESCONECTADO":
+                // Cuando un usuario cambia de estado o se conecta/desconecta, refrescar la tabla
+                SwingUtilities.invokeLater(() -> {
+                    LoggerCentral.info(TAG, "🔄 Refrescando tabla de usuarios por evento: " + tipo);
+                    refrescarTabla();
+                });
+                break;
+
+            case "USUARIO_CREADO":
+            case "USUARIO_ACTUALIZADO":
+            case "USUARIO_ELIMINADO":
+                // Actualizar tabla cuando se modifica desde la UI
+                SwingUtilities.invokeLater(() -> {
+                    LoggerCentral.info(TAG, "🔄 Refrescando tabla por modificación: " + tipo);
+                    refrescarTabla();
+                });
+                break;
+
+            default:
+                LoggerCentral.debug(TAG, "Evento no manejado en PanelUsuarios: " + tipo);
+        }
     }
 
     // Getters para acceder a los componentes si es necesario

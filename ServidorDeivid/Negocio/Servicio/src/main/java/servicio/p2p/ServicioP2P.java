@@ -171,6 +171,13 @@ public class ServicioP2P implements IServicioP2PControl {
         return servicioSync;
     }
 
+    /**
+     * ✅ NUEVO: Obtiene el UUID del peer local
+     */
+    public java.util.UUID getIdPeerLocal() {
+        return fachada.obtenerIdPeerLocal();
+    }
+
     @Override
     public void detenerRed() {
         if (!running) {

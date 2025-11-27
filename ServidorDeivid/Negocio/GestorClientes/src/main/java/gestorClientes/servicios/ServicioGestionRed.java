@@ -8,6 +8,7 @@ import gestorClientes.interfaces.IServicioCliente;
 import logger.LoggerCentral;
 import observador.IObservador;
 import observador.ISujeto;
+import repositorio.clienteServidor.UsuarioRepositorio;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -57,11 +58,30 @@ public class ServicioGestionRed implements IServicioCliente, ISujeto {
         DTOSesionCliente sesion = sesionesActivas.remove(idSesion);
         if (sesion != null && sesion.getIdUsuario() != null) {
             LoggerCentral.info(TAG, "Usuario " + sesion.getIdUsuario() + " desvinculado de sesión");
+
+            // ✅ ACTUALIZAR ESTADO EN BD A OFFLINE
+            try {
+                UsuarioRepositorio repoUsuario = new UsuarioRepositorio();
+                boolean actualizado = repoUsuario.actualizarEstado(
+                        java.util.UUID.fromString(sesion.getIdUsuario()),
+                        dominio.clienteServidor.Usuario.Estado.OFFLINE
+                );
+
+                if (actualizado) {
+                    LoggerCentral.info(TAG, "✓ Estado actualizado a OFFLINE para usuario: " + sesion.getIdUsuario());
+                } else {
+                    LoggerCentral.warn(TAG, "⚠️ No se pudo actualizar estado para usuario: " + sesion.getIdUsuario());
+                }
+            } catch (Exception e) {
+                LoggerCentral.error(TAG, "Error actualizando estado de usuario: " + e.getMessage());
+            }
+
             notificarObservadores("CLIENTE_OFFLINE", sesion.getIdUsuario());
         }
 
-        // ✅ NUEVO: Notificar cambio en estadísticas
+        // ✅ NOTIFICAR cambio en estadísticas
         notificarObservadores("CLIENTE_DESCONECTADO", idSesion);
+        notificarObservadores("ESTADISTICAS", obtenerEstadisticas());
     }
 
     /**
@@ -82,7 +102,7 @@ public class ServicioGestionRed implements IServicioCliente, ISujeto {
         // ✅ NUEVO: Configurar callbacks para recibir notificaciones
         if (gestor instanceof conexion.clientes.impl.GestorConexionesClienteImpl) {
             conexion.clientes.impl.GestorConexionesClienteImpl gestorImpl =
-                (conexion.clientes.impl.GestorConexionesClienteImpl) gestor;
+                    (conexion.clientes.impl.GestorConexionesClienteImpl) gestor;
 
             gestorImpl.setOnClienteConectado(idSesion -> {
                 LoggerCentral.info(TAG, VERDE + "✓ Nuevo cliente conectado: " + idSesion + RESET);
@@ -253,6 +273,21 @@ public class ServicioGestionRed implements IServicioCliente, ISujeto {
      */
     public List<DTOSesionCliente> getSesionesActivas() {
         return new ArrayList<>(sesionesActivas.values());
+    }
+
+    /**
+     * Obtiene estadísticas actuales del servidor.
+     */
+    private Map<String, Object> obtenerEstadisticas() {
+        int totalSesiones = sesionesActivas.size();
+        long sesionesAutenticadas = sesionesActivas.values().stream()
+                .filter(s -> s.getIdUsuario() != null)
+                .count();
+
+        return Map.of(
+                "totalSesiones", totalSesiones,
+                "usuariosAutenticados", sesionesAutenticadas
+        );
     }
 
     @Override

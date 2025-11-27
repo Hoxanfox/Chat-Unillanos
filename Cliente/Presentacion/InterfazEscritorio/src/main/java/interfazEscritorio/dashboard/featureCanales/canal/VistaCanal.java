@@ -48,6 +48,9 @@ public class VistaCanal extends BorderPane implements IObservador {
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
+    // ✅ Campo de instancia para el ScrollPane
+    private ScrollPane scrollPane;
+
     public VistaCanal(DTOCanalCreado canal, Runnable onVolver, Consumer<DTOCanalCreado> onVerMiembros, IControladorCanales controlador) {
         System.out.println("🔧 [VistaCanal]: Inicializando vista de canal...");
         System.out.println("   → Canal: " + canal.getNombre() + " (ID: " + canal.getId() + ")");
@@ -96,9 +99,10 @@ public class VistaCanal extends BorderPane implements IObservador {
         cargando.setTextFill(Color.GRAY);
         mensajesBox.getChildren().add(cargando);
 
-        ScrollPane scrollPane = new ScrollPane(mensajesBox);
+        scrollPane = new ScrollPane(mensajesBox); // ✅ Asignar a campo de instancia
         scrollPane.setFitToWidth(true);
-        scrollPane.vvalueProperty().bind(mensajesBox.heightProperty());
+        // ✅ ELIMINAR el binding automático que hace scroll hacia arriba
+        // scrollPane.vvalueProperty().bind(mensajesBox.heightProperty());
 
         // === INPUT AREA ===
         VBox inputArea = new VBox(5);
@@ -462,6 +466,11 @@ public class VistaCanal extends BorderPane implements IObservador {
                 agregarMensaje(mensaje);
             }
             System.out.println("✅ [VistaCanal]: Historial cargado en la vista");
+
+            // ✅ Hacer scroll automático hacia abajo después de cargar el historial
+            Platform.runLater(() -> {
+                scrollPane.setVvalue(1.0); // 1.0 = scroll al final (abajo)
+            });
         }
     }
 
@@ -481,13 +490,17 @@ public class VistaCanal extends BorderPane implements IObservador {
             return;
         }
 
-        // Mensajes propios a la IZQUIERDA (verde), otros a la DERECHA (blanco)
-        Pos alineacion = mensaje.isEsPropio() ? Pos.CENTER_LEFT : Pos.CENTER_RIGHT;
+        // ✅ Mensajes propios a la DERECHA (verde), otros a la IZQUIERDA (blanco)
+        // Esto sigue el patrón estándar de apps de chat (WhatsApp, Telegram, etc.)
+        Pos alineacion = mensaje.isEsPropio() ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT;
 
         System.out.println("🔍 [VistaCanal]: Agregando mensaje:");
+        System.out.println("   → ID: " + mensaje.getMensajeId());
         System.out.println("   → Tipo: " + mensaje.getTipo());
+        System.out.println("   → Remitente: " + mensaje.getNombreRemitente() + " (ID: " + mensaje.getRemitenteId() + ")");
         System.out.println("   → esPropio: " + mensaje.isEsPropio());
-        System.out.println("   → Alineación: " + (mensaje.isEsPropio() ? "IZQUIERDA (propio)" : "DERECHA (otros)"));
+        System.out.println("   → Alineación: " + (mensaje.isEsPropio() ? "DERECHA (propio)" : "IZQUIERDA (otros)"));
+        System.out.println("   → Timestamp: " + mensaje.getFechaEnvio());
 
         VBox burbuja = crearBurbujaMensaje(mensaje, alineacion);
         mensajesBox.getChildren().add(burbuja);
@@ -495,6 +508,11 @@ public class VistaCanal extends BorderPane implements IObservador {
         if (id != null && !id.isEmpty()) {
             mensajesMostrados.add(id);
         }
+
+        // ✅ Hacer scroll automático hacia abajo cuando se agrega un nuevo mensaje
+        Platform.runLater(() -> {
+            scrollPane.setVvalue(1.0); // 1.0 = scroll al final (abajo)
+        });
 
         System.out.println("✅ [VistaCanal]: Mensaje agregado a la vista");
     }

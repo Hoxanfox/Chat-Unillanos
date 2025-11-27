@@ -9,13 +9,17 @@ import dto.comunicacion.DTOResponse;
 import gestorClientes.interfaces.IServicioCliente;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
 import logger.LoggerCentral;
+import observador.IObservador;
+import observador.ISujeto;
 import repositorio.clienteServidor.UsuarioRepositorio;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public class ServicioAutenticacion implements IServicioCliente {
+public class ServicioAutenticacion implements IServicioCliente, ISujeto {
 
     private static final String TAG = "AuthService";
     private IGestorConexionesCliente gestor;
@@ -25,9 +29,13 @@ public class ServicioAutenticacion implements IServicioCliente {
     // Referencia al servicio de sincronización P2P (inyectada externamente)
     private ServicioSincronizacionDatos servicioSync;
 
+    // ✅ NUEVO: Lista de observadores para notificar cambios
+    private final List<IObservador> observadores;
+
     public ServicioAutenticacion() {
         this.repoUsuario = new UsuarioRepositorio();
         this.gson = new Gson();
+        this.observadores = new ArrayList<>();
     }
 
     /**
@@ -111,7 +119,16 @@ public class ServicioAutenticacion implements IServicioCliente {
                     LoggerCentral.info(TAG, "🔄 Activando sincronización P2P para cambio de estado: " + email + " -> ONLINE");
                     servicioSync.onBaseDeDatosCambio(); // Reconstruir Merkle Tree
                     servicioSync.forzarSincronizacion(); // Sincronizar con peers
+                } else if (servicioSync == null) {
+                    LoggerCentral.warn(TAG, "⚠️ ServicioSync es NULL, no se puede sincronizar");
                 }
+
+                // ✅ NOTIFICAR A OBSERVADORES (Para actualizar UI)
+                notificarObservadores("USUARIO_AUTENTICADO", usuario.getId());
+                notificarObservadores("USUARIO_ONLINE", usuario.getId());
+
+                // ✅ NUEVO: Enviar señal SIGNAL_UPDATE a TODOS los clientes para que actualicen
+                enviarSignalUpdateATodos("USUARIO_ONLINE");
 
                 // Construir respuesta con datos del usuario
                 // IMPORTANTE: Usar LinkedHashMap para mantener el orden de los campos
@@ -171,6 +188,13 @@ public class ServicioAutenticacion implements IServicioCliente {
                         servicioSync.onBaseDeDatosCambio(); // Reconstruir Merkle Tree
                         servicioSync.forzarSincronizacion(); // Sincronizar con peers
                     }
+
+                    // ✅ NOTIFICAR A OBSERVADORES (Para actualizar UI)
+                    notificarObservadores("USUARIO_DESCONECTADO", idUsuario);
+                    notificarObservadores("USUARIO_OFFLINE", idUsuario);
+
+                    // ✅ NUEVO: Enviar señal SIGNAL_UPDATE a TODOS los clientes
+                    enviarSignalUpdateATodos("USUARIO_OFFLINE");
                 }
 
                 return new DTOResponse("logout", "success", "Sesión cerrada", null);
@@ -180,7 +204,58 @@ public class ServicioAutenticacion implements IServicioCliente {
             }
         });
 
-        LoggerCentral.info(TAG, "Servicio de autenticación inicializado con rutas: authenticateUser, logout");
+        // ✅ NUEVA RUTA: logoutUser (El cliente usa esta acción)
+        router.registrarAccion("logoutUser", (datos, idSesion) -> {
+            try {
+                JsonObject payload = datos.getAsJsonObject();
+
+                if (!payload.has("userId")) {
+                    return new DTOResponse("logoutUser", "error", "userId requerido", null);
+                }
+
+                String userId = payload.get("userId").getAsString();
+                boolean estadoActualizado = false;
+                String emailUsuario = null;
+
+                // Actualizar estado a OFFLINE
+                Usuario usuario = repoUsuario.buscarPorId(UUID.fromString(userId));
+                if (usuario != null) {
+                    estadoActualizado = repoUsuario.actualizarEstado(UUID.fromString(usuario.getId()), Usuario.Estado.OFFLINE);
+                    emailUsuario = usuario.getEmail();
+                    LoggerCentral.info(TAG, "✅ Usuario cerró sesión: " + emailUsuario + " (ID: " + userId + ")");
+
+                    // Desvincular sesión
+                    gestor.desregistrarUsuarioEnSesion(idSesion);
+
+                    // ✅ ACTIVAR SINCRONIZACIÓN P2P
+                    if (estadoActualizado && servicioSync != null) {
+                        LoggerCentral.info(TAG, "🔄 Activando sincronización P2P para cambio de estado: " + emailUsuario + " -> OFFLINE");
+                        servicioSync.onBaseDeDatosCambio(); // Reconstruir Merkle Tree
+                        servicioSync.forzarSincronizacion(); // Sincronizar con peers
+                    } else if (servicioSync == null) {
+                        LoggerCentral.warn(TAG, "⚠️ ServicioSync es NULL, no se puede sincronizar");
+                    }
+
+                    // ✅ NOTIFICAR A OBSERVADORES (Para actualizar UI)
+                    notificarObservadores("USUARIO_DESCONECTADO", userId);
+                    notificarObservadores("USUARIO_OFFLINE", userId);
+
+                    // ✅ NUEVO: Enviar señal SIGNAL_UPDATE a TODOS los clientes
+                    enviarSignalUpdateATodos("USUARIO_OFFLINE");
+
+                    return new DTOResponse("logoutUser", "success", "Sesión cerrada exitosamente", null);
+                } else {
+                    LoggerCentral.warn(TAG, "⚠️ Usuario no encontrado para logout: " + userId);
+                    return new DTOResponse("logoutUser", "error", "Usuario no encontrado", null);
+                }
+            } catch (Exception e) {
+                LoggerCentral.error(TAG, "Error en logoutUser: " + e.getMessage());
+                e.printStackTrace();
+                return new DTOResponse("logoutUser", "error", "Error cerrando sesión", null);
+            }
+        });
+
+        LoggerCentral.info(TAG, "Servicio de autenticación inicializado con rutas: authenticateUser, logout, logoutUser");
     }
 
     /**
@@ -201,5 +276,59 @@ public class ServicioAutenticacion implements IServicioCliente {
     @Override
     public void detener() {
         LoggerCentral.info(TAG, "Servicio de autenticación detenido");
+    }
+
+    @Override
+    public void registrarObservador(IObservador observador) {
+        if (!observadores.contains(observador)) {
+            observadores.add(observador);
+            LoggerCentral.debug(TAG, "Observador registrado: " + observador.getClass().getSimpleName());
+        }
+    }
+
+    @Override
+    public void removerObservador(IObservador observador) {
+        observadores.remove(observador);
+        LoggerCentral.debug(TAG, "Observador eliminado: " + observador.getClass().getSimpleName());
+    }
+
+    @Override
+    public void notificarObservadores(String tipo, Object datos) {
+        LoggerCentral.debug(TAG, "Notificando a " + observadores.size() + " observadores: " + tipo);
+        for (IObservador obs : observadores) {
+            obs.actualizar(tipo, datos);
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Envía señal SIGNAL_UPDATE a todos los clientes conectados
+     * Esta señal indica a los clientes que deben actualizar todos sus componentes:
+     * - Lista de contactos
+     * - Lista de canales
+     * - Mensajes privados
+     * - Mensajes de canales
+     *
+     * @param resource Recurso que cambió (ej: "USUARIO_ONLINE", "USUARIO_OFFLINE", "NUEVO_MENSAJE")
+     */
+    private void enviarSignalUpdateATodos(String resource) {
+        try {
+            LoggerCentral.info(TAG, "📡 Enviando SIGNAL_UPDATE a todos los clientes - Resource: " + resource);
+
+            // Construir mensaje de señal
+            Map<String, Object> signalData = new HashMap<>();
+            signalData.put("type", "SIGNAL_UPDATE");
+            signalData.put("resource", resource);
+
+            String mensajeJson = gson.toJson(signalData);
+
+            // Enviar a todos los clientes conectados usando broadcast
+            gestor.broadcast(mensajeJson);
+
+            LoggerCentral.info(TAG, "✅ SIGNAL_UPDATE enviada a todos los clientes conectados");
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "❌ Error enviando SIGNAL_UPDATE: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }

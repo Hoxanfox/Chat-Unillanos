@@ -94,25 +94,52 @@ public class ServicioListarCanales implements IServicioCliente {
             LoggerCentral.info(TAG, "   Total canales en BD: " + todosCanales.size());
             LoggerCentral.info(TAG, "   Total relaciones miembro: " + miembros.size());
 
-            // Conjunto de IDs de canales donde el usuario pertenece
-            Set<UUID> canalesDelUsuario = miembros.stream()
-                    .filter(cm -> cm.getUsuarioId().toString().equals(userId))
-                    .map(CanalMiembro::getCanalId)
+            // 🔍 DEBUG: Mostrar todas las relaciones
+            LoggerCentral.info(TAG, "   🔍 DEBUG - Relaciones en BD:");
+            for (CanalMiembro cm : miembros) {
+                LoggerCentral.info(TAG, "      Canal: " + cm.getCanalId() + " -> Usuario: " + cm.getUsuarioId());
+            }
+
+            // Conjunto de IDs de canales donde el usuario pertenece (normalizado a minúsculas)
+            Set<String> canalesDelUsuario = miembros.stream()
+                    .filter(cm -> {
+                        String miembroId = cm.getUsuarioId().toString().toLowerCase();
+                        String targetId = userId.toLowerCase();
+                        boolean match = miembroId.equals(targetId);
+                        if (match) {
+                            LoggerCentral.info(TAG, "   ✅ Match encontrado: Canal " + cm.getCanalId());
+                        }
+                        return match;
+                    })
+                    .map(cm -> cm.getCanalId().toString().toLowerCase())
                     .collect(Collectors.toSet());
 
             LoggerCentral.info(TAG, "   Usuario pertenece a " + canalesDelUsuario.size() + " canales");
+            
+            // 🔍 DEBUG: Mostrar IDs de canales del usuario
+            if (!canalesDelUsuario.isEmpty()) {
+                LoggerCentral.info(TAG, "   🔍 Canales del usuario:");
+                for (String canalId : canalesDelUsuario) {
+                    LoggerCentral.info(TAG, "      - " + canalId);
+                }
+            }
 
             // Filtrar canales por pertenencia y convertir al formato esperado
             List<Map<String, Object>> resultado = new ArrayList<>();
             for (Canal c : todosCanales) {
-                if (canalesDelUsuario.contains(c.getId())) {
+                String canalIdNormalizado = c.getId().toString().toLowerCase();
+                LoggerCentral.info(TAG, "   🔍 Verificando canal: " + c.getNombre() + " (" + canalIdNormalizado + ")");
+                
+                if (canalesDelUsuario.contains(canalIdNormalizado)) {
                     Map<String, Object> mapa = new HashMap<>();
                     mapa.put("idCanal", c.getId().toString());
                     mapa.put("nombreCanal", c.getNombre());
                     mapa.put("ownerId", c.getCreador() != null ? c.getCreador().getId().toString() : null);
                     resultado.add(mapa);
 
-                    LoggerCentral.info(TAG, "   ✅ Canal: " + c.getNombre() + " (" + c.getId() + ")");
+                    LoggerCentral.info(TAG, "   ✅ Canal agregado: " + c.getNombre() + " (" + c.getId() + ")");
+                } else {
+                    LoggerCentral.info(TAG, "   ❌ Canal NO coincide: " + c.getNombre());
                 }
             }
 

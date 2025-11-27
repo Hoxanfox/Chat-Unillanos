@@ -3,9 +3,13 @@ package interfazGrafica;
 import controlador.p2p.ControladorP2P;
 import controlador.clienteServidor.ControladorClienteServidor;
 import controlador.usuarios.ControladorUsuarios;
+import controlador.logs.ControladorLogs;
+import controlador.logs.ControladorLogsApi;
 import gestorUsuarios.GestorUsuarios;
+import gestorLogs.GestorLogs;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
 import servicio.usuario.ServicioGestionUsuarios;
+import servicio.logs.ServicioLogs;
 import interfazGrafica.vistaUsuarios.PanelUsuarios;
 import interfazGrafica.vistaConexiones.PanelConexiones;
 import interfazGrafica.vistaLogs.PanelLogs;
@@ -33,12 +37,15 @@ public class VentanaPrincipal extends JFrame implements IObservador {
     private ControladorP2P controladorP2P;
     private ControladorClienteServidor controladorCS;
     private ControladorUsuarios controladorUsuarios;
+    private ControladorLogs controladorLogs;
+    private ControladorLogsApi controladorLogsApi;
 
     // Servicios para integración P2P
     private ServicioSincronizacionDatos servicioSincronizacion;
 
     private volatile boolean p2pIniciado = false;
     private volatile boolean csIniciado = false;
+    private volatile boolean apiRestIniciado = false;
 
     public VentanaPrincipal() {
         configurarVentana();
@@ -67,7 +74,35 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         // Construir arquitectura de capas para Usuarios
         construirArquitecturaUsuarios();
 
+        // Construir arquitectura de capas para Logs
+        construirArquitecturaLogs();
+
         LoggerCentral.info(TAG, "✓ Todos los controladores inicializados");
+    }
+
+    /**
+     * Construye toda la arquitectura de capas para la gestión de logs:
+     * Controlador → Servicio → Gestor
+     * + API REST con Spring Boot
+     */
+    private void construirArquitecturaLogs() {
+        LoggerCentral.info(TAG, "🔧 Construyendo arquitectura de gestión de logs...");
+
+        // 1. Capa de Negocio: GestorLogs
+        GestorLogs gestorLogs = new GestorLogs();
+
+        // 2. Capa de Servicio: ServicioLogs
+        ServicioLogs servicioLogs = new ServicioLogs(gestorLogs);
+
+        // 3. Capa de Presentación: ControladorLogs (para la interfaz)
+        controladorLogs = new ControladorLogs(servicioLogs);
+
+        // 4. Controlador para el API REST
+        controladorLogsApi = new ControladorLogsApi(servicioLogs);
+
+        LoggerCentral.info(TAG, "✓ Arquitectura de logs construida:");
+        LoggerCentral.info(TAG, "  Interfaz → ControladorLogs → ServicioLogs → GestorLogs");
+        LoggerCentral.info(TAG, "  API REST → ControladorLogsApi → ServicioLogs → GestorLogs");
     }
 
     /**
@@ -98,6 +133,19 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                 // 5. Registrar GestorUsuarios como observador para cambios desde otros peers
                 gestorUsuarios.registrarObservador(servicioSincronizacion);
                 LoggerCentral.info(TAG, "✓ GestorUsuarios registrado como observador del ServicioSincronizacionDatos");
+
+                // ✅ NUEVO: 6. Configurar el peer local en GestorUsuarios para asignación automática
+                try {
+                    java.util.UUID peerLocalId = servicioP2PInterno.getIdPeerLocal();
+                    if (peerLocalId != null) {
+                        gestorUsuarios.setPeerLocalId(peerLocalId);
+                        LoggerCentral.info(TAG, "✅ Peer local configurado en GestorUsuarios: " + peerLocalId);
+                    } else {
+                        LoggerCentral.warn(TAG, "⚠️ No se pudo obtener el ID del peer local");
+                    }
+                } catch (Exception e) {
+                    LoggerCentral.error(TAG, "Error configurando peer local: " + e.getMessage());
+                }
             } else {
                 LoggerCentral.warn(TAG, "⚠️ ServicioSincronizacionDatos no disponible en ServicioP2P");
             }
@@ -105,7 +153,7 @@ public class VentanaPrincipal extends JFrame implements IObservador {
             LoggerCentral.warn(TAG, "⚠️ No se pudo obtener ServicioP2P interno");
         }
 
-        // 6. Capa de Presentación: ControladorUsuarios
+        // 7. Capa de Presentación: ControladorUsuarios
         controladorUsuarios = new ControladorUsuarios(servicioUsuarios);
 
         LoggerCentral.info(TAG, "✓ Arquitectura de usuarios construida:");
@@ -122,6 +170,12 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         panelConexiones = new PanelConexiones(controladorP2P, controladorCS);
         panelLogs = new PanelLogs();
 
+        // Conectar el PanelLogs con su controlador
+        panelLogs.setControlador(controladorLogs);
+
+        // ✅ NUEVO: Suscribir PanelUsuarios como observador de eventos de autenticación
+        suscribirObservadoresUI();
+
         tabbedPane.addTab("Dashboard", panelPrincipal);
         tabbedPane.addTab("Users", panelUsuarios);
         tabbedPane.addTab("Channels", crearPanelTemporal("CHANNELS"));
@@ -131,6 +185,30 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         this.add(tabbedPane, BorderLayout.CENTER);
     }
 
+    /**
+     * ✅ MEJORADO: Suscribe los paneles de la UI como observadores de los servicios
+     */
+    private void suscribirObservadoresUI() {
+        try {
+            // Suscribir PanelUsuarios al ServicioGestionRed para recibir eventos de conexión/desconexión
+            servicio.clienteServidor.IServicioClienteControl servicioCS = controladorCS.getServicioClienteInterno();
+            if (servicioCS instanceof servicio.clienteServidor.ServicioCliente) {
+                servicio.clienteServidor.ServicioCliente servicioClienteImpl =
+                    (servicio.clienteServidor.ServicioCliente) servicioCS;
+                servicioClienteImpl.registrarObservador(panelUsuarios);
+                LoggerCentral.info(TAG, "✓ PanelUsuarios suscrito a eventos de ServicioGestionRed y ServicioAutenticacion");
+
+                // ✅ NUEVO: Suscribir GrafoClienteServidor también a los eventos de autenticación
+                if (panelConexiones != null && panelConexiones.getGrafoCS() != null) {
+                    servicioClienteImpl.registrarObservador(panelConexiones.getGrafoCS());
+                    LoggerCentral.info(TAG, "✓ GrafoClienteServidor suscrito a eventos de autenticación");
+                }
+            }
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error suscribiendo observadores UI: " + e.getMessage());
+        }
+    }
 
     private void iniciarServiciosEnSecuencia() {
         LoggerCentral.info(TAG, "═══════════════════════════════════════════");
@@ -189,12 +267,11 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                     SwingUtilities.invokeLater(() -> {
                         panelPrincipal.agregarEstado("✓ Servidor Cliente-Servidor iniciado correctamente");
                         panelPrincipal.agregarEstado("✓ Servicios integrados P2P ↔ Cliente-Servidor");
-                        panelPrincipal.agregarEstado("");
-                        panelPrincipal.agregarEstado("═══════════════════════════════════════════");
-                        panelPrincipal.agregarEstado("✅ SISTEMA COMPLETAMENTE OPERATIVO");
-                        panelPrincipal.agregarEstado("═══════════════════════════════════════════");
-                        actualizarEstadisticasDashboard();
+                        panelPrincipal.agregarEstado("⚡ Iniciando API REST de Logs...");
                     });
+
+                    // Iniciar API REST de Logs
+                    iniciarApiRestLogs();
                 } else {
                     LoggerCentral.error(TAG, "✗ Error: Cliente-Servidor no se inició correctamente");
                     SwingUtilities.invokeLater(() ->
@@ -210,6 +287,57 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         }, "Thread-InicioCS").start();
     }
 
+    /**
+     * 🆕 PASO 3: Iniciar API REST de Logs
+     */
+    private void iniciarApiRestLogs() {
+        LoggerCentral.info(TAG, "═══════════════════════════════════════════");
+        LoggerCentral.info(TAG, "🚀 PASO 3: Iniciando API REST de Logs...");
+        LoggerCentral.info(TAG, "═══════════════════════════════════════════");
+
+        new Thread(() -> {
+            try {
+                // Iniciar en puerto 7000 (configurado en application.properties)
+                boolean iniciado = controladorLogsApi.iniciarApiRest(7000);
+
+                if (iniciado) {
+                    apiRestIniciado = true;
+                    LoggerCentral.info(TAG, "✓ API REST de Logs iniciado correctamente");
+
+                    SwingUtilities.invokeLater(() -> {
+                        panelPrincipal.agregarEstado("✓ API REST de Logs iniciado en puerto 7000");
+                        panelPrincipal.agregarEstado("  → http://localhost:7000/api/logs");
+                        panelPrincipal.agregarEstado("");
+                        panelPrincipal.agregarEstado("═══════════════════════════════════════════");
+                        panelPrincipal.agregarEstado("✅ SISTEMA COMPLETAMENTE OPERATIVO");
+                        panelPrincipal.agregarEstado("═══════════════════════════════════════════");
+                        actualizarEstadisticasDashboard();
+                    });
+                } else {
+                    LoggerCentral.warn(TAG, "⚠️ API REST de Logs no se inició (posiblemente puerto ocupado)");
+                    SwingUtilities.invokeLater(() -> {
+                        panelPrincipal.agregarEstado("⚠️ API REST no iniciado (puerto puede estar ocupado)");
+                        panelPrincipal.agregarEstado("");
+                        panelPrincipal.agregarEstado("═══════════════════════════════════════════");
+                        panelPrincipal.agregarEstado("✅ SISTEMA OPERATIVO (sin API REST)");
+                        panelPrincipal.agregarEstado("═══════════════════════════════════════════");
+                        actualizarEstadisticasDashboard();
+                    });
+                }
+            } catch (Exception e) {
+                LoggerCentral.error(TAG, "Error iniciando API REST: " + e.getMessage());
+                SwingUtilities.invokeLater(() -> {
+                    panelPrincipal.agregarEstado("✗ ERROR iniciando API REST: " + e.getMessage());
+                    panelPrincipal.agregarEstado("");
+                    panelPrincipal.agregarEstado("═══════════════════════════════════════════");
+                    panelPrincipal.agregarEstado("✅ SISTEMA OPERATIVO (sin API REST)");
+                    panelPrincipal.agregarEstado("═══════════════════════════════════════════");
+                    actualizarEstadisticasDashboard();
+                });
+            }
+        }, "Thread-InicioApiRest").start();
+    }
+
     private void conectarServiciosParaTopologia() {
         try {
             LoggerCentral.info(TAG, "🔗 Conectando servicios P2P ↔ Cliente-Servidor...");
@@ -218,8 +346,19 @@ public class VentanaPrincipal extends JFrame implements IObservador {
             servicio.clienteServidor.IServicioClienteControl servicioCS = controladorCS.getServicioClienteInterno();
 
             if (servicioP2P != null && servicioCS != null) {
+                // ✅ 1. Conexión P2P → CS (para topología)
                 servicioP2P.setServicioCliente(servicioCS);
-                LoggerCentral.info(TAG, "✓ Servicios conectados para sincronización de topología");
+                LoggerCentral.info(TAG, "✓ ServicioP2P conectado con ServicioCliente para topología");
+
+                // ✅ 2. Conexión CS → P2P (para sincronización de mensajes/canales)
+                ServicioSincronizacionDatos servicioSync = servicioP2P.getServicioSincronizacion();
+                if (servicioSync != null) {
+                    servicioCS.setServicioSincronizacionP2P(servicioSync);
+                    LoggerCentral.info(TAG, "✅ Servicio de sincronización P2P inyectado en servicios CS");
+                } else {
+                    LoggerCentral.warn(TAG, "⚠️ No se pudo obtener ServicioSincronizacionDatos");
+                }
+
                 controladorP2P.forzarActualizacionTopologia();
                 LoggerCentral.info(TAG, "✓ Topología actualizada con información de clientes");
             } else {

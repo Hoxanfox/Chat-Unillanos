@@ -27,8 +27,9 @@ public class GrafoClienteServidor extends JPanel implements IObservador {
 
     // Colores para el grafo
     private static final Color COLOR_PEER = new Color(52, 152, 219);      // Azul
-    private static final Color COLOR_USUARIO_ONLINE = new Color(46, 204, 113);  // Verde
-    private static final Color COLOR_USUARIO_OFFLINE = new Color(149, 165, 166); // Gris
+    private static final Color COLOR_USUARIO_AUTENTICADO = new Color(46, 204, 113);  // Verde - Usuario autenticado
+    private static final Color COLOR_USUARIO_CONECTADO = new Color(241, 196, 15);     // Amarillo - Solo conectado, sin autenticar
+    private static final Color COLOR_USUARIO_OFFLINE = new Color(149, 165, 166);      // Gris - Offline
     private static final Color COLOR_CONEXION = new Color(52, 73, 94);    // Gris oscuro
     private static final Color COLOR_TEXTO = Color.BLACK;
 
@@ -84,7 +85,8 @@ public class GrafoClienteServidor extends JPanel implements IObservador {
     }
 
     /**
-     * ✅ NUEVO: Actualizar el grafo con datos del controlador
+     * ✅ MEJORADO: Actualizar el grafo con datos del controlador
+     * Ahora diferencia entre clientes conectados y autenticados con información completa
      */
     private void actualizarDesdeControlador() {
         if (controlador == null) return;
@@ -101,16 +103,35 @@ public class GrafoClienteServidor extends JPanel implements IObservador {
             agregarPeer(idServidor, ipServidor);
 
             // Agregar cada cliente conectado
+            int autenticados = 0;
+            int conectados = 0;
+
             for (DTOSesionCliente sesion : sesiones) {
-                String nombreCliente = sesion.getIdUsuario() != null ?
-                    sesion.getIdUsuario() : sesion.getIdSesion();
-                boolean online = "AUTENTICADO".equalsIgnoreCase(sesion.getEstado());
-                agregarUsuario(nombreCliente, idServidor, online);
+                boolean estaAutenticado = sesion.estaAutenticado();
+
+                // Determinar qué nombre mostrar
+                String nombreCliente;
+                if (estaAutenticado && sesion.getIdUsuario() != null) {
+                    // Usuario autenticado - mostrar el ID de usuario
+                    nombreCliente = sesion.getIdUsuario();
+                    autenticados++;
+                    LoggerCentral.debug(TAG, "✓ Cliente AUTENTICADO: " + nombreCliente + " (" + sesion.getIdSesion() + ")");
+                } else {
+                    // Cliente solo conectado - mostrar ID de sesión
+                    nombreCliente = sesion.getIdSesion();
+                    conectados++;
+                    LoggerCentral.debug(TAG, "○ Cliente CONECTADO: " + sesion.getIdSesion());
+                }
+
+                // Agregar al grafo con el estado correcto
+                agregarUsuario(nombreCliente, idServidor, estaAutenticado);
             }
+
+            LoggerCentral.info(TAG, String.format("📊 Grafo actualizado: %d autenticados (verde), %d conectados (amarillo)",
+                autenticados, conectados));
         }
 
         SwingUtilities.invokeLater(this::repaint);
-        LoggerCentral.debug(TAG, "Grafo actualizado: " + sesiones.size() + " clientes");
     }
 
     private void configurarPanel() {
@@ -266,7 +287,10 @@ public class GrafoClienteServidor extends JPanel implements IObservador {
     private void dibujarUsuario(Graphics2D g2d, NodoUsuario usuario) {
         int radio = 15;
 
-        Color color = usuario.esOnline ? COLOR_USUARIO_ONLINE : COLOR_USUARIO_OFFLINE;
+        // ✅ MEJORADO: Usar esOnline para determinar si está autenticado
+        // esOnline = true significa AUTENTICADO (verde)
+        // esOnline = false significa solo CONECTADO (amarillo)
+        Color color = usuario.esOnline ? COLOR_USUARIO_AUTENTICADO : COLOR_USUARIO_CONECTADO;
 
         Ellipse2D circulo = new Ellipse2D.Double(
             usuario.x - radio, usuario.y - radio,
@@ -279,15 +303,35 @@ public class GrafoClienteServidor extends JPanel implements IObservador {
         g2d.setStroke(new BasicStroke(1.5f));
         g2d.draw(circulo);
 
+        // Indicador visual de estado (icono pequeño)
+        if (usuario.esOnline) {
+            // Círculo verde pequeño para autenticado
+            g2d.setColor(COLOR_USUARIO_AUTENTICADO.brighter());
+            g2d.fillOval(usuario.x + radio - 5, usuario.y - radio, 8, 8);
+            g2d.setColor(COLOR_USUARIO_AUTENTICADO.darker());
+            g2d.setStroke(new BasicStroke(1));
+            g2d.drawOval(usuario.x + radio - 5, usuario.y - radio, 8, 8);
+        }
+
         // Nombre del usuario
         g2d.setColor(COLOR_TEXTO);
-        g2d.setFont(new Font("Arial", Font.PLAIN, 9));
-        String nombreTruncado = usuario.nombre.length() > 10 ?
-                                usuario.nombre.substring(0, 10) + "..." : usuario.nombre;
+        g2d.setFont(new Font("Arial", Font.BOLD, 9));
+        String nombreTruncado = usuario.nombre != null && usuario.nombre.length() > 12 ?
+                                usuario.nombre.substring(0, 12) + "..." :
+                                (usuario.nombre != null ? usuario.nombre : "Anónimo");
         FontMetrics fm = g2d.getFontMetrics();
         int textoX = usuario.x - fm.stringWidth(nombreTruncado) / 2;
         int textoY = usuario.y + radio + 12;
         g2d.drawString(nombreTruncado, textoX, textoY);
+
+        // Estado debajo del nombre
+        g2d.setFont(new Font("Arial", Font.ITALIC, 7));
+        String estado = usuario.esOnline ? "AUTENTICADO" : "CONECTADO";
+        fm = g2d.getFontMetrics();
+        int estadoX = usuario.x - fm.stringWidth(estado) / 2;
+        int estadoY = textoY + 10;
+        g2d.setColor(usuario.esOnline ? COLOR_USUARIO_AUTENTICADO : COLOR_USUARIO_CONECTADO);
+        g2d.drawString(estado, estadoX, estadoY);
     }
 
     /**
@@ -302,7 +346,12 @@ public class GrafoClienteServidor extends JPanel implements IObservador {
             case "CLIENTE_DESCONECTADO":
             case "CLIENTE_AUTENTICADO":
             case "SESIONES_ACTUALIZADAS":
-                // Actualizar grafo cuando cambian las sesiones
+            case "USUARIO_AUTENTICADO":
+            case "USUARIO_ONLINE":
+            case "USUARIO_OFFLINE":
+            case "USUARIO_DESCONECTADO":
+                // Actualizar grafo cuando cambian las sesiones o estados de usuario
+                LoggerCentral.info(TAG, "🔄 Actualizando grafo por evento: " + tipoDeDato);
                 SwingUtilities.invokeLater(this::actualizarDesdeControlador);
                 break;
 

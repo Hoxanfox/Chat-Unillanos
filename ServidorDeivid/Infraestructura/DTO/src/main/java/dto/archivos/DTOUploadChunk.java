@@ -1,8 +1,12 @@
 package dto.archivos;
 
+import com.google.gson.annotations.SerializedName;
+
 public class DTOUploadChunk {
     private String uploadId;
     private int chunkNumber;
+
+    @SerializedName(value = "chunkDataBase64", alternate = {"chunkData_base64"})
     private String chunkDataBase64;
 
     public DTOUploadChunk() {}
@@ -37,4 +41,3 @@ public class DTOUploadChunk {
         this.chunkDataBase64 = chunkDataBase64;
     }
 }
-

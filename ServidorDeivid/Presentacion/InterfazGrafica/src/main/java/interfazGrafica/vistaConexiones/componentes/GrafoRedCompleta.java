@@ -347,8 +347,15 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
                 }
                 break;
 
+            case "PEER_CONECTADO":
             case "PEER_DESCONECTADO":
-                // Un peer se desconectó, refrescar todo
+            case "CLIENTE_CONECTADO":
+            case "CLIENTE_DESCONECTADO":
+            case "USUARIO_AUTENTICADO":
+            case "USUARIO_DESCONECTADO":
+            case "CLIENTE_AUTENTICADO":
+                // Un peer o cliente cambió de estado, refrescar todo el grafo
+                LoggerCentral.info(TAG, "🔄 Actualizando grafo completo por evento: " + tipoDeDato);
                 SwingUtilities.invokeLater(this::actualizarDesdeControlador);
                 break;
 

@@ -1,7 +1,10 @@
 package interfazGrafica.vistaLogs;
 
+import controlador.logs.ControladorLogs;
+import dto.logs.DTOLog;
 import interfazGrafica.vistaLogs.componentes.BarraHerramientasLogs;
 import interfazGrafica.vistaLogs.componentes.TablaLogs;
+import observador.IObservador;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -12,23 +15,66 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * Panel principal que orquesta los componentes de la vista de logs
  * Muestra los registros del sistema con opciones de limpieza y exportación
+ * Implementa IObservador para recibir actualizaciones en tiempo real
  */
-public class PanelLogs extends JPanel {
+public class PanelLogs extends JPanel implements IObservador {
 
     private BarraHerramientasLogs barraHerramientas;
     private TablaLogs tablaLogs;
     private DateTimeFormatter formateadorFecha;
+    private ControladorLogs controlador;
 
     public PanelLogs() {
         formateadorFecha = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         configurarPanel();
         inicializarComponentes();
         configurarEventos();
-        cargarLogsEjemplo();
+    }
+
+    /**
+     * Configura el controlador y se registra como observador
+     */
+    public void setControlador(ControladorLogs controlador) {
+        this.controlador = controlador;
+
+        // Registrarse como observador para recibir logs en tiempo real
+        controlador.registrarObservadorLogs(this);
+
+        // Cargar logs existentes
+        cargarLogsExistentes();
+    }
+
+    /**
+     * Carga los logs existentes en memoria al inicio
+     */
+    private void cargarLogsExistentes() {
+        try {
+            List<DTOLog> logs = controlador.obtenerTodosLosLogs();
+            for (DTOLog log : logs) {
+                tablaLogs.agregarLog(log.toTableRow());
+            }
+        } catch (Exception e) {
+            System.err.println("Error al cargar logs existentes: " + e.getMessage());
+        }
+    }
+
+    // --- IMPLEMENTACIÓN DE IObservador ---
+
+    @Override
+    public void actualizar(String tipoDeDato, Object datos) {
+        if ("NUEVO_LOG".equals(tipoDeDato) && datos instanceof DTOLog) {
+            DTOLog nuevoLog = (DTOLog) datos;
+
+            // Actualizar la tabla en el hilo de Swing
+            SwingUtilities.invokeLater(() -> {
+                tablaLogs.agregarLog(nuevoLog.toTableRow());
+            });
+        }
     }
 
     private void configurarPanel() {
@@ -74,6 +120,16 @@ public class PanelLogs extends JPanel {
 
         if (confirmacion == JOptionPane.YES_OPTION) {
             tablaLogs.limpiarLogs();
+
+            // Limpiar también en el gestor si hay controlador configurado
+            if (controlador != null) {
+                try {
+                    controlador.limpiarLogs();
+                } catch (Exception ex) {
+                    System.err.println("Error al limpiar logs en el gestor: " + ex.getMessage());
+                }
+            }
+
             JOptionPane.showMessageDialog(this,
                 "Logs limpiados exitosamente",
                 "Success",
@@ -172,20 +228,11 @@ public class PanelLogs extends JPanel {
     }
 
     /**
-     * Carga logs de ejemplo para demostración
+     * Limpia el observador al destruir el panel
      */
-    private void cargarLogsEjemplo() {
-        agregarLog("INFO", "Server", "Server started successfully on port 8080");
-        agregarLog("INFO", "Database", "Database connection established");
-        agregarLog("INFO", "Auth", "User 'admin' logged in from 192.168.1.100");
-        agregarLog("WARNING", "Network", "High latency detected: 250ms");
-        agregarLog("INFO", "P2P", "New peer connected: peer_001");
-        agregarLog("ERROR", "Database", "Failed to execute query: timeout exceeded");
-        agregarLog("INFO", "Server", "New client connection accepted");
-        agregarLog("WARNING", "Memory", "Memory usage at 75%");
-        agregarLog("INFO", "Auth", "User 'user123' logged out");
-        agregarLog("ERROR", "Network", "Connection lost to peer_003");
-        agregarLog("INFO", "Server", "Configuration reloaded successfully");
-        agregarLog("WARNING", "Security", "Multiple failed login attempts detected");
+    public void limpiar() {
+        if (controlador != null) {
+            controlador.removerObservadorLogs(this);
+        }
     }
 }

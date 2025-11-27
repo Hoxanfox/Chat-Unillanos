@@ -39,7 +39,9 @@ public class ServicioListarContactos implements IServicioCliente {
         // Registrar la ruta "listarContactos"
         router.registrarAccion("listarContactos", (datos, idSesion) -> {
             LoggerCentral.info(TAG, "📥 Petición listarContactos recibida de sesión: " + idSesion);
-            return handleListarContactos(datos.getAsJsonObject(), idSesion);
+            // ✅ CORREGIDO: Manejar payload null
+            JsonObject payload = (datos != null && datos.isJsonObject()) ? datos.getAsJsonObject() : new JsonObject();
+            return handleListarContactos(payload, idSesion);
         });
 
         LoggerCentral.info(TAG, "✅ Servicio inicializado - Ruta 'listarContactos' registrada");

@@ -1,5 +1,7 @@
 package dto.mensajeria;
 
+import com.google.gson.annotations.SerializedName;
+
 /**
  * DTO para enviar mensajes de audio entre contactos.
  * Usado en la ruta: enviarmensajedirectoaudio
@@ -9,6 +11,8 @@ public class DTOEnviarMensajeAudio {
     private String destinatarioId;
     private String peerRemitenteId;
     private String peerDestinoId;
+
+    @SerializedName(value = "audioId", alternate = {"contenido"})
     private String audioId;
 
     public DTOEnviarMensajeAudio() {}

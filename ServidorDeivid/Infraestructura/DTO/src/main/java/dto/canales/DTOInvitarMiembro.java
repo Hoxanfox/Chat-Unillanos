@@ -1,11 +1,16 @@
 package dto.canales;
 
+import com.google.gson.annotations.SerializedName;
+
 /**
  * DTO para invitar a un miembro a un canal.
  * Usado en la acción: invitarmiembro
  */
 public class DTOInvitarMiembro {
+    @SerializedName(value = "canalId", alternate = {"channelId"})
     private String canalId;
+
+    @SerializedName(value = "contactoId", alternate = {"userIdToInvite"})
     private String contactoId; // ID del usuario a invitar
 
     public DTOInvitarMiembro() {}
@@ -39,4 +44,3 @@ public class DTOInvitarMiembro {
                 '}';
     }
 }
-

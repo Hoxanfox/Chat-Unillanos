@@ -191,9 +191,23 @@ public class ControladorClienteServidor implements IObservador {
                 break;
 
             case "CLIENTE_OFFLINE":
+            case "CLIENTE_DESCONECTADO":
                 LoggerCentral.info(TAG, "✓ Cliente desconectado: " + datos);
                 if (onClienteDesconectado != null && datos != null) {
                     onClienteDesconectado.accept(datos.toString());
+                }
+                break;
+
+            case "USUARIO_AUTENTICADO":
+            case "USUARIO_ONLINE":
+            case "USUARIO_OFFLINE":
+            case "USUARIO_DESCONECTADO":
+            case "CLIENTE_AUTENTICADO":
+                // ✅ NUEVO: Manejar eventos de autenticación de usuarios
+                LoggerCentral.info(TAG, "🔄 Usuario cambió de estado: " + tipo + " -> " + datos);
+                // Notificar al cliente conectado que debe actualizar
+                if (onClienteConectado != null) {
+                    onClienteConectado.accept("estado_actualizado");
                 }
                 break;
 

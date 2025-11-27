@@ -66,6 +66,12 @@ public class P2PInboundHandler extends SimpleChannelInboundHandler<String> {
 
         System.out.println(TAG + ROJO + "<<< Canal CERRADO con: " + key + RESET);
         canales.remove(key);
+
+        // ✅ NOTIFICAR AL LISTENER SOBRE LA DESCONEXIÓN
+        if (listener != null) {
+            listener.onDesconexion(key);
+        }
+
         super.channelInactive(ctx);
     }
 

@@ -254,7 +254,11 @@ public class GrafoP2P extends JPanel implements IObservador {
             case "PEER_CONECTADO":
             case "PEER_DESCONECTADO":
             case "LISTA_PEERS":
-                // Actualizar grafo cuando cambian los peers
+            case "CLIENTE_CONECTADO":
+            case "CLIENTE_DESCONECTADO":
+            case "TOPOLOGIA_ACTUALIZADA":
+                // Actualizar grafo cuando cambian los peers o la topología de red
+                LoggerCentral.info(TAG, "🔄 Actualizando grafo P2P por evento: " + tipoDeDato);
                 SwingUtilities.invokeLater(this::actualizarDesdeControlador);
                 break;
 

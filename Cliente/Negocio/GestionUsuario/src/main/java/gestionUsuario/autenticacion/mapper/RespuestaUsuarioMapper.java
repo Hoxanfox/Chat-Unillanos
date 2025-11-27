@@ -35,7 +35,7 @@ public class RespuestaUsuarioMapper {
         usuario.setEmail(firstString(datos, "email"));
         usuario.setEstado("activo");
 
-        String fileId = firstString(datos, "fileId", "photoAddress", "photoId", "imagenBase64");
+        String fileId = firstString(datos, "fileId", "photoAddress", "photoId", "imagenBase64", "photoIdServidor");
         if (fileId != null) usuario.setPhotoIdServidor(fileId);
 
         usuario.setFechaRegistro(LocalDateTime.now());

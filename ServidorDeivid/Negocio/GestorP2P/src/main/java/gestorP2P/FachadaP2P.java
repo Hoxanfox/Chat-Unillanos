@@ -121,4 +121,50 @@ public class FachadaP2P {
     public GestorConexionesImpl obtenerGestorConexionesImpl() {
         return (GestorConexionesImpl) gestorConexiones;
     }
+
+    /**
+     * ✅ NUEVO: Obtiene el UUID del peer local
+     */
+    public java.util.UUID obtenerIdPeerLocal() {
+        try {
+            configuracion.Configuracion config = configuracion.Configuracion.getInstance();
+            String ipLocal = config.getPeerHost();
+            int puertoLocal = config.getPeerPuerto();
+            String socketInfo = ipLocal + ":" + puertoLocal;
+
+            // Buscar en la base de datos por socketInfo
+            repositorio.p2p.PeerRepositorio peerRepo = new repositorio.p2p.PeerRepositorio();
+            dominio.p2p.Peer peerLocal = peerRepo.obtenerPorSocketInfo(socketInfo);
+
+            if (peerLocal != null && peerLocal.getId() != null) {
+                System.out.println("[FachadaP2P] Peer local encontrado en BD: " + peerLocal.getId());
+                return peerLocal.getId();
+            }
+
+            // Si no existe, crear uno nuevo
+            java.util.UUID nuevoId = java.util.UUID.randomUUID();
+            dominio.p2p.Peer nuevoPeer = new dominio.p2p.Peer(
+                    nuevoId,
+                    ipLocal,
+                    null,
+                    dominio.p2p.Peer.Estado.ONLINE,
+                    java.time.Instant.now()
+            );
+
+            boolean guardado = peerRepo.guardarOActualizarPeer(nuevoPeer, socketInfo);
+            if (guardado) {
+                System.out.println("[FachadaP2P] Nuevo peer local creado en BD: " + nuevoId);
+                return nuevoId;
+            }
+
+            System.err.println("[FachadaP2P] Error al guardar peer local, usando UUID temporal");
+            return nuevoId;
+
+        } catch (Exception e) {
+            System.err.println("[FachadaP2P] Error obteniendo peer local: " + e.getMessage());
+            e.printStackTrace();
+            // Fallback: generar UUID temporal
+            return java.util.UUID.randomUUID();
+        }
+    }
 }

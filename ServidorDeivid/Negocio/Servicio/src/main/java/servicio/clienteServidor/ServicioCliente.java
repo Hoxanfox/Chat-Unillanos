@@ -12,7 +12,15 @@ import gestorClientes.servicios.ServicioCrearCanal;
 import gestorClientes.servicios.ServicioInvitarMiembro;
 import gestorClientes.servicios.ServicioUnirseCanal;
 import gestorClientes.servicios.ServicioRechazarInvitacion;
+import gestorClientes.servicios.ServicioResponderInvitacion;
 import gestorClientes.servicios.ServiciosMensajeContactos;
+import gestorClientes.servicios.ServicioArchivos;
+import gestorClientes.servicios.ServicioHistorialCanal;
+import gestorClientes.servicios.ServicioEnviarMensajeCanal;
+import gestorClientes.servicios.ServicioNotificarMensajeCanal;
+import gestorClientes.servicios.ServicioNotificarInvitacionCanal;
+import gestorClientes.servicios.ServicioObtenerInvitaciones;
+import gestorClientes.servicios.ServicioObtenerNotificaciones;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
 import logger.LoggerCentral;
 import observador.IObservador;
@@ -38,7 +46,13 @@ public class ServicioCliente implements IServicioClienteControl {
     private ServicioInvitarMiembro servicioInvitarMiembro;
     private ServicioUnirseCanal servicioUnirseCanal;
     private ServicioRechazarInvitacion servicioRechazarInvitacion;
+    private ServicioResponderInvitacion servicioResponderInvitacion;
     private ServiciosMensajeContactos servicioMensajes;
+    private ServicioArchivos servicioArchivos;
+    private ServicioHistorialCanal servicioHistorialCanal;
+    private ServicioEnviarMensajeCanal servicioEnviarMensajeCanal;
+    private ServicioNotificarMensajeCanal servicioNotificarCanal;
+    private ServicioNotificarInvitacionCanal servicioNotificarInvitacion;
 
     private boolean running;
 
@@ -102,6 +116,41 @@ public class ServicioCliente implements IServicioClienteControl {
         this.servicioRechazarInvitacion = new ServicioRechazarInvitacion();
         fachada.registrarServicio(servicioRechazarInvitacion);
 
+        // 11. Gestión de Archivos (Subida/Descarga de archivos por chunks)
+        LoggerCentral.info(TAG, "Registrando ServicioArchivos...");
+        this.servicioArchivos = new ServicioArchivos();
+        fachada.registrarServicio(servicioArchivos);
+
+        // 12. Historial de Canal (Consultar historial de mensajes de un canal)
+        LoggerCentral.info(TAG, "Registrando ServicioHistorialCanal...");
+        servicioHistorialCanal = new ServicioHistorialCanal();
+        fachada.registrarServicio(servicioHistorialCanal);
+
+        // 13. Enviar Mensaje a Canal (Enviar un mensaje a todos los miembros de un canal)
+        LoggerCentral.info(TAG, "Registrando ServicioEnviarMensajeCanal...");
+        servicioEnviarMensajeCanal = new ServicioEnviarMensajeCanal();
+        fachada.registrarServicio(servicioEnviarMensajeCanal);
+
+        // 14. Notificar Invitación a Canal (Enviar notificaciones push de invitaciones)
+        LoggerCentral.info(TAG, "Registrando ServicioNotificarInvitacionCanal...");
+        servicioNotificarInvitacion = new ServicioNotificarInvitacionCanal();
+        fachada.registrarServicio(servicioNotificarInvitacion);
+
+        // 15. Obtener Invitaciones (Consultar invitaciones pendientes del usuario)
+        LoggerCentral.info(TAG, "Registrando ServicioObtenerInvitaciones...");
+        ServicioObtenerInvitaciones servicioObtenerInvitaciones = new ServicioObtenerInvitaciones();
+        fachada.registrarServicio(servicioObtenerInvitaciones);
+
+        // 16. Obtener Notificaciones (Consultar notificaciones pendientes del usuario)
+        LoggerCentral.info(TAG, "Registrando ServicioObtenerNotificaciones...");
+        ServicioObtenerNotificaciones servicioObtenerNotificaciones = new ServicioObtenerNotificaciones();
+        fachada.registrarServicio(servicioObtenerNotificaciones);
+
+        // 17. Responder Invitación (Aceptar/Rechazar invitaciones a canales)
+        LoggerCentral.info(TAG, "Registrando ServicioResponderInvitacion...");
+        ServicioResponderInvitacion servicioResponderInvitacion = new ServicioResponderInvitacion();
+        fachada.registrarServicio(servicioResponderInvitacion);
+
         LoggerCentral.info(TAG, "✅ Todos los servicios CS registrados");
     }
 
@@ -110,6 +159,14 @@ public class ServicioCliente implements IServicioClienteControl {
      * Debe llamarse DESPUÉS de iniciar la red P2P.
      */
     public void setServicioSincronizacionP2P(ServicioSincronizacionDatos servicioSyncP2P) {
+        // ✅ NUEVO: Inyectar en ServicioAutenticacion
+        if (servicioAuth != null) {
+            servicioAuth.setServicioSync(servicioSyncP2P);
+            LoggerCentral.info(TAG, "✅ Servicio de sincronización P2P inyectado en autenticación");
+        } else {
+            LoggerCentral.warn(TAG, "⚠️ No se pudo inyectar servicio P2P: servicioAuth es null");
+        }
+
         if (servicioMensajes != null) {
             servicioMensajes.setServicioSincronizacionP2P(servicioSyncP2P);
             LoggerCentral.info(TAG, "✅ Servicio de sincronización P2P inyectado en mensajería");
@@ -130,6 +187,7 @@ public class ServicioCliente implements IServicioClienteControl {
         if (servicioInvitarMiembro != null) {
             servicioInvitarMiembro.setServicioSincronizacionP2P(servicioSyncP2P);
             servicioInvitarMiembro.setServicioNotificacion(servicioNotificacion);
+            servicioInvitarMiembro.setServicioNotificarInvitacion(servicioNotificarInvitacion);
             LoggerCentral.info(TAG, "✅ Servicio de sincronización P2P inyectado en invitaciones");
         } else {
             LoggerCentral.warn(TAG, "⚠️ No se pudo inyectar servicio P2P: servicioInvitarMiembro es null");
@@ -151,6 +209,32 @@ public class ServicioCliente implements IServicioClienteControl {
             LoggerCentral.info(TAG, "✅ Servicio de sincronización P2P inyectado en rechazar invitación");
         } else {
             LoggerCentral.warn(TAG, "⚠️ No se pudo inyectar servicio P2P: servicioRechazarInvitacion es null");
+        }
+
+        // Inyectar P2P en el servicio de responder invitación
+        if (servicioResponderInvitacion != null) {
+            servicioResponderInvitacion.setServicioSincronizacionP2P(servicioSyncP2P);
+            servicioResponderInvitacion.setServicioNotificacion(servicioNotificacion);
+            LoggerCentral.info(TAG, "✅ Servicio de sincronización P2P inyectado en responder invitación");
+        } else {
+            LoggerCentral.warn(TAG, "⚠️ No se pudo inyectar servicio P2P: servicioResponderInvitacion es null");
+        }
+
+        // Inyectar P2P en el servicio de archivos
+        if (servicioArchivos != null) {
+            servicioArchivos.setServicioSync(servicioSyncP2P);
+            LoggerCentral.info(TAG, "✅ Servicio de sincronización P2P inyectado en archivos");
+        } else {
+            LoggerCentral.warn(TAG, "⚠️ No se pudo inyectar servicio P2P: servicioArchivos es null");
+        }
+
+        // ✅ NUEVO: Inyectar P2P y notificaciones en el servicio de enviar mensaje a canal
+        if (servicioEnviarMensajeCanal != null) {
+            servicioEnviarMensajeCanal.setServicioSincronizacionP2P(servicioSyncP2P);
+            servicioEnviarMensajeCanal.setServicioNotificacion(servicioNotificacion);
+            LoggerCentral.info(TAG, "✅ Servicio de sincronización P2P inyectado en envío de mensajes a canal");
+        } else {
+            LoggerCentral.warn(TAG, "⚠️ No se pudo inyectar servicio P2P: servicioEnviarMensajeCanal es null");
         }
     }
 
@@ -202,12 +286,20 @@ public class ServicioCliente implements IServicioClienteControl {
         return gestionRed != null ? gestionRed.getSesionesActivas() : List.of();
     }
 
-    // --- PATRÓN OBSERVER (delegado al ServicioGestionRed) ---
+    // --- PATRÓN OBSERVER (delegado al ServicioGestionRed y ServicioAutenticacion) ---
 
     public void registrarObservador(IObservador observador) {
+        // Registrar en ServicioGestionRed para eventos de conexión/desconexión
         ServicioGestionRed gestionRed = fachada.getServicioGestionRed();
         if (gestionRed != null) {
             gestionRed.registrarObservador(observador);
+            LoggerCentral.debug(TAG, "Observador registrado en ServicioGestionRed");
+        }
+
+        // ✅ NUEVO: Registrar también en ServicioAutenticacion para eventos de login/logout
+        if (servicioAuth != null) {
+            servicioAuth.registrarObservador(observador);
+            LoggerCentral.debug(TAG, "Observador registrado en ServicioAutenticacion");
         }
     }
 
@@ -215,6 +307,11 @@ public class ServicioCliente implements IServicioClienteControl {
         ServicioGestionRed gestionRed = fachada.getServicioGestionRed();
         if (gestionRed != null) {
             gestionRed.removerObservador(observador);
+        }
+
+        // ✅ NUEVO: Remover también del ServicioAutenticacion
+        if (servicioAuth != null) {
+            servicioAuth.removerObservador(observador);
         }
     }
 
@@ -233,4 +330,3 @@ public class ServicioCliente implements IServicioClienteControl {
         return fachada.getServicioGestionRed();
     }
 }
-

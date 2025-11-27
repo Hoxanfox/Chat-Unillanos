@@ -160,6 +160,36 @@ public class ServicioGestionUsuarios {
     }
 
     /**
+     * ✅ NUEVO: Registra un archivo en la base de datos
+     * Este método respeta la arquitectura: Servicio -> Gestor -> Repositorio
+     * @param fileId ID del archivo (ruta relativa desde Bucket/)
+     * @param nombreOriginal Nombre original del archivo
+     * @param mimeType Tipo MIME del archivo
+     * @param tamanio Tamaño en bytes
+     * @param hash Hash SHA-256 del archivo
+     * @return true si se registró correctamente
+     */
+    public boolean registrarArchivo(String fileId, String nombreOriginal, String mimeType, long tamanio, String hash) {
+        try {
+            LoggerCentral.info(TAG, "📝 Registrando archivo en BD: " + fileId);
+
+            // Llamar al gestor para registrar el archivo
+            boolean resultado = gestor.registrarArchivo(fileId, nombreOriginal, mimeType, tamanio, hash);
+
+            if (resultado) {
+                LoggerCentral.info(TAG, "✓ Archivo registrado exitosamente");
+                // Sincronizar con la red P2P
+                sincronizarConRed("Archivo registrado: " + fileId);
+            }
+
+            return resultado;
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error al registrar archivo: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
      * Método privado para sincronizar cambios con la red P2P
      * @param descripcion Descripción del cambio realizado
      */

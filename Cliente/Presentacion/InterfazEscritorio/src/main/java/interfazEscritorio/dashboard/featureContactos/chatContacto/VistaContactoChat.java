@@ -158,6 +158,14 @@ public class VistaContactoChat extends BorderPane implements IObservador {
         System.out.println("📥 [VistaContactoChat]: Notificación recibida - Tipo: " + tipoDeDato);
 
         switch (tipoDeDato) {
+            case "REFRESCAR_MENSAJES":
+                // Señal de actualización global - refrescar el historial
+                System.out.println("🔄 [VistaContactoChat]: Refrescando mensajes por SIGNAL_UPDATE");
+                Platform.runLater(() -> {
+                    controlador.solicitarHistorial(contacto.getId());
+                });
+                break;
+
             case "NUEVO_MENSAJE_PRIVADO":
                 // Mensaje recibido de otro usuario (PUSH del servidor)
                 if (datos instanceof DTOMensaje) {

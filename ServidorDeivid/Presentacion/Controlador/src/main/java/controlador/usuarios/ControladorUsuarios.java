@@ -211,6 +211,40 @@ public class ControladorUsuarios {
         }
     }
 
+    /**
+     * ✅ NUEVO: Registra un archivo en la base de datos
+     * Este método respeta la arquitectura: Controlador -> Servicio -> Gestor -> Repositorio
+     * @param fileId ID del archivo (ruta relativa desde Bucket/)
+     * @param nombreOriginal Nombre original del archivo
+     * @param mimeType Tipo MIME del archivo
+     * @param tamanio Tamaño en bytes
+     * @param hash Hash SHA-256 del archivo
+     * @return true si se registró correctamente
+     */
+    public boolean registrarArchivo(String fileId, String nombreOriginal, String mimeType, long tamanio, String hash) {
+        try {
+            LoggerCentral.info(TAG, "📝 Registrando archivo en BD: " + fileId);
+
+            // Llamar al servicio para registrar el archivo
+            boolean resultado = servicio.registrarArchivo(fileId, nombreOriginal, mimeType, tamanio, hash);
+
+            if (resultado) {
+                LoggerCentral.info(TAG, "✅ Archivo registrado en BD exitosamente: " + fileId);
+            } else {
+                LoggerCentral.error(TAG, "❌ Error al registrar archivo en BD: " + fileId);
+                mostrarError("No se pudo registrar el archivo en la base de datos");
+            }
+
+            return resultado;
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "❌ Error inesperado al registrar archivo: " + e.getMessage());
+            e.printStackTrace();
+            mostrarError("Error al registrar archivo en la base de datos");
+            return false;
+        }
+    }
+
     // --- Métodos auxiliares para mostrar mensajes ---
 
     private void mostrarError(String mensaje) {

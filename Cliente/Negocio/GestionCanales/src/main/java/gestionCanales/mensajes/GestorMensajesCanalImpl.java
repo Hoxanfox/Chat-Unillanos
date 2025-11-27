@@ -151,9 +151,20 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
 
             for (Map<String, Object> mapa : mensajesData) {
                 DTOMensajeCanal mensaje = construirDTOMensajeDesdeMap(mapa);
+                // ✅ Marcar correctamente si el mensaje es propio comparando IDs
                 mensaje.setEsPropio(mensaje.getRemitenteId().equals(usuarioActual));
                 historial.add(mensaje);
             }
+
+            // ✅ ORDENAR MENSAJES POR TIMESTAMP (del más antiguo al más reciente)
+            historial.sort((m1, m2) -> {
+                if (m1.getFechaEnvio() == null && m2.getFechaEnvio() == null) return 0;
+                if (m1.getFechaEnvio() == null) return 1; // null al final
+                if (m2.getFechaEnvio() == null) return -1; // null al final
+                return m1.getFechaEnvio().compareTo(m2.getFechaEnvio());
+            });
+
+            System.out.println("📋 [GestorMensajesCanal]: Historial ordenado por timestamp - Total: " + historial.size());
 
             // Sincronizar con la base de datos local
             if (!historial.isEmpty()) {

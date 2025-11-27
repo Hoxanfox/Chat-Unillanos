@@ -42,6 +42,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
     // Referencias a servicios
     private ServicioNotificacionCliente servicioNotificacion;
     private ServicioSincronizacionDatos servicioSyncP2P;
+    private ServicioNotificarInvitacionCanal servicioNotificarInvitacion;
 
     public ServicioInvitarMiembro() {
         this.invitacionRepositorio = new CanalInvitacionRepositorio();
@@ -64,6 +65,14 @@ public class ServicioInvitarMiembro implements IServicioCliente {
     public void setServicioSincronizacionP2P(ServicioSincronizacionDatos servicioSyncP2P) {
         this.servicioSyncP2P = servicioSyncP2P;
         LoggerCentral.info(TAG, VERDE + "Servicio de sincronización P2P configurado" + RESET);
+    }
+
+    /**
+     * Inyecta el servicio de notificación de invitaciones a canal.
+     */
+    public void setServicioNotificarInvitacion(ServicioNotificarInvitacionCanal servicioNotificarInvitacion) {
+        this.servicioNotificarInvitacion = servicioNotificarInvitacion;
+        LoggerCentral.info(TAG, VERDE + "Servicio de notificación de invitaciones configurado" + RESET);
     }
 
     @Override
@@ -145,7 +154,19 @@ public class ServicioInvitarMiembro implements IServicioCliente {
 
                 LoggerCentral.info(TAG, VERDE + "✅ Invitación guardada en BD - ID: " + invitacion.getId() + RESET);
 
-                // 10. ✅ Notificar al usuario invitado (SIGNAL_UPDATE)
+                // 10. ✅ Enviar notificación push detallada al usuario invitado
+                if (servicioNotificarInvitacion != null) {
+                    servicioNotificarInvitacion.notificarInvitacion(
+                        canalId.toString(),
+                        contactoId.toString(),
+                        adminId
+                    );
+                    LoggerCentral.info(TAG, VERDE + "✅ Notificación push de invitación enviada" + RESET);
+                } else {
+                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ Servicio de notificación de invitaciones no disponible" + RESET);
+                }
+
+                // 11. ✅ Notificar al usuario invitado (SIGNAL_UPDATE genérico)
                 if (servicioNotificacion != null) {
                     // Notificar específicamente al usuario invitado sobre la nueva invitación
                     Map<String, Object> notificacionData = new HashMap<>();
@@ -158,17 +179,22 @@ public class ServicioInvitarMiembro implements IServicioCliente {
                     LoggerCentral.info(TAG, VERDE + "✅ SIGNAL_UPDATE enviado para nueva invitación" + RESET);
                 }
 
-                // 11. ✅ Activar sincronización P2P
+                // 12. ✅ Activar sincronización P2P
                 if (servicioSyncP2P != null) {
                     LoggerCentral.info(TAG, CYAN + "🔄 Activando sincronización P2P..." + RESET);
-                    servicioSyncP2P.onBaseDeDatosCambio();
-                    servicioSyncP2P.forzarSincronizacion();
-                    LoggerCentral.info(TAG, VERDE + "✅ Sincronización P2P activada" + RESET);
+                    try {
+                        servicioSyncP2P.onBaseDeDatosCambio();
+                        servicioSyncP2P.forzarSincronizacion();
+                        LoggerCentral.info(TAG, VERDE + "✅ Sincronización P2P activada exitosamente" + RESET);
+                    } catch (Exception e) {
+                        LoggerCentral.error(TAG, ROJO + "❌ Error al forzar sincronización P2P: " + e.getMessage() + RESET);
+                    }
                 } else {
-                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ Servicio P2P no disponible, sincronización omitida" + RESET);
+                    LoggerCentral.error(TAG, ROJO + "❌ CRÍTICO: Servicio P2P es NULL - NO SE SINCRONIZARÁ" + RESET);
+                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ La invitación se guardó pero NO se sincronizó con otros nodos" + RESET);
                 }
 
-                // 12. Preparar respuesta
+                // 13. Preparar respuesta
                 Map<String, Object> respuesta = new HashMap<>();
                 respuesta.put("invitacionId", invitacion.getId().toString());
                 respuesta.put("canalId", canalId.toString());
@@ -203,4 +229,3 @@ public class ServicioInvitarMiembro implements IServicioCliente {
         LoggerCentral.info(TAG, "Servicio de invitar miembro detenido");
     }
 }
-

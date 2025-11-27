@@ -241,29 +241,55 @@ public class ServicioArchivos implements IServicioCliente {
             try {
                 DTOStartDownload dto = gson.fromJson(datos, DTOStartDownload.class);
 
+                LoggerCentral.info(TAG, "📥 Solicitud de descarga recibida - FileId: " + dto.getFileId());
+                LoggerCentral.info(TAG, "   Sesión: " + idSesion);
+
                 // Buscar archivo en BD
+                LoggerCentral.info(TAG, "   Buscando archivo en BD...");
                 Archivo archivo = repoArchivo.buscarPorFileId(dto.getFileId());
+
                 if (archivo == null) {
+                    LoggerCentral.error(TAG, "❌ Archivo NO encontrado en BD - FileId: " + dto.getFileId());
+                    LoggerCentral.error(TAG, "   CAUSA: El archivo no está registrado en la tabla 'archivos'");
+                    LoggerCentral.error(TAG, "   SOLUCIÓN: Ejecutar el script fix_archivos_faltantes.sql");
                     return new DTOResponse("startFileDownload", "error", "Archivo no encontrado", null);
                 }
 
+                LoggerCentral.info(TAG, "✓ Archivo encontrado en BD:");
+                LoggerCentral.info(TAG, "   - ID: " + archivo.getId());
+                LoggerCentral.info(TAG, "   - Nombre: " + archivo.getNombreArchivo());
+                LoggerCentral.info(TAG, "   - Ruta relativa: " + archivo.getRutaRelativa());
+                LoggerCentral.info(TAG, "   - Tamaño: " + archivo.getTamanio() + " bytes");
+                LoggerCentral.info(TAG, "   - MimeType: " + archivo.getMimeType());
+
                 // Leer archivo físico
-                File archivoFisico = new File(BUCKET_PATH + archivo.getRutaRelativa());
+                String rutaCompleta = BUCKET_PATH + archivo.getRutaRelativa();
+                File archivoFisico = new File(rutaCompleta);
+
+                LoggerCentral.info(TAG, "   Verificando archivo físico: " + archivoFisico.getAbsolutePath());
+
                 if (!archivoFisico.exists()) {
-                    LoggerCentral.error(TAG, "Archivo físico no existe: " + archivoFisico.getAbsolutePath());
+                    LoggerCentral.error(TAG, "❌ Archivo físico NO existe: " + archivoFisico.getAbsolutePath());
+                    LoggerCentral.error(TAG, "   CAUSA: El archivo fue eliminado del sistema de archivos");
                     return new DTOResponse("startFileDownload", "error", "Archivo no disponible", null);
                 }
 
+                LoggerCentral.info(TAG, "✓ Archivo físico existe - Tamaño: " + archivoFisico.length() + " bytes");
+
                 byte[] fileData = Files.readAllBytes(archivoFisico.toPath());
                 int totalChunks = (int) Math.ceil((double) fileData.length / CHUNK_SIZE);
+
+                LoggerCentral.info(TAG, "✓ Archivo leído - Se dividirá en " + totalChunks + " chunks");
 
                 // Crear sesión de descarga
                 String downloadId = UUID.randomUUID().toString();
                 DownloadSession session = new DownloadSession(downloadId, archivo, fileData, totalChunks);
                 downloadSessions.put(downloadId, session);
 
-                LoggerCentral.info(TAG, "Download iniciado: " + downloadId + " - FileId: " + dto.getFileId() +
-                                 " - Chunks: " + totalChunks);
+                LoggerCentral.info(TAG, "✅ Descarga iniciada exitosamente:");
+                LoggerCentral.info(TAG, "   - DownloadId: " + downloadId);
+                LoggerCentral.info(TAG, "   - FileId: " + dto.getFileId());
+                LoggerCentral.info(TAG, "   - Chunks totales: " + totalChunks);
 
                 // Respuesta con info de descarga
                 DTODownloadInfo response = new DTODownloadInfo(
@@ -274,7 +300,8 @@ public class ServicioArchivos implements IServicioCliente {
                 return new DTOResponse("startFileDownload", "success", "Download iniciado", gson.toJsonTree(response));
 
             } catch (Exception e) {
-                LoggerCentral.error(TAG, "Error en startFileDownload: " + e.getMessage());
+                LoggerCentral.error(TAG, "❌ Error en startFileDownload: " + e.getMessage());
+                e.printStackTrace();
                 return new DTOResponse("startFileDownload", "error", "Error al iniciar descarga", null);
             }
         });
