@@ -124,8 +124,7 @@ public class Archivo implements Serializable, IMerkleEntity {
                (fileId != null ? fileId : "") +
                (nombreArchivo != null ? nombreArchivo : "") +
                (hashSHA256 != null ? hashSHA256 : "") +
-               tamanio +
-               (fechaCreacion != null ? fechaCreacion.toString() : "");
+               tamanio ;
     }
 
     @Override

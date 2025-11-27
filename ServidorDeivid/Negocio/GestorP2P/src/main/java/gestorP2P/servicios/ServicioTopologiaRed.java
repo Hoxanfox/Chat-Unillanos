@@ -331,12 +331,19 @@ public class ServicioTopologiaRed implements IServicioP2P, ISujeto {
 
     @Override
     public void notificarObservadores(String tipoDeDato, Object datos) {
+        LoggerCentral.info(TAG, "📢 Notificando '" + tipoDeDato + "' a " + observadores.size() + " observadores");
+
+        int contador = 0;
         for (IObservador obs : observadores) {
             try {
+                contador++;
+                LoggerCentral.debug(TAG, "  -> Notificando observador #" + contador + ": " + obs.getClass().getSimpleName());
                 obs.actualizar(tipoDeDato, datos);
             } catch (Exception e) {
-                LoggerCentral.error(TAG, "Error notificando observador: " + e.getMessage());
+                LoggerCentral.error(TAG, "Error notificando observador #" + contador + ": " + e.getMessage());
             }
         }
+
+        LoggerCentral.info(TAG, "✅ Notificación completada a " + contador + " observadores");
     }
 }

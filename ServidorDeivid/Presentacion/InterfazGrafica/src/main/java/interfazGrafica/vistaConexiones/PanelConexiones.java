@@ -237,7 +237,15 @@ public class PanelConexiones extends JPanel implements IObservador { // ✅ NUEV
             new Color(52, 152, 219)
         ));
 
-        grafoCompleto = new GrafoRedCompleta();
+        // ✅ CORREGIDO: Pasar el controlador para que se suscriba a eventos de topología
+        if (controladorP2P != null) {
+            grafoCompleto = new GrafoRedCompleta(controladorP2P);
+            LoggerCentral.info(TAG, "✅ GrafoRedCompleta creado con controlador (se suscribirá a topología)");
+        } else {
+            grafoCompleto = new GrafoRedCompleta();
+            LoggerCentral.warn(TAG, "⚠️ GrafoRedCompleta creado sin controlador (modo estático)");
+        }
+
         wrapperCompleto = new PanelGrafoConZoom(grafoCompleto);
         panel.add(wrapperCompleto, BorderLayout.CENTER);
 

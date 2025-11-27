@@ -16,11 +16,19 @@ import observador.IObservador;
 public class ServicioNotificacionCliente implements IServicioCliente, IObservador {
 
     private static final String TAG = "NotificadorClientes";
+
+    // --- COLORES ANSI ---
+    private static final String RESET = "\u001B[0m";
+    private static final String AZUL = "\u001B[34m";
+    private static final String VERDE = "\u001B[32m";
+    private static final String AMARILLO = "\u001B[33m";
+
     private IGestorConexionesCliente gestorClientes;
     private final Gson gson;
 
     public ServicioNotificacionCliente() {
         this.gson = new Gson();
+        LoggerCentral.info(TAG, VERDE + "✅ ServicioNotificacionCliente creado" + RESET);
     }
 
     @Override
@@ -29,7 +37,7 @@ public class ServicioNotificacionCliente implements IServicioCliente, IObservado
     @Override
     public void inicializar(IGestorConexionesCliente gestor, IRouterMensajesCliente router) {
         this.gestorClientes = gestor;
-        LoggerCentral.info(TAG, "Pasarela de eventos PUSH lista.");
+        LoggerCentral.info(TAG, VERDE + "✅ Pasarela de eventos PUSH lista." + RESET);
     }
 
     /**
@@ -41,10 +49,41 @@ public class ServicioNotificacionCliente implements IServicioCliente, IObservado
      */
     @Override
     public void actualizar(String tipoEvento, Object datos) {
+        LoggerCentral.info(TAG, AZUL + "📥 Evento recibido: " + tipoEvento + " | Datos: " + datos + RESET);
+
+        // ✅ NUEVO: Manejar específicamente la sincronización P2P terminada
+        if ("SINCRONIZACION_P2P_TERMINADA".equals(tipoEvento)) {
+            boolean huboCambios = datos instanceof Boolean ? (Boolean) datos : false;
+
+            if (huboCambios) {
+                LoggerCentral.info(TAG, VERDE + "🔄 Sincronización P2P completada CON cambios. Notificando clientes..." + RESET);
+                enviarSenalDeActualizacion("SYNC_P2P_UPDATE");
+            } else {
+                LoggerCentral.debug(TAG, "Sincronización P2P completada SIN cambios. No se notifica.");
+            }
+            return;
+        }
+
+        // ✅ MEJORADO: Manejar evento de sincronización terminada
+        if ("SINCRONIZACION_TERMINADA".equals(tipoEvento)) {
+            boolean huboCambios = datos instanceof Boolean ? (Boolean) datos : false;
+
+            if (huboCambios) {
+                LoggerCentral.info(TAG, VERDE + "🔄 Sincronización terminada CON cambios. Notificando clientes..." + RESET);
+                enviarSenalDeActualizacion("SYNC_UPDATE");
+            } else {
+                LoggerCentral.debug(TAG, "Sincronización terminada SIN cambios. No se notifica.");
+            }
+            return;
+        }
+
         // Filtramos qué eventos merecen notificar al cliente
         // Por ejemplo: NUEVO_MENSAJE, NUEVO_USUARIO, etc.
         if (tipoEvento.startsWith("NUEVO_") || tipoEvento.equals("ACTUALIZACION_ESTADO")) {
+            LoggerCentral.info(TAG, AZUL + "📡 Evento requiere notificación: " + tipoEvento + RESET);
             enviarSenalDeActualizacion(tipoEvento);
+        } else {
+            LoggerCentral.debug(TAG, "Evento " + tipoEvento + " no requiere notificación a clientes");
         }
     }
 
@@ -53,7 +92,10 @@ public class ServicioNotificacionCliente implements IServicioCliente, IObservado
      * El cliente recibe esto y actualiza toda su información: contactos, canales, mensajes.
      */
     private void enviarSenalDeActualizacion(String recursoAfectado) {
-        if (gestorClientes == null) return;
+        if (gestorClientes == null) {
+            LoggerCentral.warn(TAG, AMARILLO + "⚠️ GestorClientes no disponible. No se puede enviar notificación." + RESET);
+            return;
+        }
 
         try {
             // Payload Ligero: { "type": "SIGNAL_UPDATE", "resource": "NUEVO_MENSAJE" }
@@ -63,16 +105,24 @@ public class ServicioNotificacionCliente implements IServicioCliente, IObservado
 
             String jsonPush = gson.toJson(signal);
 
-            LoggerCentral.debug(TAG, "📡 Enviando SIGNAL_UPDATE: " + recursoAfectado);
+            LoggerCentral.info(TAG, VERDE + "📡 Enviando SIGNAL_UPDATE a todos los clientes: " + recursoAfectado + RESET);
 
             // Broadcast a todos los clientes conectados
             gestorClientes.broadcast(jsonPush);
 
+            LoggerCentral.info(TAG, VERDE + "✅ SIGNAL_UPDATE enviado a todos los clientes" + RESET);
+
         } catch (Exception e) {
-            LoggerCentral.error(TAG, "Error enviando push: " + e.getMessage());
+            LoggerCentral.error(TAG, "❌ Error enviando push: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
-    @Override public void iniciar() {}
-    @Override public void detener() {}
+    @Override public void iniciar() {
+        LoggerCentral.info(TAG, VERDE + "🚀 ServicioNotificacionCliente iniciado" + RESET);
+    }
+
+    @Override public void detener() {
+        LoggerCentral.info(TAG, "⏹️ ServicioNotificacionCliente detenido");
+    }
 }

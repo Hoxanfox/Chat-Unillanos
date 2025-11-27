@@ -103,13 +103,21 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
     }
 
     /**
-     * ✅ NUEVO: Inyecta el servicio de notificación de clientes CS.
+     * ✅ MEJORADO: Inyecta el servicio de notificación de clientes CS.
      * Permite que cuando termine la sincronización P2P, se envíe automáticamente
      * un SIGNAL_UPDATE a todos los clientes conectados para que actualicen su información.
+     * AHORA TAMBIÉN LO REGISTRA COMO OBSERVADOR para que reciba todas las notificaciones.
      */
     public void setServicioNotificacionCliente(IObservador servicioNotificacionCliente) {
         this.servicioNotificacionCliente = servicioNotificacionCliente;
-        LoggerCentral.info(TAG, "✅ Servicio de notificación de clientes CS configurado");
+        LoggerCentral.info(TAG, VERDE + "✅ Servicio de notificación de clientes CS configurado" + RESET);
+
+        // ✅ NUEVO: También registrarlo como observador para que reciba TODAS las notificaciones
+        if (servicioNotificacionCliente != null) {
+            registrarObservador(servicioNotificacionCliente);
+            LoggerCentral.info(TAG, VERDE + "✅ ServicioNotificacionCliente registrado como observador" + RESET);
+            LoggerCentral.info(TAG, CYAN + "Total de observadores registrados: " + observadores.size() + RESET);
+        }
     }
 
     @Override
