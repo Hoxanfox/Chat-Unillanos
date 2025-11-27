@@ -127,6 +127,25 @@ public class ServicioTopologiaRed implements IServicioP2P, ISujeto {
     }
 
     /**
+     * ✅ NUEVO: Configurar observador del servicio Cliente-Servidor para forzar actualización
+     * cuando cambien los clientes conectados.
+     */
+    public void observarCambiosClientes(observador.ISujeto servicioGestionRedCS) {
+        if (servicioGestionRedCS != null) {
+            servicioGestionRedCS.registrarObservador(new observador.IObservador() {
+                @Override
+                public void actualizar(String tipo, Object datos) {
+                    if ("CLIENTE_CONECTADO".equals(tipo) || "CLIENTE_DESCONECTADO".equals(tipo)) {
+                        LoggerCentral.debug(TAG, "📡 Cambio en clientes detectado: " + tipo);
+                        forzarActualizacion();
+                    }
+                }
+            });
+            LoggerCentral.info(TAG, "✅ ServicioTopologiaRed observando cambios en clientes CS");
+        }
+    }
+
+    /**
      * Configura la información local del peer usando la configuración
      */
     public void configurarInfoLocal(String idLocal, int puertoLocal) {

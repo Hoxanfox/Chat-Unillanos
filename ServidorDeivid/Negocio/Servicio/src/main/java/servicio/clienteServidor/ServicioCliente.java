@@ -224,5 +224,13 @@ public class ServicioCliente implements IServicioClienteControl {
             gestionRed.notificarObservadores(tipo, datos);
         }
     }
+
+    /**
+     * ✅ NUEVO: Expone el ServicioGestionRed interno para que otros servicios puedan observarlo.
+     * Útil para conectar con ServicioTopologiaRed y actualizar la topología cuando cambien los clientes.
+     */
+    public ServicioGestionRed getServicioGestionRed() {
+        return fachada.getServicioGestionRed();
+    }
 }
 

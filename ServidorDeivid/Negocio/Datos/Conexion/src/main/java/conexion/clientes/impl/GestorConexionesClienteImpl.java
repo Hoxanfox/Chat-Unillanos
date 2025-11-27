@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 public class GestorConexionesClienteImpl implements IGestorConexionesCliente, IMensajeListener {
 
@@ -30,6 +31,10 @@ public class GestorConexionesClienteImpl implements IGestorConexionesCliente, IM
     private final Map<String, String> mapaUsuarioSesion;
 
     private IRouterMensajesCliente router;
+
+    // ✅ NUEVO: Callbacks para notificar cambios
+    private Consumer<String> onClienteConectadoCallback;
+    private Consumer<String> onClienteDesconectadoCallback;
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public GestorConexionesClienteImpl() {
@@ -41,6 +46,15 @@ public class GestorConexionesClienteImpl implements IGestorConexionesCliente, IM
 
     public void setRouter(IRouterMensajesCliente router) {
         this.router = router;
+    }
+
+    // ✅ NUEVO: Configurar callbacks para notificar eventos
+    public void setOnClienteConectado(Consumer<String> callback) {
+        this.onClienteConectadoCallback = callback;
+    }
+
+    public void setOnClienteDesconectado(Consumer<String> callback) {
+        this.onClienteDesconectadoCallback = callback;
     }
 
     @Override
@@ -162,7 +176,12 @@ public class GestorConexionesClienteImpl implements IGestorConexionesCliente, IM
                     origen, ip, puerto, "CONECTADO", LocalDateTime.now().format(FORMATTER)
             );
             poolSesiones.put(origen, sesion);
-            // System.out.println(TAG + "Nuevo cliente conectado: " + origen);
+            System.out.println(TAG + "Nuevo cliente conectado: " + origen);
+
+            // ✅ NUEVO: Notificar evento
+            if (onClienteConectadoCallback != null) {
+                onClienteConectadoCallback.accept(origen);
+            }
         } catch (Exception e) {
             System.err.println(TAG + "Error registrando cliente: " + e.getMessage());
         }
@@ -188,6 +207,11 @@ public class GestorConexionesClienteImpl implements IGestorConexionesCliente, IM
                 mapaUsuarioSesion.remove(sesion.getIdUsuario());
             }
             System.out.println(TAG + "Cliente salió: " + origen);
+
+            // ✅ NUEVO: Notificar evento
+            if (onClienteDesconectadoCallback != null) {
+                onClienteDesconectadoCallback.accept(origen);
+            }
         }
     }
 }

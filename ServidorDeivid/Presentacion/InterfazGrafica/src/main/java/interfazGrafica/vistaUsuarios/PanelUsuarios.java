@@ -7,9 +7,12 @@ import dto.vista.DTOUsuarioVista;
 import interfazGrafica.vistaUsuarios.componentes.BarraHerramientasUsuarios;
 import interfazGrafica.vistaUsuarios.componentes.DialogoUsuario;
 import interfazGrafica.vistaUsuarios.componentes.TablaUsuarios;
+import interfazGrafica.util.GestorArchivosLocal;
+import logger.LoggerCentral;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.File;
 import java.util.List;
 
 /**
@@ -18,6 +21,7 @@ import java.util.List;
  */
 public class PanelUsuarios extends JPanel {
 
+    private static final String TAG = "PanelUsuarios";
     private BarraHerramientasUsuarios barraHerramientas;
     private TablaUsuarios tablaUsuarios;
     private ControladorUsuarios controlador;
@@ -64,13 +68,30 @@ public class PanelUsuarios extends JPanel {
             String email = dialogo.getEmail();
             String password = dialogo.getPassword();
             String status = dialogo.getStatus();
+            File archivoFoto = dialogo.getArchivoFotoSeleccionado();
+
+            // Guardar foto en Bucket si fue seleccionada
+            String fileIdFoto = null;
+            if (archivoFoto != null) {
+                LoggerCentral.info(TAG, "Guardando foto de perfil para usuario: " + username);
+                fileIdFoto = GestorArchivosLocal.guardarFotoUsuario(archivoFoto);
+
+                if (fileIdFoto == null) {
+                    JOptionPane.showMessageDialog(this,
+                        "Error al guardar la foto de perfil. El usuario se creará sin foto.",
+                        "Advertencia",
+                        JOptionPane.WARNING_MESSAGE);
+                } else {
+                    LoggerCentral.info(TAG, "✓ Foto guardada con ID: " + fileIdFoto);
+                }
+            }
 
             // Crear DTO para enviar al controlador
             DTOCrearUsuario dto = new DTOCrearUsuario();
             dto.setNombre(username);
             dto.setEmail(email);
-            dto.setContrasena(password); // Usar la contraseña del formulario
-            // TODO: Obtener el peerPadreId del servidor actual
+            dto.setContrasena(password);
+            dto.setFoto(fileIdFoto); // Guardar el fileId de la foto
             dto.setPeerPadreId(null); // Por ahora null
 
             // Llamar al controlador para crear el usuario
@@ -88,6 +109,8 @@ public class PanelUsuarios extends JPanel {
                 };
 
                 tablaUsuarios.agregarUsuario(nuevoUsuario);
+                LoggerCentral.info(TAG, "✅ Usuario creado exitosamente con foto: " +
+                    (fileIdFoto != null ? fileIdFoto : "sin foto"));
             }
         }
     }
@@ -153,12 +176,35 @@ public class PanelUsuarios extends JPanel {
 
         // Si el usuario confirmó
         if (dialogo.isConfirmado()) {
+            File archivoFoto = dialogo.getArchivoFotoSeleccionado();
+            String fileIdFoto = null;
+
+            // Si se seleccionó una nueva foto, guardarla
+            if (archivoFoto != null) {
+                LoggerCentral.info(TAG, "Actualizando foto de perfil para usuario: " + usuario[0]);
+                fileIdFoto = GestorArchivosLocal.guardarFotoUsuario(archivoFoto);
+
+                if (fileIdFoto == null) {
+                    JOptionPane.showMessageDialog(this,
+                        "Error al guardar la nueva foto. El usuario se actualizará sin cambiar la foto.",
+                        "Advertencia",
+                        JOptionPane.WARNING_MESSAGE);
+                } else {
+                    LoggerCentral.info(TAG, "✓ Nueva foto guardada con ID: " + fileIdFoto);
+                }
+            }
+
             // Crear DTO para actualizar
             DTOActualizarUsuario dto = new DTOActualizarUsuario();
             dto.setId((String) usuario[0]); // ID
             dto.setNombre(dialogo.getUsername());
             dto.setEmail(dialogo.getEmail());
             dto.setEstado(dialogo.getStatus().toUpperCase());
+
+            // Solo actualizar foto si se seleccionó una nueva
+            if (fileIdFoto != null) {
+                dto.setFoto(fileIdFoto);
+            }
 
             // Llamar al controlador para actualizar
             DTOUsuarioVista usuarioActualizado = controlador.actualizarUsuario(dto);
@@ -175,6 +221,8 @@ public class PanelUsuarios extends JPanel {
                 };
 
                 tablaUsuarios.actualizarUsuario(filaSeleccionada, datosActualizados);
+                LoggerCentral.info(TAG, "✅ Usuario actualizado exitosamente" +
+                    (fileIdFoto != null ? " con nueva foto: " + fileIdFoto : ""));
             }
         }
     }

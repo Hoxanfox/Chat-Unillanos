@@ -1,7 +1,11 @@
 package interfazGrafica.vistaUsuarios.componentes;
 
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import javax.imageio.ImageIO;
 
 /**
  * Diálogo modal para agregar o editar un usuario
@@ -14,7 +18,10 @@ public class DialogoUsuario extends JDialog {
     private JComboBox<String> cmbStatus;
     private JButton btnGuardar;
     private JButton btnCancelar;
+    private JButton btnSeleccionarFoto;
+    private JLabel lblFotoPreview;
 
+    private File archivoFotoSeleccionado;
     private boolean confirmado = false;
     private boolean esEdicion = false;
 
@@ -26,7 +33,7 @@ public class DialogoUsuario extends JDialog {
     }
 
     private void configurarDialogo() {
-        this.setSize(400, 300);
+        this.setSize(500, 450);
         this.setLocationRelativeTo(getParent());
         this.setResizable(false);
         this.setLayout(new BorderLayout(10, 10));
@@ -53,8 +60,16 @@ public class DialogoUsuario extends JDialog {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(5, 5, 5, 5);
 
+        // Foto de perfil
+        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2;
+        JPanel panelFoto = crearPanelFoto();
+        panel.add(panelFoto, gbc);
+
+        // Reset gridwidth
+        gbc.gridwidth = 1;
+
         // Username
-        gbc.gridx = 0; gbc.gridy = 0;
+        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0;
         panel.add(new JLabel("Username:"), gbc);
 
         gbc.gridx = 1; gbc.weightx = 1.0;
@@ -62,7 +77,7 @@ public class DialogoUsuario extends JDialog {
         panel.add(txtUsername, gbc);
 
         // Email
-        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0;
+        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0;
         panel.add(new JLabel("Email:"), gbc);
 
         gbc.gridx = 1; gbc.weightx = 1.0;
@@ -70,7 +85,7 @@ public class DialogoUsuario extends JDialog {
         panel.add(txtEmail, gbc);
 
         // Password (solo visible en modo creación)
-        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0;
+        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0;
         JLabel lblPassword = new JLabel("Password:");
         panel.add(lblPassword, gbc);
 
@@ -85,7 +100,7 @@ public class DialogoUsuario extends JDialog {
         }
 
         // Status
-        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0;
+        gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0;
         panel.add(new JLabel("Status:"), gbc);
 
         gbc.gridx = 1; gbc.weightx = 1.0;
@@ -93,6 +108,86 @@ public class DialogoUsuario extends JDialog {
         panel.add(cmbStatus, gbc);
 
         return panel;
+    }
+
+    private JPanel crearPanelFoto() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBorder(BorderFactory.createTitledBorder("Foto de Perfil"));
+
+        // Panel izquierdo: preview de la foto
+        JPanel panelPreview = new JPanel(new BorderLayout());
+        lblFotoPreview = new JLabel("Sin foto", SwingConstants.CENTER);
+        lblFotoPreview.setPreferredSize(new Dimension(120, 120));
+        lblFotoPreview.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
+        lblFotoPreview.setBackground(Color.LIGHT_GRAY);
+        lblFotoPreview.setOpaque(true);
+        panelPreview.add(lblFotoPreview, BorderLayout.CENTER);
+
+        // Panel derecho: botón para seleccionar
+        JPanel panelBoton = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        btnSeleccionarFoto = new JButton("Seleccionar Foto");
+        btnSeleccionarFoto.addActionListener(e -> seleccionarFoto());
+        panelBoton.add(btnSeleccionarFoto);
+
+        panel.add(panelPreview, BorderLayout.WEST);
+        panel.add(panelBoton, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    private void seleccionarFoto() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Seleccionar foto de perfil");
+
+        // Filtro para solo imágenes
+        FileNameExtensionFilter filtro = new FileNameExtensionFilter(
+            "Imágenes (*.jpg, *.jpeg, *.png, *.gif)", "jpg", "jpeg", "png", "gif"
+        );
+        fileChooser.setFileFilter(filtro);
+        fileChooser.setAcceptAllFileFilterUsed(false);
+
+        int resultado = fileChooser.showOpenDialog(this);
+
+        if (resultado == JFileChooser.APPROVE_OPTION) {
+            archivoFotoSeleccionado = fileChooser.getSelectedFile();
+
+            // Validar tamaño (máx 5MB)
+            long tamañoMB = archivoFotoSeleccionado.length() / (1024 * 1024);
+            if (tamañoMB > 5) {
+                JOptionPane.showMessageDialog(this,
+                    "La imagen es demasiado grande. Máximo 5MB",
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+                archivoFotoSeleccionado = null;
+                return;
+            }
+
+            // Mostrar preview
+            mostrarPreviewFoto(archivoFotoSeleccionado);
+        }
+    }
+
+    private void mostrarPreviewFoto(File archivo) {
+        try {
+            BufferedImage imagenOriginal = ImageIO.read(archivo);
+            if (imagenOriginal == null) {
+                throw new Exception("No se pudo leer la imagen");
+            }
+
+            // Escalar imagen para preview (120x120)
+            Image imagenEscalada = imagenOriginal.getScaledInstance(120, 120, Image.SCALE_SMOOTH);
+            ImageIcon icono = new ImageIcon(imagenEscalada);
+
+            lblFotoPreview.setIcon(icono);
+            lblFotoPreview.setText("");
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this,
+                "Error al cargar la imagen: " + e.getMessage(),
+                "Error",
+                JOptionPane.ERROR_MESSAGE);
+            archivoFotoSeleccionado = null;
+        }
     }
 
     private JPanel crearPanelBotones() {
@@ -198,5 +293,9 @@ public class DialogoUsuario extends JDialog {
 
     public boolean isEsEdicion() {
         return esEdicion;
+    }
+
+    public File getArchivoFotoSeleccionado() {
+        return archivoFotoSeleccionado;
     }
 }

@@ -59,6 +59,9 @@ public class ServicioGestionRed implements IServicioCliente, ISujeto {
             LoggerCentral.info(TAG, "Usuario " + sesion.getIdUsuario() + " desvinculado de sesión");
             notificarObservadores("CLIENTE_OFFLINE", sesion.getIdUsuario());
         }
+
+        // ✅ NUEVO: Notificar cambio en estadísticas
+        notificarObservadores("CLIENTE_DESCONECTADO", idSesion);
     }
 
     /**
@@ -75,6 +78,24 @@ public class ServicioGestionRed implements IServicioCliente, ISujeto {
         this.gestorConexiones = gestor;
 
         LoggerCentral.info(TAG, CYAN + "Inicializando ServicioGestionRed para Cliente-Servidor..." + RESET);
+
+        // ✅ NUEVO: Configurar callbacks para recibir notificaciones
+        if (gestor instanceof conexion.clientes.impl.GestorConexionesClienteImpl) {
+            conexion.clientes.impl.GestorConexionesClienteImpl gestorImpl =
+                (conexion.clientes.impl.GestorConexionesClienteImpl) gestor;
+
+            gestorImpl.setOnClienteConectado(idSesion -> {
+                LoggerCentral.info(TAG, VERDE + "✓ Nuevo cliente conectado: " + idSesion + RESET);
+                onClienteConectado(idSesion, gestor.obtenerSesion(idSesion));
+            });
+
+            gestorImpl.setOnClienteDesconectado(idSesion -> {
+                LoggerCentral.warn(TAG, ROJO + "🔴 Cliente desconectado: " + idSesion + RESET);
+                onClienteDesconectado(idSesion);
+            });
+
+            LoggerCentral.info(TAG, VERDE + "✓ Callbacks de conexión configurados" + RESET);
+        }
 
         // =========================================================================
         // RUTA 1: HEARTBEAT (Verificación de conexión)

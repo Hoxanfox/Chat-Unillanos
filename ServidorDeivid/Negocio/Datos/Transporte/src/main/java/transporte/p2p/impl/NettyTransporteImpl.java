@@ -43,6 +43,9 @@ public class NettyTransporteImpl implements ITransporteTcp {
     /**
      * Configuración centralizada del Pipeline para asegurar que Cliente y Servidor
      * hablen el mismo idioma y no rompan los JSONs.
+     * 
+     * PROTOCOLO UNIFICADO: LengthField (4 bytes de prefijo con tamaño del mensaje)
+     * - Tanto clientes como servidores P2P usan este mismo formato
      */
     private void configurarPipeline(ChannelPipeline p) {
         // 1. ENTRADA: Decodificador inteligente
@@ -57,7 +60,7 @@ public class NettyTransporteImpl implements ITransporteTcp {
         p.addLast(new StringDecoder());
         p.addLast(new StringEncoder());
 
-        // 4. Tu lógica de negocio
+        // 4. Lógica de negocio
         p.addLast(new P2PInboundHandler(listener, canalesActivos));
     }
 

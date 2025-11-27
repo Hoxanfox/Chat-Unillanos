@@ -1,0 +1,295 @@
+==========================================================================
+ARCHIVO 1: NettyClienteTransporte.java
+Ubicación: Cliente/Negocio/Datos/Transporte/src/main/java/transporte/
+==========================================================================
+
+package transporte;
+
+import dto.gestionConexion.conexion.DTOSesion;
+import dto.gestionConexion.transporte.DTOConexion;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.*;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.codec.string.StringDecoder;
+import io.netty.handler.codec.string.StringEncoder;
+
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+
+/**
+ * Implementación de ITransporte usando Netty con el protocolo LengthField.
+ * Este protocolo es compatible con el servidor que usa LengthFieldPrepender/Decoder.
+ */
+public class NettyClienteTransporte implements ITransporte {
+
+    private static final int MAX_FRAME_SIZE = 50 * 1024 * 1024; // 50MB
+    private static final String TAG = "[NettyCliente] ";
+
+    @Override
+    public DTOSesion conectar(DTOConexion datosConexion) {
+        try {
+            // Cola para recibir mensajes del servidor
+            BlockingQueue<String> mensajesEntrantes = new LinkedBlockingQueue<>();
+
+            // EventLoopGroup para el cliente
+            EventLoopGroup group = new NioEventLoopGroup();
+
+            // Objeto para mantener la referencia del canal
+            final Channel[] channelRef = new Channel[1];
+
+            Bootstrap b = new Bootstrap();
+            b.group(group)
+                .channel(NioSocketChannel.class)
+                .handler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    public void initChannel(SocketChannel ch) {
+                        ChannelPipeline p = ch.pipeline();
+
+                        // MISMO PROTOCOLO QUE EL SERVIDOR
+                        // 1. Decodificador de entrada (lee 4 bytes de tamaño + mensaje)
+                        p.addLast(new LengthFieldBasedFrameDecoder(MAX_FRAME_SIZE, 0, 4, 0, 4));
+
+                        // 2. Prepender de salida (agrega 4 bytes con el tamaño antes de enviar)
+                        p.addLast(new LengthFieldPrepender(4));
+
+                        // 3. Conversión String <-> Bytes
+                        p.addLast(new StringDecoder());
+                        p.addLast(new StringEncoder());
+
+                        // 4. Handler personalizado para recibir mensajes
+                        p.addLast(new ClienteInboundHandler(mensajesEntrantes));
+                    }
+                });
+
+            // Conectar de forma síncrona
+            ChannelFuture future = b.connect(datosConexion.getHost(), datosConexion.getPuerto()).sync();
+
+            if (future.isSuccess()) {
+                channelRef[0] = future.channel();
+                System.out.println(TAG + "✓ Conexión establecida con " +
+                    datosConexion.getHost() + ":" + datosConexion.getPuerto());
+
+                // Crear adaptador compatible con DTOSesion
+                NettySessionAdapter adapter = new NettySessionAdapter(
+                    channelRef[0],
+servidor, resolviendo el error "frame length exceeds".
+Con estos cambios, el cliente usará el mismo protocolo LengthField que el
+
+==========================================================================
+LISTO!
+==========================================================================
+
+    </dependency>
+        <version>4.1.104.Final</version>
+        <artifactId>netty-all</artifactId>
+        <groupId>io.netty</groupId>
+    <dependency>
+    <!-- Netty para comunicación de red -->
+
+Agregar dentro de <dependencies>:
+
+==========================================================================
+Ubicación: Cliente/Negocio/Datos/Transporte/pom.xml
+ARCHIVO 5: pom.xml (AGREGAR DEPENDENCIA)
+==========================================================================
+
+}
+    }
+        return transporte.conectar(datosConexion);
+        ITransporte transporte = new NettyClienteTransporte();
+        // CAMBIO: Usar NettyClienteTransporte en lugar de TransporteTCP
+    public DTOSesion iniciarConexion(DTOConexion datosConexion) {
+
+public class FabricaTransporte {
+ */
+ * Fábrica dedicada a la creación de sesiones de transporte.
+/**
+
+import dto.gestionConexion.transporte.DTOConexion;
+import dto.gestionConexion.conexion.DTOSesion;
+
+package transporte;
+
+==========================================================================
+Ubicación: Cliente/Negocio/Datos/Transporte/src/main/java/transporte/
+ARCHIVO 4: FabricaTransporte.java (MODIFICAR)
+==========================================================================
+
+}
+    }
+        return in;
+    public BufferedReader getIn() {
+
+    }
+        return out;
+    public PrintWriter getOut() {
+
+    }
+        };
+            }
+                }
+                    throw new IOException("Interrupted", e);
+                    Thread.currentThread().interrupt();
+                } catch (InterruptedException e) {
+                    return mensaje;
+                    String mensaje = mensajesEntrantes.take();
+                    // Bloquear hasta recibir un mensaje
+                try {
+            public String readLine() throws IOException {
+            @Override
+        }) {
+            }
+                group.shutdownGracefully();
+                channel.close();
+            public void close() throws IOException {
+            @Override
+
+            }
+                }
+                    throw new IOException("Interrupted", e);
+                    Thread.currentThread().interrupt();
+                } catch (InterruptedException e) {
+
+                    return toCopy;
+                    System.arraycopy(chars, 0, cbuf, off, toCopy);
+                    int toCopy = Math.min(chars.length, len);
+                    char[] chars = mensaje.toCharArray();
+
+                    }
+                        return 0; // Timeout
+                    if (mensaje == null) {
+                    String mensaje = mensajesEntrantes.poll(1, TimeUnit.SECONDS);
+                try {
+            public int read(char[] cbuf, int off, int len) throws IOException {
+            @Override
+        this.in = new BufferedReader(new java.io.Reader() {
+        // Adaptar la cola de mensajes a BufferedReader
+
+        }, true); // autoFlush = true
+            }
+                group.shutdownGracefully();
+                channel.close();
+            public void close() throws IOException {
+            @Override
+
+            }
+                channel.flush();
+            public void flush() throws IOException {
+            @Override
+
+            }
+                }
+                    channel.writeAndFlush(mensaje);
+                if (channel.isActive()) {
+                String mensaje = new String(cbuf, off, len);
+            public void write(char[] cbuf, int off, int len) throws IOException {
+            @Override
+        this.out = new PrintWriter(new Writer() {
+        // Adaptar el canal Netty a PrintWriter
+
+        this.group = group;
+        this.channel = channel;
+    public NettySessionAdapter(Channel channel, EventLoopGroup group, BlockingQueue<String> mensajesEntrantes) {
+
+    private final BufferedReader in;
+    private final PrintWriter out;
+    private final EventLoopGroup group;
+    private final Channel channel;
+
+public class NettySessionAdapter {
+ */
+ * para mantener compatibilidad con el código existente del cliente.
+ * Adaptador que convierte un Channel de Netty en PrintWriter/BufferedReader
+/**
+
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.BlockingQueue;
+import java.io.Writer;
+import java.io.PrintWriter;
+import java.io.IOException;
+import java.io.BufferedReader;
+
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.Channel;
+
+package transporte;
+
+==========================================================================
+Ubicación: Cliente/Negocio/Datos/Transporte/src/main/java/transporte/
+ARCHIVO 3: NettySessionAdapter.java
+==========================================================================
+
+}
+    }
+        ctx.close();
+        System.err.println(TAG + "✗ Error: " + cause.getMessage());
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+    @Override
+
+    }
+        super.channelInactive(ctx);
+        System.out.println(TAG + "✗ Conexión cerrada");
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    @Override
+
+    }
+        super.channelActive(ctx);
+        System.out.println(TAG + "✓ Canal activo con servidor");
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+    @Override
+
+    }
+        System.out.println(TAG + "✓ Mensaje recibido (" + mensaje.length() + " bytes)");
+        mensajesEntrantes.offer(mensaje);
+        // Agregar el mensaje a la cola para que pueda ser leído
+    protected void channelRead0(ChannelHandlerContext ctx, String mensaje) throws Exception {
+    @Override
+
+    }
+        this.mensajesEntrantes = mensajesEntrantes;
+    public ClienteInboundHandler(BlockingQueue<String> mensajesEntrantes) {
+
+    private final BlockingQueue<String> mensajesEntrantes;
+    private static final String TAG = "[ClienteHandler] ";
+
+public class ClienteInboundHandler extends SimpleChannelInboundHandler<String> {
+ */
+ * para que puedan ser consumidos por el BufferedReader adaptado.
+ * Handler que recibe mensajes del servidor y los pone en una cola
+/**
+
+import java.util.concurrent.BlockingQueue;
+
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.ChannelHandlerContext;
+
+package transporte;
+
+==========================================================================
+Ubicación: Cliente/Negocio/Datos/Transporte/src/main/java/transporte/
+ARCHIVO 2: ClienteInboundHandler.java
+==========================================================================
+
+}
+    }
+        }
+            return null;
+            e.printStackTrace();
+            System.err.println(TAG + "Error al crear la conexión: " + e.getMessage());
+        } catch (Exception e) {
+
+            }
+                return null;
+                System.err.println(TAG + "✗ No se pudo conectar al servidor");
+                group.shutdownGracefully();
+            } else {
+                return new DTOSesion(null, adapter.getOut(), adapter.getIn());
+
+                );
+                    mensajesEntrantes
+                    group,
+

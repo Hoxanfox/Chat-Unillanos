@@ -54,15 +54,15 @@ public class ServicioAutenticacion implements IServicioCliente {
                 JsonObject creds = datos.getAsJsonObject();
 
                 // Validar campos requeridos
-                if (!creds.has("nombreUsuario") || !creds.has("contrasena")) {
+                if (!creds.has("nombreUsuario") || !creds.has("password")) {
                     Map<String, Object> errorData = new HashMap<>();
-                    errorData.put("campo", !creds.has("nombreUsuario") ? "nombreUsuario" : "contrasena");
+                    errorData.put("campo", !creds.has("nombreUsuario") ? "nombreUsuario" : "password");
                     errorData.put("motivo", "Campo requerido");
                     return new DTOResponse("authenticateUser", "error", "Datos incompletos", gson.toJsonTree(errorData));
                 }
 
                 String email = creds.get("nombreUsuario").getAsString();
-                String password = creds.get("contrasena").getAsString();
+                String password = creds.get("password").getAsString();
 
                 // Validar formato básico
                 if (email == null || email.trim().isEmpty()) {
@@ -74,9 +74,9 @@ public class ServicioAutenticacion implements IServicioCliente {
 
                 if (password == null || password.trim().isEmpty()) {
                     Map<String, Object> errorData = new HashMap<>();
-                    errorData.put("campo", "contrasena");
-                    errorData.put("motivo", "La contraseña no puede estar vacía");
-                    return new DTOResponse("authenticateUser", "error", "Contraseña inválida", gson.toJsonTree(errorData));
+                    errorData.put("campo", "password");
+                    errorData.put("motivo", "La password no puede estar vacía");
+                    return new DTOResponse("authenticateUser", "error", "password inválida", gson.toJsonTree(errorData));
                 }
 
                 // Buscar usuario en BD
@@ -93,8 +93,8 @@ public class ServicioAutenticacion implements IServicioCliente {
                 // Verificar contraseña (IMPORTANTE: implementar hash en producción)
                 if (!verificarContrasena(password, usuario.getContrasena())) {
                     Map<String, Object> errorData = new HashMap<>();
-                    errorData.put("campo", "contrasena");
-                    errorData.put("motivo", "Contraseña incorrecta");
+                    errorData.put("campo", "password");
+                    errorData.put("motivo", "password incorrecta");
                     LoggerCentral.warn(TAG, "Intento de login fallido para: " + email);
                     return new DTOResponse("authenticateUser", "error", "Credenciales incorrectas", gson.toJsonTree(errorData));
                 }
@@ -114,15 +114,29 @@ public class ServicioAutenticacion implements IServicioCliente {
                 }
 
                 // Construir respuesta con datos del usuario
-                Map<String, Object> userData = new HashMap<>();
-                userData.put("idUsuario", usuario.getId());
+                // IMPORTANTE: Usar LinkedHashMap para mantener el orden de los campos
+                Map<String, Object> userData = new java.util.LinkedHashMap<>();
+
+                // Asegurar que photoIdServidor siempre esté presente (aunque sea vacío)
+                String fotoId = usuario.getFoto() != null ? usuario.getFoto() : "";
+
+                // Orden específico esperado por el cliente
+                // El cliente espera "id" no "idUsuario"
+                userData.put("id", usuario.getId());
                 userData.put("nombre", usuario.getNombre());
                 userData.put("email", usuario.getEmail());
-                userData.put("photoIdServidor", usuario.getFoto());
+                userData.put("photoIdServidor", fotoId);
                 userData.put("estado", usuario.getEstado().name());
-                userData.put("peerPadre", usuario.getPeerPadre() != null ? usuario.getPeerPadre().toString() : null);
+                userData.put("peerPadre", usuario.getPeerPadre() != null ? usuario.getPeerPadre().toString() : "");
 
+                LoggerCentral.debug(TAG, "Foto del usuario '" + email + "': " + (usuario.getFoto() != null ? usuario.getFoto() : "NULL"));
+                LoggerCentral.debug(TAG, "userData completo antes de serializar: " + userData.toString());
                 LoggerCentral.info(TAG, "Usuario autenticado exitosamente: " + email + " (ID: " + usuario.getId() + ")");
+
+                // Log del JSON final que se envía
+                String jsonFinal = gson.toJson(userData);
+                LoggerCentral.info(TAG, "📤 JSON enviado al cliente: " + jsonFinal);
+
                 return new DTOResponse("authenticateUser", "success", "Bienvenido", gson.toJsonTree(userData));
 
             } catch (Exception e) {

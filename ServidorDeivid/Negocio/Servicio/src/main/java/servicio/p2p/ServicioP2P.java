@@ -283,6 +283,19 @@ public class ServicioP2P implements IServicioP2PControl {
                 return new java.util.ArrayList<>();
             });
             LoggerCentral.info(TAG, "✅ Proveedor de clientes inyectado en ServicioTopologiaRed.");
+
+            // ✅ NUEVO: Conectar ServicioTopologiaRed como observador de cambios en clientes
+            if (servicioCliente instanceof servicio.clienteServidor.ServicioCliente) {
+                servicio.clienteServidor.ServicioCliente servicioClienteImpl =
+                    (servicio.clienteServidor.ServicioCliente) servicioCliente;
+                gestorClientes.servicios.ServicioGestionRed servicioGestionRed =
+                    servicioClienteImpl.getServicioGestionRed();
+
+                if (servicioGestionRed != null) {
+                    servicioTopologia.observarCambiosClientes(servicioGestionRed);
+                    LoggerCentral.info(TAG, "✅ ServicioTopologiaRed observando cambios en clientes CS.");
+                }
+            }
         }
     }
 
