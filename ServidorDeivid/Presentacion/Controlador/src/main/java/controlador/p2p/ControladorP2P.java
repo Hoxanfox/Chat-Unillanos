@@ -131,6 +131,26 @@ public class ControladorP2P implements IObservador {
     }
 
     /**
+     * ✅ NUEVO: Registra un observador para recibir notificaciones cuando termina la sincronización P2P.
+     * Se notifica cada vez que se completa un ciclo de sincronización.
+     */
+    public void suscribirseASincronizacion(observador.IObservador observador) {
+        LoggerCentral.info(TAG, "Suscribiendo observador a eventos de sincronización...");
+        if (servicio instanceof ServicioP2P) {
+            ServicioP2P servicioP2P = (ServicioP2P) servicio;
+            gestorP2P.servicios.ServicioSincronizacionDatos servicioSync = servicioP2P.getServicioSincronizacion();
+            if (servicioSync != null) {
+                servicioSync.registrarObservador(observador);
+                LoggerCentral.info(TAG, "✅ Observador registrado en ServicioSincronizacionDatos");
+            } else {
+                LoggerCentral.error(TAG, "❌ ServicioSincronizacionDatos no disponible");
+            }
+        } else {
+            LoggerCentral.error(TAG, "❌ No se pudo suscribir a sincronización");
+        }
+    }
+
+    /**
      * ✅ NUEVO: Fuerza una actualización inmediata de la topología.
      * Útil cuando se detecta un cambio importante.
      */

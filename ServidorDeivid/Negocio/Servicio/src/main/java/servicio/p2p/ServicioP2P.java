@@ -157,6 +157,17 @@ public class ServicioP2P implements IServicioP2PControl {
             LoggerCentral.info(TAG, "Encendiendo motores de la red P2P...");
             fachada.iniciar();
             running = true;
+
+            // ✅ NUEVO: Configurar la información local del peer en ServicioTopologiaRed
+            if (servicioTopologia != null) {
+                java.util.UUID idLocal = fachada.obtenerIdPeerLocal();
+                configuracion.Configuracion config = configuracion.Configuracion.getInstance();
+                int puertoLocal = config.getPeerPuerto();
+
+                servicioTopologia.configurarInfoLocal(idLocal.toString(), puertoLocal);
+                LoggerCentral.info(TAG, "✅ Información local configurada en ServicioTopologiaRed: " + idLocal);
+            }
+
             LoggerCentral.info(TAG, "✅ Red P2P iniciada exitosamente. Estado: EN EJECUCIÓN");
         } catch (Exception e) {
             LoggerCentral.error(TAG, "❌ Error fatal al iniciar red P2P: " + e.getMessage());

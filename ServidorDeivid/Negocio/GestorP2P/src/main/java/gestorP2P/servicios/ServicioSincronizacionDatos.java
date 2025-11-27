@@ -19,6 +19,7 @@ import gestorP2P.interfaces.IServicioP2P;
 import gestorP2P.utils.GsonUtil;
 import logger.LoggerCentral;
 import observador.IObservador;
+import observador.ISujeto; // ✅ NUEVO: Para notificar cuando termina la sincronización
 import repositorio.clienteServidor.ArchivoRepositorio;
 import repositorio.clienteServidor.CanalMiembroRepositorio;
 import repositorio.clienteServidor.CanalRepositorio;
@@ -30,8 +31,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.concurrent.CopyOnWriteArrayList; // ✅ NUEVO
 
-public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
+public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, ISujeto { // ✅ NUEVO: Implementa ISujeto
 
     private static final String TAG = "SyncDatos";
 
@@ -54,12 +56,18 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
     private final CanalRepositorio repoCanal;
     private final CanalMiembroRepositorio repoMiembro;
     private final MensajeRepositorio repoMensaje;
-    private final ArchivoRepositorio repoArchivo; // NUEVO: Para sincronizar archivos
-    private final PeerRepositorio repoPeer; // NUEVO: Para obtener peers ONLINE
+    private final ArchivoRepositorio repoArchivo;
+    private final PeerRepositorio repoPeer;
     private final Map<String, MerkleTree> bosqueMerkle;
+
+    // ✅ NUEVO: Lista de observadores para notificar cuando termina la sincronización
+    private final List<IObservador> observadores = new CopyOnWriteArrayList<>();
 
     // ✅ NUEVO: Servicio para transferir archivos físicos P2P
     private ServicioTransferenciaArchivos servicioTransferenciaArchivos;
+
+    // ✅ NUEVO: Servicio para notificar a clientes CS cuando termina la sincronización
+    private IObservador servicioNotificacionCliente;
 
     // Flag para saber si hicimos cambios durante este ciclo y debemos avisar al final
     private boolean huboCambiosEnEsteCiclo = false;
@@ -92,6 +100,16 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
     public void setServicioTransferenciaArchivos(ServicioTransferenciaArchivos servicioTransferencia) {
         this.servicioTransferenciaArchivos = servicioTransferencia;
         LoggerCentral.info(TAG, "Servicio de transferencia de archivos P2P configurado");
+    }
+
+    /**
+     * ✅ NUEVO: Inyecta el servicio de notificación de clientes CS.
+     * Permite que cuando termine la sincronización P2P, se envíe automáticamente
+     * un SIGNAL_UPDATE a todos los clientes conectados para que actualicen su información.
+     */
+    public void setServicioNotificacionCliente(IObservador servicioNotificacionCliente) {
+        this.servicioNotificacionCliente = servicioNotificacionCliente;
+        LoggerCentral.info(TAG, "✅ Servicio de notificación de clientes CS configurado");
     }
 
     @Override
@@ -331,6 +349,9 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
         } else if (!huboCambiosEnEsteCiclo) {
             LoggerCentral.debug(TAG, "No hubo cambios en este ciclo. No se envía notificación.");
         }
+
+        // ✅ NUEVO: Notificar a observadores que la sincronización ha terminado
+        notificarObservadoresSincronizacion();
     }
 
     private void solicitarEntidadesFaltantes(String tipo, JsonArray idsRemotos) {
@@ -569,6 +590,56 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador {
             iniciarSincronizacionGeneral();
         } else {
             LoggerCentral.debug(TAG, "Tipo de actualización no manejado: " + tipo);
+        }
+    }
+
+    // ✅ NUEVO: Método para notificar a observadores que la sincronización ha terminado
+    private void notificarObservadoresSincronizacion() {
+        LoggerCentral.info(TAG, VERDE + "📢 Notificando sincronización terminada a " + observadores.size() + " observadores" + RESET);
+        notificarObservadores("SINCRONIZACION_TERMINADA", huboCambiosEnEsteCiclo);
+
+        // ✅ NUEVO: Notificar también al servicio de notificación de clientes CS
+        if (servicioNotificacionCliente != null && huboCambiosEnEsteCiclo) {
+            LoggerCentral.info(TAG, AZUL + "📡 Enviando SIGNAL_UPDATE a todos los clientes conectados..." + RESET);
+            try {
+                servicioNotificacionCliente.actualizar("SINCRONIZACION_P2P_TERMINADA", true);
+                LoggerCentral.info(TAG, VERDE + "✅ Clientes CS notificados de actualización P2P" + RESET);
+            } catch (Exception e) {
+                LoggerCentral.error(TAG, ROJO + "Error notificando a clientes CS: " + e.getMessage() + RESET);
+            }
+        } else if (servicioNotificacionCliente == null) {
+            LoggerCentral.warn(TAG, AMARILLO + "⚠ ServicioNotificacionCliente no configurado. No se enviarán notificaciones a clientes CS." + RESET);
+        } else if (!huboCambiosEnEsteCiclo) {
+            LoggerCentral.debug(TAG, "No hubo cambios en sincronización. No se notifica a clientes CS.");
+        }
+    }
+
+    // ===== IMPLEMENTACIÓN ISujeto =====
+
+    @Override
+    public void registrarObservador(IObservador observador) {
+        if (!observadores.contains(observador)) {
+            observadores.add(observador);
+            LoggerCentral.info(TAG, "✅ Observador registrado en ServicioSincronizacionDatos");
+        }
+    }
+
+    @Override
+    public void removerObservador(IObservador observador) {
+        if (observadores.remove(observador)) {
+            LoggerCentral.info(TAG, "Observador removido de ServicioSincronizacionDatos");
+        }
+    }
+
+    @Override
+    public void notificarObservadores(String tipoDeDato, Object datos) {
+        LoggerCentral.debug(TAG, "Notificando evento: " + tipoDeDato + " a " + observadores.size() + " observadores");
+        for (IObservador obs : observadores) {
+            try {
+                obs.actualizar(tipoDeDato, datos);
+            } catch (Exception e) {
+                LoggerCentral.error(TAG, "Error notificando observador: " + e.getMessage());
+            }
         }
     }
 }

@@ -2,6 +2,7 @@ package gestorLogs.api;
 
 import logger.LoggerCentral;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -30,21 +31,37 @@ public class LogsApiApplication {
         LoggerCentral.info(TAG, "Iniciando Logs REST API Server");
         LoggerCentral.info(TAG, "========================================");
 
-        String[] args = {
-            "--server.port=" + port,
-            "--spring.main.web-application-type=servlet"
-        };
-
         new Thread(() -> {
             try {
                 LoggerCentral.info(TAG, "Iniciando API en puerto " + port + "...");
                 LoggerCentral.info(TAG, "Escaneando paquete: gestorLogs.api");
                 LoggerCentral.info(TAG, "Tipo de aplicación: SERVLET (Web Server)");
 
-                context = SpringApplication.run(LogsApiApplication.class, args);
+                // Crear SpringApplication y configurar explícitamente como SERVLET
+                SpringApplication app = new SpringApplication(LogsApiApplication.class);
+                app.setWebApplicationType(WebApplicationType.SERVLET);
+
+                // Configurar propiedades
+                String[] args = {
+                    "--server.port=" + port
+                };
+
+                LoggerCentral.info(TAG, "WebApplicationType configurado explícitamente como SERVLET");
+
+                context = app.run(args);
 
                 if (context != null && context.isActive()) {
                     LoggerCentral.info(TAG, "✓ Spring Boot context iniciado correctamente");
+
+                    // DIAGNÓSTICO DETALLADO
+                    LoggerCentral.info(TAG, "Context class: " + context.getClass().getName());
+                    try {
+                        String webType = context.getEnvironment().getProperty("spring.main.web-application-type");
+                        LoggerCentral.info(TAG, "spring.main.web-application-type = " + webType);
+                    } catch (Exception e) {
+                        LoggerCentral.warn(TAG, "No se pudo leer environment: " + e.getMessage());
+                    }
+                    LoggerCentral.info(TAG, "is ServletWebServerApplicationContext? " + (context instanceof ServletWebServerApplicationContext));
 
                     // Verificar si es un contexto web
                     if (context instanceof ServletWebServerApplicationContext) {
@@ -53,6 +70,7 @@ public class LogsApiApplication {
                         LoggerCentral.info(TAG, "✓ Servidor Web Tomcat iniciado en puerto: " + puertoReal);
                     } else {
                         LoggerCentral.warn(TAG, "⚠️ El contexto NO es un servidor web - verificar dependencias");
+                        LoggerCentral.warn(TAG, "⚠️ Spring detectó que no hay un servidor web disponible");
                     }
 
                     LoggerCentral.info(TAG, "✓ Logs REST API iniciado exitosamente");

@@ -79,8 +79,18 @@ public class ServicioTopologiaRed implements IServicioP2P, ISujeto {
         // RUTA 1: Recibir actualizaciones de topología de otros peers
         router.registrarAccion("actualizarTopologia", (payload, origenId) -> {
             LoggerCentral.debug(TAG, "📥 Topología recibida de: " + origenId);
+
+            // NUEVO: Log detallado del payload
+            if (payload != null) {
+                LoggerCentral.debug(TAG, "Payload recibido: " + gson.toJson(payload));
+            } else {
+                LoggerCentral.warn(TAG, "⚠️ Payload es null!");
+            }
+
             recibirTopologiaRemota(origenId, payload);
-            return new DTOResponse("topologiaRecibida", "success", "Topología actualizada", null);
+
+            // CORREGIDO: Devolver la topología recibida en lugar de null
+            return new DTOResponse("topologiaRecibida", "success", "Topología actualizada", payload);
         });
 
         // RUTA 2: Solicitar topología de un peer específico

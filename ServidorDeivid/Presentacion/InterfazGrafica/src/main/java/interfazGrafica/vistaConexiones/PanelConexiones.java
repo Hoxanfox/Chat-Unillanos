@@ -3,6 +3,8 @@ package interfazGrafica.vistaConexiones;
 import controlador.p2p.ControladorP2P;
 import controlador.clienteServidor.ControladorClienteServidor;
 import interfazGrafica.vistaConexiones.componentes.*;
+import logger.LoggerCentral; // ✅ NUEVO
+import observador.IObservador; // ✅ NUEVO
 
 import javax.swing.*;
 import java.awt.*;
@@ -14,8 +16,11 @@ import java.awt.*;
  * - Solo red Cliente-Servidor
  * - Red completa (ambas integradas)
  * ✅ ACTUALIZADO: Ahora recibe controladores para grafos dinámicos
+ * ✅ NUEVO: Implementa IObservador para escuchar eventos de topología P2P
  */
-public class PanelConexiones extends JPanel {
+public class PanelConexiones extends JPanel implements IObservador { // ✅ NUEVO
+
+    private static final String TAG = "PanelConexiones"; // ✅ NUEVO
 
     private GrafoP2P grafoP2P;
     private GrafoClienteServidor grafoCS;
@@ -300,5 +305,34 @@ public class PanelConexiones extends JPanel {
 
     public GrafoRedCompleta getGrafoCompleto() {
         return grafoCompleto;
+    }
+
+    // ✅ NUEVO: Implementación de IObservador para eventos de topología
+    @Override
+    public void actualizar(String tipo, Object datos) {
+        LoggerCentral.debug(TAG, "📢 Evento recibido: " + tipo + " | Datos: " + datos);
+
+        switch (tipo) {
+            case "TOPOLOGIA_ACTUALIZADA":
+            case "TOPOLOGIA_REMOTA_RECIBIDA":
+                // Cuando cambia la topología P2P, actualizar los grafos
+                SwingUtilities.invokeLater(() -> {
+                    LoggerCentral.info(TAG, "🔄 Actualizando grafos por cambio en topología P2P");
+                    actualizarGrafos();
+                });
+                break;
+
+            case "PEER_CONECTADO":
+            case "PEER_DESCONECTADO":
+                // Cuando se conecta/desconecta un peer, actualizar grafos
+                SwingUtilities.invokeLater(() -> {
+                    LoggerCentral.info(TAG, "🔄 Actualizando grafos por cambio de conexión P2P: " + tipo);
+                    actualizarGrafos();
+                });
+                break;
+
+            default:
+                LoggerCentral.debug(TAG, "Evento no manejado en PanelConexiones: " + tipo);
+        }
     }
 }

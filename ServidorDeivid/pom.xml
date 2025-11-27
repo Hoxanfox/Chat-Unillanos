@@ -25,6 +25,7 @@
         <module>Negocio/GestorClientes</module>
         <module>Negocio/GestorUsuarios</module>
         <module>Negocio/GestorLogs</module>
+        <module>Negocio/GestorDashboard</module>
     </modules>
 
     <properties>

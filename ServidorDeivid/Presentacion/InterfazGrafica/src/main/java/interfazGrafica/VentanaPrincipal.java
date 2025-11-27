@@ -355,6 +355,15 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                 if (servicioSync != null) {
                     servicioCS.setServicioSincronizacionP2P(servicioSync);
                     LoggerCentral.info(TAG, "✅ Servicio de sincronización P2P inyectado en servicios CS");
+
+                    // ✅ 3. NUEVO: Conexión P2P → CS (para notificar cuando termina sincronización)
+                    gestorClientes.servicios.ServicioNotificacionCliente servicioNotificacionCliente = servicioCS.getServicioNotificacion();
+                    if (servicioNotificacionCliente != null) {
+                        servicioSync.setServicioNotificacionCliente(servicioNotificacionCliente);
+                        LoggerCentral.info(TAG, "✅ ServicioNotificacionCliente inyectado en ServicioSincronizacionDatos");
+                    } else {
+                        LoggerCentral.warn(TAG, "⚠️ No se pudo obtener ServicioNotificacionCliente");
+                    }
                 } else {
                     LoggerCentral.warn(TAG, "⚠️ No se pudo obtener ServicioSincronizacionDatos");
                 }
