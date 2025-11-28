@@ -200,6 +200,13 @@ public class Fase5ComparacionContenido {
             hayDiferencias = true;
         }
 
+        if (local.getEstado() != remoto.getEstado()) {
+            LoggerCentral.warn(TAG, AMARILLO + "  Diferencia en ESTADO" + RESET);
+            LoggerCentral.warn(TAG, "    Local: " + local.getEstado());
+            LoggerCentral.warn(TAG, "    Remoto: " + remoto.getEstado());
+            hayDiferencias = true;
+        }
+
         if (hayDiferencias) {
             return resolverConflictoTemporal(
                 local.getFechaCreacion(),

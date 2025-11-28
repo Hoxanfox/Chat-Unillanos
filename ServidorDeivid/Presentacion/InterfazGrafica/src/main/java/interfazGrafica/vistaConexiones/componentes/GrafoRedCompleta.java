@@ -90,33 +90,31 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
             LoggerCentral.info(TAG, "📊 Actualizando desde controlador: " + topologia.size() + " peers");
             LoggerCentral.debug(TAG, "Keys de topología recibida: " + topologia.keySet());
 
-            // Agregar todos los peers
+            // Agregar todos los peers usando SIEMPRE idPeer como clave interna
             for (Map.Entry<String, DTOTopologiaRed> entry : topologia.entrySet()) {
-                String keyTopologia = entry.getKey();
                 DTOTopologiaRed topo = entry.getValue();
 
-                boolean esLocal = "LOCAL".equalsIgnoreCase(topo.getIdPeer());
+                String idPeer = topo.getIdPeer();
+                boolean esLocal = "LOCAL".equalsIgnoreCase(idPeer);
                 boolean esOnline = "ONLINE".equalsIgnoreCase(topo.getEstadoPeer());
 
-                LoggerCentral.debug(TAG, "📍 Procesando peer - Key: '" + keyTopologia +
-                    "' | IdPeer: '" + topo.getIdPeer() + "' | IP: " + topo.getIpPeer());
+                LoggerCentral.debug(TAG, "📍 Procesando peer - KeyMap: '" + entry.getKey() +
+                    "' | IdPeer usado: '" + idPeer + "' | IP: " + topo.getIpPeer());
 
-                // Usar la KEY del mapa como ID del peer (es la que se usa para buscar después)
-                agregarPeer(keyTopologia, topo.getIpPeer(), esLocal, esOnline);
+                agregarPeer(idPeer, topo.getIpPeer(), esLocal, esOnline);
 
-                // Agregar clientes de este peer
+                // Agregar clientes de este peer colgando del mismo idPeer
                 for (DTOSesionCliente cliente : topo.getClientesConectados()) {
                     String nombreCliente = cliente.getIdUsuario() != null ?
                         cliente.getIdUsuario() : cliente.getIdSesion();
                     boolean clienteOnline = "AUTENTICADO".equalsIgnoreCase(cliente.getEstado());
-                    agregarUsuario(nombreCliente, keyTopologia, clienteOnline);
+                    agregarUsuario(nombreCliente, idPeer, clienteOnline);
                 }
             }
 
-            // Verificar peers agregados
             LoggerCentral.info(TAG, "🔍 Peers agregados al mapa: " + peers.keySet());
 
-            // Agregar conexiones P2P (todos conectados entre sí en malla completa)
+            // Agregar conexiones P2P (malla completa entre todos los peers conocidos)
             List<String> peerIds = new ArrayList<>(peers.keySet());
             LoggerCentral.info(TAG, "🔗 Creando conexiones P2P entre " + peerIds.size() + " peers...");
             LoggerCentral.debug(TAG, "IDs de peers para conexiones: " + peerIds);
@@ -403,22 +401,23 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
     private void actualizarConTopologia(Map<String, DTOTopologiaRed> topologia) {
         limpiar();
 
-        // Agregar todos los peers y sus clientes
+        // Agregar todos los peers y sus clientes usando siempre idPeer
         for (DTOTopologiaRed topo : topologia.values()) {
-            boolean esLocal = "LOCAL".equalsIgnoreCase(topo.getIdPeer());
+            String idPeer = topo.getIdPeer();
+            boolean esLocal = "LOCAL".equalsIgnoreCase(idPeer);
             boolean esOnline = "ONLINE".equalsIgnoreCase(topo.getEstadoPeer());
-            agregarPeer(topo.getIdPeer(), topo.getIpPeer(), esLocal, esOnline);
+            agregarPeer(idPeer, topo.getIpPeer(), esLocal, esOnline);
 
             for (DTOSesionCliente cliente : topo.getClientesConectados()) {
                 String nombreCliente = cliente.getIdUsuario() != null ?
                     cliente.getIdUsuario() : cliente.getIdSesion();
                 boolean clienteOnline = "AUTENTICADO".equalsIgnoreCase(cliente.getEstado());
-                agregarUsuario(nombreCliente, topo.getIdPeer(), clienteOnline);
+                agregarUsuario(nombreCliente, idPeer, clienteOnline);
             }
         }
 
-        // Conectar todos los peers entre sí
-        List<String> peerIds = new ArrayList<>(topologia.keySet());
+        // Conectar todos los peers entre sí usando los mismos IDs internos
+        List<String> peerIds = new ArrayList<>(peers.keySet());
         for (int i = 0; i < peerIds.size(); i++) {
             for (int j = i + 1; j < peerIds.size(); j++) {
                 agregarConexionP2P(peerIds.get(i), peerIds.get(j));
