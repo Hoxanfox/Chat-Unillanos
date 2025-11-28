@@ -190,19 +190,28 @@ public class VentanaPrincipal extends JFrame implements IObservador {
      */
     private void suscribirObservadoresUI() {
         try {
-            // Suscribir PanelUsuarios al ServicioGestionRed para recibir eventos de conexión/desconexión
+            // 1. Suscribir PanelUsuarios al ServicioCliente (eventos CS: autenticación, conexión/desconexión)
             servicio.clienteServidor.IServicioClienteControl servicioCS = controladorCS.getServicioClienteInterno();
             if (servicioCS instanceof servicio.clienteServidor.ServicioCliente) {
                 servicio.clienteServidor.ServicioCliente servicioClienteImpl =
                     (servicio.clienteServidor.ServicioCliente) servicioCS;
                 servicioClienteImpl.registrarObservador(panelUsuarios);
-                LoggerCentral.info(TAG, "✓ PanelUsuarios suscrito a eventos de ServicioGestionRed y ServicioAutenticacion");
+                LoggerCentral.info(TAG, "✓ PanelUsuarios suscrito a eventos de ServicioCliente (CS)");
 
-                // ✅ NUEVO: Suscribir GrafoClienteServidor también a los eventos de autenticación
+                // Suscribir GrafoClienteServidor también a los eventos de autenticación
                 if (panelConexiones != null && panelConexiones.getGrafoCS() != null) {
                     servicioClienteImpl.registrarObservador(panelConexiones.getGrafoCS());
                     LoggerCentral.info(TAG, "✓ GrafoClienteServidor suscrito a eventos de autenticación");
                 }
+            }
+
+            // ✅ NUEVO: 2. Suscribir PanelUsuarios al ServicioSincronizacionDatos (eventos P2P: sincronización terminada)
+            if (servicioSincronizacion != null) {
+                servicioSincronizacion.registrarObservador(panelUsuarios);
+                LoggerCentral.info(TAG, "✅ PanelUsuarios suscrito a eventos de ServicioSincronizacionDatos P2P");
+                LoggerCentral.info(TAG, "   → El panel se actualizará automáticamente cuando termine la sincronización P2P");
+            } else {
+                LoggerCentral.warn(TAG, "⚠️ ServicioSincronizacionDatos no disponible para suscribir PanelUsuarios");
             }
 
         } catch (Exception e) {

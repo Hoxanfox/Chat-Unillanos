@@ -345,6 +345,7 @@ public class PanelUsuarios extends JPanel implements IObservador {
 
             // ✅ NUEVO: Escuchar eventos de sincronización P2P
             case "SINCRONIZACION_TERMINADA":
+            case "SINCRONIZACION_P2P_TERMINADA":  // ✅ AGREGADO: También escuchar el evento P2P específico
                 // Cuando termina la sincronización P2P, refrescar para mostrar usuarios sincronizados
                 SwingUtilities.invokeLater(() -> {
                     LoggerCentral.info(TAG, "🔄 Refrescando tabla por sincronización P2P terminada");
