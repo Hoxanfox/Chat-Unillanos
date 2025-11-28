@@ -82,32 +82,58 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
             Map<String, DTOTopologiaRed> topologia = controlador.obtenerTopologiaCompleta();
 
             if (topologia.isEmpty()) {
+                LoggerCentral.debug(TAG, "Topología vacía, no hay datos para mostrar");
                 repaint();
                 return;
             }
 
+            LoggerCentral.info(TAG, "📊 Actualizando desde controlador: " + topologia.size() + " peers");
+            LoggerCentral.debug(TAG, "Keys de topología recibida: " + topologia.keySet());
+
             // Agregar todos los peers
-            for (DTOTopologiaRed topo : topologia.values()) {
+            for (Map.Entry<String, DTOTopologiaRed> entry : topologia.entrySet()) {
+                String keyTopologia = entry.getKey();
+                DTOTopologiaRed topo = entry.getValue();
+
                 boolean esLocal = "LOCAL".equalsIgnoreCase(topo.getIdPeer());
                 boolean esOnline = "ONLINE".equalsIgnoreCase(topo.getEstadoPeer());
-                agregarPeer(topo.getIdPeer(), topo.getIpPeer(), esLocal, esOnline);
+
+                LoggerCentral.debug(TAG, "📍 Procesando peer - Key: '" + keyTopologia +
+                    "' | IdPeer: '" + topo.getIdPeer() + "' | IP: " + topo.getIpPeer());
+
+                // Usar la KEY del mapa como ID del peer (es la que se usa para buscar después)
+                agregarPeer(keyTopologia, topo.getIpPeer(), esLocal, esOnline);
 
                 // Agregar clientes de este peer
                 for (DTOSesionCliente cliente : topo.getClientesConectados()) {
                     String nombreCliente = cliente.getIdUsuario() != null ?
                         cliente.getIdUsuario() : cliente.getIdSesion();
                     boolean clienteOnline = "AUTENTICADO".equalsIgnoreCase(cliente.getEstado());
-                    agregarUsuario(nombreCliente, topo.getIdPeer(), clienteOnline);
+                    agregarUsuario(nombreCliente, keyTopologia, clienteOnline);
                 }
             }
 
-            // Agregar conexiones P2P (todos conectados entre sí)
-            List<String> peerIds = new ArrayList<>(topologia.keySet());
+            // Verificar peers agregados
+            LoggerCentral.info(TAG, "🔍 Peers agregados al mapa: " + peers.keySet());
+
+            // Agregar conexiones P2P (todos conectados entre sí en malla completa)
+            List<String> peerIds = new ArrayList<>(peers.keySet());
+            LoggerCentral.info(TAG, "🔗 Creando conexiones P2P entre " + peerIds.size() + " peers...");
+            LoggerCentral.debug(TAG, "IDs de peers para conexiones: " + peerIds);
+
+            int conexionesCreadas = 0;
             for (int i = 0; i < peerIds.size(); i++) {
                 for (int j = i + 1; j < peerIds.size(); j++) {
-                    agregarConexionP2P(peerIds.get(i), peerIds.get(j));
+                    String id1 = peerIds.get(i);
+                    String id2 = peerIds.get(j);
+                    LoggerCentral.debug(TAG, "Intentando conectar: '" + id1 + "' <-> '" + id2 + "'");
+                    agregarConexionP2P(id1, id2);
+                    conexionesCreadas++;
                 }
             }
+
+            LoggerCentral.info(TAG, "✅ Conexiones P2P totales: " + conexionesP2P.size() +
+                              " (intentadas: " + conexionesCreadas + ")");
 
             repaint();
 
@@ -148,9 +174,16 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
     public void agregarConexionP2P(String idOrigen, String idDestino) {
         NodoPeer origen = peers.get(idOrigen);
         NodoPeer destino = peers.get(idDestino);
+
         if (origen != null && destino != null) {
             conexionesP2P.add(new ConexionP2P(origen, destino));
+            LoggerCentral.debug(TAG, "✅ Conexión P2P agregada: " + idOrigen + " <-> " + idDestino);
             repaint();
+        } else {
+            LoggerCentral.warn(TAG, "❌ No se pudo agregar conexión P2P: origen=" +
+                (origen != null ? "OK" : "NULL") + " destino=" + (destino != null ? "OK" : "NULL") +
+                " | IDs: " + idOrigen + " <-> " + idDestino);
+            LoggerCentral.debug(TAG, "Peers disponibles: " + peers.keySet());
         }
     }
 

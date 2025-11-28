@@ -297,10 +297,19 @@ public class PanelConexiones extends JPanel implements IObservador { // ✅ NUEV
 
     // Métodos públicos para actualizar los grafos
     public void actualizarGrafos() {
-        grafoP2P.limpiar();
-        grafoCS.limpiar();
-        grafoCompleto.limpiar();
-        cargarDatosEjemplo();
+        // ✅ CORREGIDO: Solo usar datos de ejemplo si NO hay controladores reales
+        if (controladorP2P == null && controladorCS == null) {
+            // Modo estático con datos de ejemplo
+            grafoP2P.limpiar();
+            grafoCS.limpiar();
+            grafoCompleto.limpiar();
+            cargarDatosEjemplo();
+            LoggerCentral.debug(TAG, "Grafos actualizados con datos de ejemplo (sin controladores)");
+        } else {
+            // Modo dinámico: Los grafos se actualizan solos mediante observadores
+            // NO hacer nada aquí, dejar que cada grafo se actualice desde su controlador
+            LoggerCentral.debug(TAG, "Los grafos se actualizan automáticamente desde controladores (modo dinámico)");
+        }
     }
 
     public GrafoP2P getGrafoP2P() {

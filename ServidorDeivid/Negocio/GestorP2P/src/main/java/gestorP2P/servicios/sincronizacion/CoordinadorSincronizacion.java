@@ -51,6 +51,9 @@ public class CoordinadorSincronizacion {
     private final Gson gson;
     private final PeerRepositorio repoPeer;
 
+    // ✅ NUEVO: Referencia al servicio padre para notificar a TODOS los observadores
+    private observador.ISujeto servicioPadre;
+
     // Control de estado
     private volatile boolean sincronizacionEnProgreso = false;
     private volatile int contadorReintentos = 0;
@@ -75,6 +78,15 @@ public class CoordinadorSincronizacion {
         this.fase6 = new Fase6TransferenciaArchivos();
 
         LoggerCentral.info(TAG, VERDE + "✓ Coordinador de sincronización inicializado" + RESET);
+    }
+
+    /**
+     * ✅ NUEVO: Configura el servicio padre (ServicioSincronizacionDatos) para poder
+     * notificar a TODOS sus observadores, no solo al servicioNotificacionCliente.
+     */
+    public void setServicioPadre(observador.ISujeto servicioPadre) {
+        this.servicioPadre = servicioPadre;
+        LoggerCentral.info(TAG, VERDE + "✓ Servicio padre configurado para notificaciones globales" + RESET);
     }
 
     /**
@@ -286,11 +298,24 @@ public class CoordinadorSincronizacion {
     }
 
     /**
-     * Notifica finalización de sincronización.
+     * ✅ MEJORADO: Notifica finalización de sincronización a TODOS los observadores.
+     * Esto incluye PanelUsuarios, ServicioNotificacionCliente, etc.
      */
     private void notificarFinalizacion() {
+        LoggerCentral.info(TAG, AZUL + "📡 Notificando finalización de sincronización..." + RESET);
+
+        // ✅ NUEVO: Notificar a TODOS los observadores del servicio padre
+        if (servicioPadre != null) {
+            try {
+                LoggerCentral.info(TAG, VERDE + "📢 Notificando a TODOS los observadores (incluyendo UI)..." + RESET);
+                servicioPadre.notificarObservadores("SINCRONIZACION_P2P_TERMINADA", huboCambiosEnEsteCiclo);
+            } catch (Exception e) {
+                LoggerCentral.error(TAG, "Error notificando a observadores: " + e.getMessage());
+            }
+        }
+
+        // Mantener compatibilidad con el observador individual (por si acaso)
         if (servicioNotificacionCliente != null) {
-            LoggerCentral.info(TAG, AZUL + "📡 Notificando finalización de sincronización..." + RESET);
             try {
                 servicioNotificacionCliente.actualizar("SINCRONIZACION_P2P_TERMINADA", huboCambiosEnEsteCiclo);
             } catch (Exception e) {

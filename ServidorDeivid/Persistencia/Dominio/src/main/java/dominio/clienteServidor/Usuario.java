@@ -57,7 +57,8 @@ public class Usuario implements Serializable, IMerkleEntity {
                 (email != null ? email : "") + "|" +
                 (foto != null ? foto : "") + "|" +
                 (peerPadre != null ? peerPadre.toString() : "") + "|" +
-                (contrasena != null ? contrasena : "");
+                (contrasena != null ? contrasena : "")+ "|" +
+                (estado != null ? estado : "");
                 // fechaCreacion excluido para evitar diferencias de sincronización entre peers
     }
 

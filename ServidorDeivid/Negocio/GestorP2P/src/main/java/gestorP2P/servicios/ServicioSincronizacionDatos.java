@@ -110,6 +110,9 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
         // Crear coordinador
         this.coordinador = new CoordinadorSincronizacion(gestor, gson);
 
+        // ✅ NUEVO: Configurar este servicio como padre para que el coordinador pueda notificar a TODOS los observadores
+        coordinador.setServicioPadre(this);
+
         // Configurar servicios si ya están disponibles
         if (notificador != null || servicioNotificacionCliente != null) {
             coordinador.configurarNotificaciones(notificador, servicioNotificacionCliente);
@@ -401,4 +404,3 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
         return coordinador;
     }
 }
-

@@ -4,6 +4,7 @@ import controlador.p2p.ControladorP2P;
 import dto.p2p.DTOPeerDetails;
 import logger.LoggerCentral;
 import observador.IObservador;
+import configuracion.Configuracion;
 
 import javax.swing.*;
 import java.awt.*;
@@ -25,6 +26,10 @@ public class GrafoP2P extends JPanel implements IObservador {
     private List<ConexionP2P> conexiones;
     private ControladorP2P controlador;
 
+    // ✅ NUEVO: Información del peer local para identificarlo
+    private String ipLocal;
+    private int puertoLocal;
+
     // Colores para el grafo
     private static final Color COLOR_PEER_ONLINE = new Color(46, 204, 113);  // Verde
     private static final Color COLOR_PEER_OFFLINE = new Color(149, 165, 166); // Gris
@@ -36,6 +41,7 @@ public class GrafoP2P extends JPanel implements IObservador {
         this.nodos = new LinkedHashMap<>();
         this.conexiones = new ArrayList<>();
         configurarPanel();
+        cargarConfiguracionLocal();
     }
 
     /**
@@ -47,6 +53,52 @@ public class GrafoP2P extends JPanel implements IObservador {
         if (controlador != null) {
             suscribirseAEventos();
         }
+    }
+
+    /**
+     * ✅ NUEVO: Cargar la configuración del peer local para identificarlo
+     */
+    private void cargarConfiguracionLocal() {
+        Configuracion config = Configuracion.getInstance();
+        this.ipLocal = config.getPeerHost();
+        this.puertoLocal = config.getPeerPuerto();
+        LoggerCentral.info(TAG, "Configuración local cargada: " + ipLocal + ":" + puertoLocal);
+    }
+
+    /**
+     * ✅ NUEVO: Determina si un peer es el local
+     */
+    private boolean esPeerLocal(String ip, int puerto) {
+        // Normalizar IPs locales
+        String ipNormalizada = normalizarIP(ip);
+        String ipLocalNormalizada = normalizarIP(ipLocal);
+
+        boolean esLocal = ipNormalizada.equals(ipLocalNormalizada) && puerto == puertoLocal;
+
+        if (esLocal) {
+            LoggerCentral.debug(TAG, "Peer LOCAL identificado: " + ip + ":" + puerto);
+        }
+
+        return esLocal;
+    }
+
+    /**
+     * ✅ NUEVO: Normaliza direcciones IP locales
+     */
+    private String normalizarIP(String ip) {
+        if (ip == null) return "127.0.0.1";
+
+        // Remover prefijo "/" si existe
+        if (ip.startsWith("/")) {
+            ip = ip.substring(1);
+        }
+
+        // Normalizar localhost
+        if (ip.equals("localhost") || ip.equals("0.0.0.0")) {
+            return "127.0.0.1";
+        }
+
+        return ip;
     }
 
     /**
@@ -73,13 +125,50 @@ public class GrafoP2P extends JPanel implements IObservador {
     private void actualizarConListaPeers(List<DTOPeerDetails> peers) {
         SwingUtilities.invokeLater(() -> {
             limpiar();
+
+            LoggerCentral.info(TAG, "📊 Actualizando GrafoP2P: " + peers.size() + " peers recibidos");
+
             for (DTOPeerDetails peer : peers) {
-                boolean esLocal = "LOCAL".equalsIgnoreCase(peer.getId());
+                // ✅ CORREGIDO: Usar IP y puerto del DTO correctamente
+                String ip = peer.getIp();
+                int puerto = peer.getPuertoServidor() > 0 ? peer.getPuertoServidor() : peer.getPuerto();
+
+                // ✅ CORREGIDO: Identificar correctamente si es el peer local
+                boolean esLocal = esPeerLocal(ip, puerto);
                 boolean esOnline = "ONLINE".equalsIgnoreCase(peer.getEstado());
-                agregarPeer(peer.getId(), peer.getIp(), esLocal, esOnline);
+
+                LoggerCentral.debug(TAG, "Procesando peer: " + ip + ":" + puerto +
+                                   " | Local: " + esLocal + " | Online: " + esOnline);
+
+                // ✅ NUEVO: Solo agregar el peer local UNA VEZ
+                // Si es local, agregarlo con etiqueta especial
+                // Si no es local, agregarlo como peer remoto
+                if (esLocal) {
+                    // Solo agregar si no existe ya (evitar duplicados)
+                    if (!nodos.containsKey(peer.getId())) {
+                        LoggerCentral.info(TAG, "✅ Agregando PEER LOCAL: " + ip + ":" + puerto);
+                        agregarPeer(peer.getId(), ip, puerto, true, esOnline);
+                    } else {
+                        LoggerCentral.debug(TAG, "Peer local ya existe, ignorando duplicado");
+                    }
+                } else {
+                    // Peer remoto
+                    LoggerCentral.debug(TAG, "Agregando peer remoto: " + ip + ":" + puerto);
+                    agregarPeer(peer.getId(), ip, puerto, false, esOnline);
+                }
             }
+
             // Las conexiones se infieren (todos conectados entre sí en P2P)
-            agregarConexionesP2P(peers);
+            // Filtrar la lista para solo incluir peers que se agregaron
+            List<DTOPeerDetails> peersAgregados = peers.stream()
+                .filter(p -> nodos.containsKey(p.getId()))
+                .collect(java.util.stream.Collectors.toList());
+
+            agregarConexionesP2P(peersAgregados);
+
+            LoggerCentral.info(TAG, "✅ Grafo actualizado: " + nodos.size() + " nodos, " +
+                              conexiones.size() + " conexiones");
+
             repaint();
         });
     }
@@ -97,7 +186,7 @@ public class GrafoP2P extends JPanel implements IObservador {
     }
 
     /**
-     * ✅ NUEVO: Agregar conexiones P2P (todos los peers se conectan entre sí)
+     * ✅ ACTUALIZADO: Agregar conexiones P2P (todos los peers se conectan entre sí)
      */
     private void agregarConexionesP2P(List<DTOPeerDetails> peers) {
         // En una red P2P, típicamente todos están conectados entre sí
@@ -115,8 +204,18 @@ public class GrafoP2P extends JPanel implements IObservador {
         this.setPreferredSize(new Dimension(800, 600));
     }
 
+    /**
+     * ✅ ACTUALIZADO: Método original ahora es wrapper del nuevo método
+     */
     public void agregarPeer(String id, String ip, boolean esLocal, boolean esOnline) {
-        NodoP2P nodo = new NodoP2P(id, ip, esLocal, esOnline);
+        agregarPeer(id, ip, 0, esLocal, esOnline);
+    }
+
+    /**
+     * ✅ NUEVO: Método mejorado que incluye el puerto para mostrar IP completa
+     */
+    public void agregarPeer(String id, String ip, int puerto, boolean esLocal, boolean esOnline) {
+        NodoP2P nodo = new NodoP2P(id, ip, puerto, esLocal, esOnline);
         nodos.put(id, nodo);
         calcularPosiciones();
         repaint();
@@ -206,7 +305,7 @@ public class GrafoP2P extends JPanel implements IObservador {
         // Determinar color según estado
         Color color;
         if (nodo.esLocal) {
-            color = COLOR_PEER_LOCAL;
+            color = COLOR_PEER_LOCAL; // ✅ Azul para peer local
         } else if (nodo.esOnline) {
             color = COLOR_PEER_ONLINE;
         } else {
@@ -226,6 +325,17 @@ public class GrafoP2P extends JPanel implements IObservador {
         g2d.setStroke(new BasicStroke(2));
         g2d.draw(circulo);
 
+        // ✅ Etiqueta especial para peer local
+        if (nodo.esLocal) {
+            g2d.setColor(COLOR_PEER_LOCAL);
+            g2d.setFont(new Font("Arial", Font.BOLD, 9));
+            String etiqueta = "LOCAL";
+            FontMetrics fm = g2d.getFontMetrics();
+            int etiquetaX = nodo.x - fm.stringWidth(etiqueta) / 2;
+            int etiquetaY = nodo.y + 4;
+            g2d.drawString(etiqueta, etiquetaX, etiquetaY);
+        }
+
         // Texto: ID (truncado)
         g2d.setColor(COLOR_TEXTO);
         g2d.setFont(new Font("Arial", Font.BOLD, 10));
@@ -235,12 +345,13 @@ public class GrafoP2P extends JPanel implements IObservador {
         int textoY = nodo.y + radio + 15;
         g2d.drawString(idTruncado, textoX, textoY);
 
-        // IP
+        // ✅ CORREGIDO: Mostrar IP con puerto para diferenciarlos
         g2d.setFont(new Font("Arial", Font.PLAIN, 9));
+        String ipDisplay = nodo.puerto > 0 ? nodo.ip + ":" + nodo.puerto : nodo.ip;
         fm = g2d.getFontMetrics();
-        int ipX = nodo.x - fm.stringWidth(nodo.ip) / 2;
+        int ipX = nodo.x - fm.stringWidth(ipDisplay) / 2;
         int ipY = textoY + 12;
-        g2d.drawString(nodo.ip, ipX, ipY);
+        g2d.drawString(ipDisplay, ipX, ipY);
     }
 
     /**
@@ -271,13 +382,15 @@ public class GrafoP2P extends JPanel implements IObservador {
     private static class NodoP2P {
         String id;
         String ip;
+        int puerto; // ✅ NUEVO: Incluir puerto
         boolean esLocal;
         boolean esOnline;
         int x, y;
 
-        NodoP2P(String id, String ip, boolean esLocal, boolean esOnline) {
+        NodoP2P(String id, String ip, int puerto, boolean esLocal, boolean esOnline) {
             this.id = id;
             this.ip = ip;
+            this.puerto = puerto;
             this.esLocal = esLocal;
             this.esOnline = esOnline;
             this.x = 0;

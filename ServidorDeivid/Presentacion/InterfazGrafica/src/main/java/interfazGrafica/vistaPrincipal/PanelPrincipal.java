@@ -53,14 +53,14 @@ public class PanelPrincipal extends JPanel {
      * Agrega una línea de información al system status
      */
     public void agregarEstado(String mensaje) {
-        panelSystemStatus.agregarEstado(mensaje);
+        panelSystemStatus.agregarActividad(mensaje);
     }
 
     /**
      * Limpia toda la información del system status
      */
     public void limpiarEstado() {
-        panelSystemStatus.limpiarEstado();
+        panelSystemStatus.limpiarTodo();
     }
 
     /**

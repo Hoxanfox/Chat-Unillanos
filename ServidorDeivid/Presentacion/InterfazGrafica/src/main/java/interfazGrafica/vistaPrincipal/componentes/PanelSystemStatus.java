@@ -1,24 +1,37 @@
 package interfazGrafica.vistaPrincipal.componentes;
 
+import controlador.dashboard.ControladorDashboard;
+import logger.LoggerCentral;
+
 import javax.swing.*;
 import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
 import java.awt.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Panel que muestra el estado del sistema dividido en secciones
  * Incluye: Server Info, Network Status, Resources y Activity
+ * ✅ ACTUALIZADO: Ahora se integra con ControladorDashboard para actualizaciones automáticas
  */
 public class PanelSystemStatus extends JPanel {
+
+    private static final String TAG = "PanelSystemStatus";
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private JTextArea txtServerInfo;
     private JTextArea txtNetworkStatus;
     private JTextArea txtResources;
     private JTextArea txtRecentActivity;
 
+    // ✅ NUEVO: Controlador de Dashboard
+    private ControladorDashboard controladorDashboard;
+
     public PanelSystemStatus() {
         configurarPanel();
         inicializarComponentes();
+        inicializarControlador();
     }
 
     private void configurarPanel() {
@@ -63,6 +76,69 @@ public class PanelSystemStatus extends JPanel {
         // Agregar componentes
         this.add(lblTitulo, BorderLayout.NORTH);
         this.add(panelSecciones, BorderLayout.CENTER);
+    }
+
+    /**
+     * ✅ NUEVO: Inicializa el controlador de dashboard y suscribe a eventos
+     */
+    private void inicializarControlador() {
+        try {
+            controladorDashboard = new ControladorDashboard();
+
+            // Suscribir el controlador a eventos del servicio
+            controladorDashboard.suscribirseAEventos();
+
+            // Suscribir callbacks para actualizar la vista
+            controladorDashboard.suscribirInfoServidor(this::actualizarServerInfoEnHilo);
+            controladorDashboard.suscribirEstadoRed(this::actualizarNetworkStatusEnHilo);
+            controladorDashboard.suscribirRecursos(this::actualizarResourcesEnHilo);
+            controladorDashboard.suscribirActividades(this::agregarActividadEnHilo);
+
+            // Iniciar el monitoreo
+            controladorDashboard.iniciarMonitoreo();
+
+            LoggerCentral.info(TAG, "✅ PanelSystemStatus conectado al ControladorDashboard");
+
+            // Cargar datos iniciales
+            actualizarTodo();
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error inicializando controlador de dashboard: " + e.getMessage());
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Actualiza toda la información del dashboard
+     */
+    private void actualizarTodo() {
+        if (controladorDashboard == null || !controladorDashboard.estaActivo()) {
+            return;
+        }
+
+        SwingUtilities.invokeLater(() -> {
+            actualizarServerInfo(controladorDashboard.obtenerInfoServidor());
+            actualizarNetworkStatus(controladorDashboard.obtenerEstadoRed());
+            actualizarResources(controladorDashboard.obtenerRecursos());
+        });
+    }
+
+    /**
+     * ✅ NUEVO: Wrappers para actualizar en el hilo de Swing (thread-safe)
+     */
+    private void actualizarServerInfoEnHilo(String info) {
+        SwingUtilities.invokeLater(() -> actualizarServerInfo(info));
+    }
+
+    private void actualizarNetworkStatusEnHilo(String status) {
+        SwingUtilities.invokeLater(() -> actualizarNetworkStatus(status));
+    }
+
+    private void actualizarResourcesEnHilo(String resources) {
+        SwingUtilities.invokeLater(() -> actualizarResources(resources));
+    }
+
+    private void agregarActividadEnHilo(String actividad) {
+        SwingUtilities.invokeLater(() -> agregarActividad(actividad));
     }
 
     /**
@@ -152,43 +228,19 @@ public class PanelSystemStatus extends JPanel {
     }
 
     /**
-     * Agrega una línea de estado (método legacy para compatibilidad)
+     * ✅ NUEVO: Obtiene el controlador de dashboard para uso externo
      */
-    public void agregarEstado(String mensaje) {
-        // Determinar a qué sección pertenece el mensaje
-        if (mensaje.contains("Server") || mensaje.contains("port") || mensaje.contains("Uptime") || mensaje.contains("backup")) {
-            txtServerInfo.append(mensaje + "\n");
-        } else if (mensaje.contains("Network") || mensaje.contains("P2P") || mensaje.contains("peer") || mensaje.contains("connection")) {
-            txtNetworkStatus.append(mensaje + "\n");
-        } else if (mensaje.contains("Memory") || mensaje.contains("CPU") || mensaje.contains("Database")) {
-            txtResources.append(mensaje + "\n");
-        } else {
-            txtRecentActivity.append(mensaje + "\n");
+    public ControladorDashboard getControladorDashboard() {
+        return controladorDashboard;
+    }
+
+    /**
+     * ✅ NUEVO: Limpieza al destruir el panel
+     */
+    public void destruir() {
+        if (controladorDashboard != null) {
+            controladorDashboard.detenerMonitoreo();
+            LoggerCentral.info(TAG, "PanelSystemStatus destruido y monitoreo detenido");
         }
-    }
-
-    /**
-     * Limpia todo el contenido (método legacy para compatibilidad)
-     */
-    public void limpiarEstado() {
-        limpiarTodo();
-    }
-
-    /**
-     * Establece el contenido completo (método legacy para compatibilidad)
-     */
-    public void setEstado(String contenido) {
-        txtRecentActivity.setText(contenido);
-        txtRecentActivity.setCaretPosition(0);
-    }
-
-    /**
-     * Obtiene el contenido actual (método legacy para compatibilidad)
-     */
-    public String getEstado() {
-        return txtServerInfo.getText() + "\n" +
-                txtNetworkStatus.getText() + "\n" +
-                txtResources.getText() + "\n" +
-                txtRecentActivity.getText();
     }
 }
