@@ -34,9 +34,10 @@ import java.util.concurrent.CompletableFuture;
  * <li>Usar el repositorio para almacenamiento en caché local</li>
  * <li>Implementar el patrón Observer para notificar cambios</li>
  * <li>Aceptar/rechazar solicitudes de amistad e invitaciones a canales</li>
+ * <li>Registrarse en el GestorSincronizacionGlobal para actualizaciones automáticas</li>
  * </ul>
  */
-public class GestorNotificaciones implements ISujeto {
+public class GestorNotificaciones implements ISujeto, IObservador {
 
     private final IRepositorioNotificacion repositorioNotificacion;
     private final GestorSesionUsuario gestorSesion;
@@ -54,6 +55,10 @@ public class GestorNotificaciones implements ISujeto {
         this.observadores = new ArrayList<>();
 
         System.out.println("✅ [GestorNotificaciones]: Gestor inicializado con comunicación y repositorio");
+
+        // 🔥 NUEVO: Registrarse en el GestorSincronizacionGlobal para recibir ACTUALIZAR_NOTIFICACIONES
+        GestorSincronizacionGlobal.getInstancia().registrarObservador(this);
+        System.out.println("✅ [GestorNotificaciones]: Registrado en GestorSincronizacionGlobal para actualizaciones automáticas");
     }
 
     /**
@@ -336,6 +341,28 @@ public class GestorNotificaciones implements ISujeto {
         gestorRespuesta.registrarManejador("solicitudAceptada", this::manejarSolicitudAceptada);
         gestorRespuesta.registrarManejador("notificacionInvitacionCanal", this::manejarInvitacionCanal);
         System.out.println("✅ [GestorNotificaciones]: Manejadores inicializados");
+    }
+
+    // ==================== IMPLEMENTACIÓN DE IObservador ====================
+
+    /**
+     * Recibe actualizaciones del GestorSincronizacionGlobal.
+     * Cuando llega SIGNAL_UPDATE del servidor, este método es invocado.
+     */
+    @Override
+    public void actualizar(String tipoDeDato, Object datos) {
+        System.out.println("🔔 [GestorNotificaciones]: Actualización recibida del GestorSincronizacionGlobal - Tipo: " + tipoDeDato);
+
+        if ("ACTUALIZAR_NOTIFICACIONES".equals(tipoDeDato)) {
+            System.out.println("📡 [GestorNotificaciones]: Refrescando notificaciones desde el caché local...");
+
+            // Obtener todas las notificaciones del caché y notificar a los observadores (UI)
+            List<DTONotificacion> notificacionesCache = repositorioNotificacion.obtenerTodas();
+            System.out.println("📦 [GestorNotificaciones]: " + notificacionesCache.size() + " notificaciones encontradas en caché");
+
+            // Notificar a los observadores registrados (ServicioNotificaciones -> UI)
+            notificarObservadores("ACTUALIZAR_NOTIFICACIONES", notificacionesCache);
+        }
     }
 
     // ==================== MÉTODOS PRIVADOS ====================
