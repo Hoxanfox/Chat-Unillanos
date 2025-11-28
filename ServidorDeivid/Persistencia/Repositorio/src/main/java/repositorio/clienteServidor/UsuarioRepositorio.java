@@ -108,11 +108,12 @@ public class UsuarioRepositorio {
      * Actualiza el estado de un usuario
      */
     public boolean actualizarEstado(UUID id, Usuario.Estado estado) {
-        String sql = "UPDATE usuarios SET estado = ? WHERE id = ?";
+        String sql = "UPDATE usuarios SET estado = ?, fecha_creacion = ? WHERE id = ?";
         try (Connection conn = mysql.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, estado.name());
-            ps.setString(2, id.toString());
+            ps.setTimestamp(2, Timestamp.from(Instant.now())); // ✅ Actualizar timestamp
+            ps.setString(3, id.toString());
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
             System.err.println("[RepoUsuario] Error actualizando estado: " + e.getMessage());

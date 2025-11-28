@@ -43,6 +43,35 @@ public class ArchivoRepositorio {
     }
 
     /**
+     * ✅ NUEVO: Actualiza un archivo existente y actualiza su timestamp automáticamente.
+     */
+    public boolean actualizar(Archivo archivo) {
+        // Actualizar timestamp de modificación al momento actual
+        archivo.setFechaUltimaActualizacion(java.time.Instant.now());
+
+        String sql = "UPDATE archivos SET nombre_archivo=?, ruta_relativa=?, mime_type=?, tamanio=?, hash_sha256=?, fecha_actualizacion=? WHERE id=?";
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, archivo.getNombreArchivo());
+            ps.setString(2, archivo.getRutaRelativa());
+            ps.setString(3, archivo.getMimeType());
+            ps.setLong(4, archivo.getTamanio());
+            ps.setString(5, archivo.getHashSHA256());
+            ps.setTimestamp(6, Timestamp.from(archivo.getFechaUltimaActualizacion()));
+            ps.setString(7, archivo.getId().toString());
+
+            int affected = ps.executeUpdate();
+            if (affected > 0) {
+                System.out.println("[RepoArchivo] ✓ Archivo actualizado con timestamp: " + archivo.getId());
+            }
+            return affected > 0;
+        } catch (SQLException e) {
+            System.err.println("[RepoArchivo] Error actualizando: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Busca un archivo por su fileId (usado por clientes)
      */
     public Archivo buscarPorFileId(String fileId) {

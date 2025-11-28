@@ -151,6 +151,37 @@ public class MensajeRepositorio {
     }
 
     /**
+     * ✅ NUEVO: Actualiza un mensaje existente y actualiza su timestamp automáticamente.
+     */
+    public boolean actualizar(Mensaje m) {
+        if (m == null || m.getId() == null) return false;
+
+        // Actualizar timestamp al momento actual
+        m.setFechaEnvio(Instant.now());
+
+        String sql = "UPDATE mensajes SET contenido=?, fecha_envio=?, peer_remitente_id=?, peer_destino_id=? WHERE id=?";
+
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, m.getContenido());
+            ps.setTimestamp(2, Timestamp.from(m.getFechaEnvio()));
+            ps.setString(3, m.getPeerRemitenteId());
+            ps.setString(4, m.getPeerDestinoId());
+            ps.setString(5, m.getId());
+
+            int affected = ps.executeUpdate();
+            if (affected > 0) {
+                System.out.println("[MensajeRepo] ✓ Mensaje actualizado con timestamp: " + m.getId());
+            }
+            return affected > 0;
+        } catch (SQLException e) {
+            System.err.println("[MensajeRepo] Error actualizando mensaje " + m.getId() + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Método auxiliar para convertir un ResultSet en un objeto Mensaje.
      * ✅ ACTUALIZADO: Ahora mapea también los campos de peer.
      */

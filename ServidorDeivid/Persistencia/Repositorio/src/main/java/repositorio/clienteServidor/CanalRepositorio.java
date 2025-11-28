@@ -42,7 +42,7 @@ public class CanalRepositorio {
 
     public boolean guardar(Canal c) {
         String sql = "INSERT INTO canales (id, peer_padre, creador_id, nombre, tipo, fecha_creacion) VALUES (?, ?, ?, ?, ?, ?) " +
-                "ON DUPLICATE KEY UPDATE nombre=VALUES(nombre), tipo=VALUES(tipo)";
+                "ON DUPLICATE KEY UPDATE nombre=VALUES(nombre), tipo=VALUES(tipo), fecha_creacion=VALUES(fecha_creacion)";
         try (Connection conn = mysql.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, c.getId().toString());
@@ -54,6 +54,32 @@ public class CanalRepositorio {
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
             System.err.println("[RepoCanal] Error (Posible falta de Usuario creador): " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Actualiza un canal existente y actualiza su timestamp automáticamente.
+     */
+    public boolean actualizar(Canal c) {
+        // Actualizar timestamp de modificación al momento actual
+        c.setFechaCreacion(Instant.now());
+
+        String sql = "UPDATE canales SET nombre=?, tipo=?, fecha_creacion=? WHERE id=?";
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, c.getNombre());
+            ps.setString(2, c.getTipo().name());
+            ps.setTimestamp(3, Timestamp.from(c.getFechaCreacion()));
+            ps.setString(4, c.getId().toString());
+
+            int affected = ps.executeUpdate();
+            if (affected > 0) {
+                System.out.println("[RepoCanal] ✓ Canal actualizado con timestamp: " + c.getId());
+            }
+            return affected > 0;
+        } catch (SQLException e) {
+            System.err.println("[RepoCanal] Error actualizando: " + e.getMessage());
             return false;
         }
     }

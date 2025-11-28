@@ -239,19 +239,26 @@ public class GestorUsuarios {
 
     /**
      * Cambia el estado de un usuario (ONLINE/OFFLINE)
+     * ✅ ACTUALIZADO: Ahora actualiza timestamp y notifica correctamente
      */
     public boolean cambiarEstado(String id, Usuario.Estado nuevoEstado) {
         LoggerCentral.info(TAG, "Cambiando estado de usuario " + id + " a " + nuevoEstado);
 
         try {
             UUID uuid = UUID.fromString(id);
+
+            // ✅ MEJORADO: actualizarEstado() ya actualiza el timestamp automáticamente
             boolean actualizado = repositorio.actualizarEstado(uuid, nuevoEstado);
 
             if (actualizado) {
-                // Notificar a observadores
+                // ✅ IMPORTANTE: Recargar usuario con timestamp actualizado
                 Usuario usuario = repositorio.buscarPorId(uuid);
                 if (usuario != null) {
+                    LoggerCentral.info(TAG, "✅ Estado actualizado con timestamp: " + usuario.getFechaCreacion());
+                    // Notificar a observadores (activa sincronización P2P)
                     notificarObservadores(EVENTO_USUARIO_ACTUALIZADO, usuario);
+                } else {
+                    LoggerCentral.warn(TAG, "⚠️ Usuario actualizado pero no se pudo recargar para notificar");
                 }
             }
 
