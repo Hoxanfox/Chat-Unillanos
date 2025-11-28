@@ -139,7 +139,7 @@ public class Fase5ComparacionContenido {
                     huboCambios = compararCanal(canalRemoto);
                     break;
 
-                case "MIEMBRO":
+                case "CANAL_MIEMBRO":  // ✅ CORREGIDO: era "MIEMBRO", ahora coincide con Fase1
                     CanalMiembro miembroRemoto = gson.fromJson(dataRemota, CanalMiembro.class);
                     huboCambios = compararMiembro(miembroRemoto);
                     break;
@@ -154,7 +154,7 @@ public class Fase5ComparacionContenido {
                     huboCambios = compararArchivo(archivoRemoto);
                     break;
 
-                case "CANAL_INVITACION": // ✅ NUEVO CASO
+                case "CANAL_INVITACION":
                     CanalInvitacion invitacionRemota = gson.fromJson(dataRemota, CanalInvitacion.class);
                     huboCambios = compararInvitacion(invitacionRemota);
                     break;
