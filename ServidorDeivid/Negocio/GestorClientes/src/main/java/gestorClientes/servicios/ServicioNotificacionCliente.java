@@ -51,16 +51,18 @@ public class ServicioNotificacionCliente implements IServicioCliente, IObservado
     public void actualizar(String tipoEvento, Object datos) {
         LoggerCentral.info(TAG, AZUL + "📥 Evento recibido: " + tipoEvento + " | Datos: " + datos + RESET);
 
-        // ✅ NUEVO: Manejar específicamente la sincronización P2P terminada
+        // ✅ AJUSTE: Siempre notificar a los clientes cuando termine la sincronización P2P
         if ("SINCRONIZACION_P2P_TERMINADA".equals(tipoEvento)) {
             boolean huboCambios = datos instanceof Boolean ? (Boolean) datos : false;
 
             if (huboCambios) {
                 LoggerCentral.info(TAG, VERDE + "🔄 Sincronización P2P completada CON cambios. Notificando clientes..." + RESET);
-                enviarSenalDeActualizacion("SYNC_P2P_UPDATE");
             } else {
-                LoggerCentral.debug(TAG, "Sincronización P2P completada SIN cambios. No se notifica.");
+                LoggerCentral.info(TAG, AMARILLO + "🔄 Sincronización P2P completada SIN cambios. Notificando clientes igualmente..." + RESET);
             }
+
+            // Siempre enviar señal de actualización específica de P2P
+            enviarSenalDeActualizacion("SYNC_P2P_UPDATE");
             return;
         }
 

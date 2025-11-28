@@ -28,6 +28,9 @@ public class VentanaPrincipal extends JFrame implements IObservador {
 
     private static final String TAG = "VentanaPrincipal";
 
+    // Indicador visual de sincronización P2P
+    private JLabel lblEstadoSyncP2P;
+
     private JTabbedPane tabbedPane;
     private PanelPrincipal panelPrincipal;
     private PanelUsuarios panelUsuarios;
@@ -62,6 +65,17 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         this.setLocationRelativeTo(null);
         this.setLayout(new BorderLayout());
+
+        // Barra superior con estado de sincronización
+        JPanel topBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        lblEstadoSyncP2P = new JLabel("Sync P2P: IDLE");
+        lblEstadoSyncP2P.setOpaque(true);
+        lblEstadoSyncP2P.setBackground(Color.GRAY);
+        lblEstadoSyncP2P.setForeground(Color.WHITE);
+        lblEstadoSyncP2P.setBorder(BorderFactory.createEmptyBorder(3, 8, 3, 8));
+        topBar.add(lblEstadoSyncP2P);
+
+        this.add(topBar, BorderLayout.NORTH);
     }
 
     private void inicializarControladores() {
@@ -76,6 +90,12 @@ public class VentanaPrincipal extends JFrame implements IObservador {
 
         // Construir arquitectura de capas para Logs
         construirArquitecturaLogs();
+
+        // Suscribir ventana principal como observador de la sincronización P2P
+        if (servicioSincronizacion != null) {
+            servicioSincronizacion.registrarObservador(this);
+            LoggerCentral.info(TAG, "✅ VentanaPrincipal suscrita a eventos de ServicioSincronizacionDatos");
+        }
 
         LoggerCentral.info(TAG, "✓ Todos los controladores inicializados");
     }
@@ -427,6 +447,31 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                     } else if (!csIniciado) {
                         csIniciado = true;
                         panelPrincipal.agregarEstado("✓ Cliente-Servidor listo: " + datos);
+                    }
+                });
+                break;
+
+            case "SINCRONIZACION_P2P_INICIADA":
+                SwingUtilities.invokeLater(() -> {
+                    if (lblEstadoSyncP2P != null) {
+                        lblEstadoSyncP2P.setText("Sync P2P: RUNNING");
+                        lblEstadoSyncP2P.setBackground(Color.ORANGE);
+                    }
+                    if (panelPrincipal != null) {
+                        panelPrincipal.agregarEstado("🔄 Sincronización P2P iniciada");
+                    }
+                });
+                break;
+
+            case "SINCRONIZACION_P2P_TERMINADA":
+                SwingUtilities.invokeLater(() -> {
+                    boolean huboCambios = datos instanceof Boolean && (Boolean) datos;
+                    if (lblEstadoSyncP2P != null) {
+                        lblEstadoSyncP2P.setText("Sync P2P: OK" + (huboCambios ? " (changes)" : ""));
+                        lblEstadoSyncP2P.setBackground(new Color(0, 128, 0));
+                    }
+                    if (panelPrincipal != null) {
+                        panelPrincipal.agregarEstado("✅ Sincronización P2P terminada" + (huboCambios ? " con cambios" : " sin cambios"));
                     }
                 });
                 break;

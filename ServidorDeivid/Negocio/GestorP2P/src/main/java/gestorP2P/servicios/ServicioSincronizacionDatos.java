@@ -281,6 +281,16 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
         LoggerCentral.info(TAG, VERDE + "✓ Servicio iniciado correctamente" + RESET);
     }
 
+    // API pública para disparar sincronización, notificando inicio a observadores
+    public void iniciarSincronizacionConNotificacion() {
+        LoggerCentral.info(TAG, AZUL + "=== Solicitud de sincronización con notificación ===" + RESET);
+        // Notificar a la UI y otros observadores que se inicia la sincronización
+        notificarObservadores("SINCRONIZACION_P2P_INICIADA", null);
+        if (coordinador != null) {
+            coordinador.iniciarSincronizacion();
+        }
+    }
+
     @Override
     public void detener() {
         LoggerCentral.info(TAG, ROJO + "Deteniendo servicio de sincronización..." + RESET);
