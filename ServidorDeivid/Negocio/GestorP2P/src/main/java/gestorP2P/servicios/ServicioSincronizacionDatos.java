@@ -225,17 +225,50 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
             }
         });
 
-        // Respuesta a sync_compare_entity
+        // ✅ MEJORADO: Respuesta a sync_compare_entity con deduplicación
         router.registrarManejadorRespuesta("sync_compare_entity", (resp) -> {
             if (resp.fueExitoso()) {
                 JsonObject env = resp.getData().getAsJsonObject();
                 String tipo = env.get("tipo").getAsString();
                 JsonElement data = env.get("data");
 
+                // ✅ NUEVO: Extraer el ID de la entidad para deduplicación
+                String id = extraerIdDeEntidad(tipo, data);
+
+                // ✅ NUEVO: Verificar si ya procesamos esta respuesta
+                if (coordinador.getFase5().yaFueProcesado(tipo, id)) {
+                    LoggerCentral.debug(TAG, "⏩ Respuesta duplicada ignorada: " + tipo + " ID: " + id);
+                    return;
+                }
+
                 LoggerCentral.info(TAG, CYAN + "✓ Comparación de contenido para: " + tipo + RESET);
                 coordinador.procesarComparacion(tipo, data);
             }
         });
+    }
+
+    /**
+     * ✅ NUEVO: Extrae el ID de una entidad desde JSON.
+     */
+    private String extraerIdDeEntidad(String tipo, JsonElement data) {
+        try {
+            JsonObject obj = data.getAsJsonObject();
+
+            // Diferentes campos según el tipo de entidad
+            if (obj.has("id")) {
+                return obj.get("id").getAsString();
+            } else if (obj.has("idUsuario")) {
+                return obj.get("idUsuario").getAsString();
+            } else if (obj.has("idCanal")) {
+                return obj.get("idCanal").getAsString();
+            }
+
+            // Si no tiene ID, usar un hash del contenido
+            return Integer.toString(data.hashCode());
+        } catch (Exception e) {
+            LoggerCentral.warn(TAG, "No se pudo extraer ID, usando hashCode");
+            return Integer.toString(data.hashCode());
+        }
     }
 
     @Override

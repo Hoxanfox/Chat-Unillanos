@@ -165,28 +165,55 @@ public class GestorUsuarios {
             throw new IllegalArgumentException("No existe un usuario con ID: " + dto.getId());
         }
 
+        // ✅ NUEVO: Variable para detectar si hubo cambios
+        boolean huboCambios = false;
+
         // Actualizar campos si se proporcionan
         if (dto.getNombre() != null && !dto.getNombre().trim().isEmpty()) {
-            usuario.setNombre(dto.getNombre());
+            if (!usuario.getNombre().equals(dto.getNombre())) {
+                usuario.setNombre(dto.getNombre());
+                huboCambios = true;
+            }
         }
         if (dto.getEmail() != null && !dto.getEmail().trim().isEmpty()) {
             if (!validarEmail(dto.getEmail())) {
                 throw new IllegalArgumentException("El email no es válido");
             }
-            usuario.setEmail(dto.getEmail());
+            if (!usuario.getEmail().equals(dto.getEmail())) {
+                usuario.setEmail(dto.getEmail());
+                huboCambios = true;
+            }
         }
         if (dto.getFoto() != null) {
-            usuario.setFoto(dto.getFoto());
+            if (!dto.getFoto().equals(usuario.getFoto())) {
+                usuario.setFoto(dto.getFoto());
+                huboCambios = true;
+            }
         }
         if (dto.getContrasena() != null && !dto.getContrasena().trim().isEmpty()) {
-            usuario.setContrasena(dto.getContrasena()); // TODO: Encriptar
+            if (!dto.getContrasena().equals(usuario.getContrasena())) {
+                usuario.setContrasena(dto.getContrasena()); // TODO: Encriptar
+                huboCambios = true;
+            }
         }
         if (dto.getEstado() != null) {
             try {
-                usuario.setEstado(Usuario.Estado.valueOf(dto.getEstado().toUpperCase()));
+                Usuario.Estado nuevoEstado = Usuario.Estado.valueOf(dto.getEstado().toUpperCase());
+                if (usuario.getEstado() != nuevoEstado) {
+                    usuario.setEstado(nuevoEstado);
+                    huboCambios = true;
+                }
             } catch (IllegalArgumentException e) {
                 LoggerCentral.warn(TAG, "Estado inválido: " + dto.getEstado());
             }
+        }
+
+        // ✅ CRÍTICO: Actualizar timestamp solo si hubo cambios reales
+        if (huboCambios) {
+            usuario.setFechaCreacion(Instant.now());
+            LoggerCentral.info(TAG, "⏰ Timestamp actualizado por modificación: " + usuario.getFechaCreacion());
+        } else {
+            LoggerCentral.debug(TAG, "No hubo cambios en el usuario, timestamp sin modificar");
         }
 
         // Persistir cambios
@@ -197,8 +224,10 @@ public class GestorUsuarios {
 
         LoggerCentral.info(TAG, "Usuario actualizado exitosamente: " + usuario.getId());
 
-        // Notificar a observadores
-        notificarObservadores(EVENTO_USUARIO_ACTUALIZADO, usuario);
+        // Notificar a observadores solo si hubo cambios
+        if (huboCambios) {
+            notificarObservadores(EVENTO_USUARIO_ACTUALIZADO, usuario);
+        }
 
         return convertirADTOVista(usuario);
     }

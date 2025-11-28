@@ -32,9 +32,18 @@ public class UsuarioRepositorio {
     }
 
     public boolean guardar(Usuario u) {
+        // ✅ MEJORADO: Actualizar timestamp automáticamente cuando se modifica un usuario
         String sql = "INSERT INTO usuarios (id, nombre, email, foto, peer_padre, contrasena, ip, estado, fecha_creacion) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
-                "ON DUPLICATE KEY UPDATE nombre=VALUES(nombre), email=VALUES(email), foto=VALUES(foto), ip=VALUES(ip), estado=VALUES(estado)";
+                "ON DUPLICATE KEY UPDATE " +
+                "nombre=VALUES(nombre), " +
+                "email=VALUES(email), " +
+                "foto=VALUES(foto), " +
+                "ip=VALUES(ip), " +
+                "estado=VALUES(estado), " +
+                "contrasena=VALUES(contrasena), " +
+                "fecha_creacion=VALUES(fecha_creacion)"; // ✅ NUEVO: Actualizar timestamp en modificaciones
+
         try (Connection conn = mysql.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, u.getId().toString());
@@ -45,7 +54,16 @@ public class UsuarioRepositorio {
             ps.setString(6, u.getContrasena());
             ps.setString(7, u.getIp());
             ps.setString(8, u.getEstado().name());
-            ps.setTimestamp(9, Timestamp.from(u.getFechaCreacion()));
+
+            // ✅ NUEVO: Si el usuario ya existe (UPDATE), usar timestamp actual
+            // Si es nuevo (INSERT), usar el timestamp que trae
+            Instant timestamp = u.getFechaCreacion();
+            if (timestamp == null) {
+                timestamp = Instant.now();
+                u.setFechaCreacion(timestamp);
+            }
+            ps.setTimestamp(9, Timestamp.from(timestamp));
+
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
             System.err.println("[RepoUsuario] Error guardando: " + e.getMessage());

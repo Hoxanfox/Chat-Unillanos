@@ -19,12 +19,18 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
+// ✅ NUEVO: Imports para deduplicación
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
 
 /**
  * Fase 5: Comparación de Contenido
  *
  * Responsabilidad: Resolver conflictos cuando los IDs coinciden pero los hashes difieren.
  * Compara campo por campo y decide qué versión conservar basándose en timestamps.
+ *
+ * ✅ MEJORADO: Ahora con deduplicación de respuestas para evitar procesar múltiples
+ * respuestas del mismo ID desde diferentes peers.
  */
 public class Fase5ComparacionContenido {
 
@@ -49,6 +55,9 @@ public class Fase5ComparacionContenido {
     private final AtomicInteger comparacionesPendientes = new AtomicInteger(0);
     private volatile String tipoEnComparacion = null;
 
+    // ✅ NUEVO: Deduplicación de respuestas
+    private final Set<String> idsYaProcesados = ConcurrentHashMap.newKeySet();
+
     public Fase5ComparacionContenido(IGestorConexiones gestor, Gson gson) {
         this.gestor = gestor;
         this.gson = gson;
@@ -66,6 +75,9 @@ public class Fase5ComparacionContenido {
         int cantidad = idsRemotos.size();
         comparacionesPendientes.set(cantidad);
         tipoEnComparacion = tipo;
+
+        // ✅ NUEVO: Limpiar IDs procesados de la ronda anterior
+        idsYaProcesados.clear();
 
         LoggerCentral.info(TAG, CYAN + String.format("🔍 Iniciando %d comparaciones de contenido para %s",
             cantidad, tipo) + RESET);
@@ -91,6 +103,15 @@ public class Fase5ComparacionContenido {
         String jsonReq = gson.toJson(req);
 
         gestor.broadcast(jsonReq);
+    }
+
+    /**
+     * ✅ MEJORADO: Verifica si ya se procesó este ID en esta ronda de comparaciones.
+     * Esto evita procesar múltiples respuestas del mismo ID desde diferentes peers.
+     */
+    public boolean yaFueProcesado(String tipo, String id) {
+        String clave = tipo + ":" + id;
+        return !idsYaProcesados.add(clave); // add() retorna false si ya existía
     }
 
     /**
@@ -382,12 +403,20 @@ public class Fase5ComparacionContenido {
     }
 
     /**
-     * Decrementa el contador de comparaciones pendientes.
+     * ✅ MEJORADO: Decrementa el contador de comparaciones pendientes de forma thread-safe.
      *
      * @return true si ya no hay comparaciones pendientes
      */
     public boolean decrementarComparacion() {
         int restantes = comparacionesPendientes.decrementAndGet();
+
+        // ✅ NUEVO: Evitar que el contador baje de cero
+        if (restantes < 0) {
+            LoggerCentral.warn(TAG, AMARILLO + "⚠️ Contador de comparaciones fue negativo, ajustando a 0" + RESET);
+            comparacionesPendientes.set(0);
+            return true;
+        }
+
         LoggerCentral.info(TAG, CYAN + "Comparaciones restantes: " + restantes + RESET);
         return restantes <= 0;
     }
@@ -398,6 +427,8 @@ public class Fase5ComparacionContenido {
     public void resetearComparaciones() {
         comparacionesPendientes.set(0);
         tipoEnComparacion = null;
+        // ✅ NUEVO: También limpiar IDs procesados
+        idsYaProcesados.clear();
     }
 
     public int getComparacionesPendientes() {
