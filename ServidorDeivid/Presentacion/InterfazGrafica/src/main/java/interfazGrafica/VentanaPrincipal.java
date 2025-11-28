@@ -93,8 +93,11 @@ public class VentanaPrincipal extends JFrame implements IObservador {
 
         // Suscribir ventana principal como observador de la sincronización P2P
         if (servicioSincronizacion != null) {
+            LoggerCentral.info(TAG, "Registrando VentanaPrincipal como observador de ServicioSincronizacionDatos...");
             servicioSincronizacion.registrarObservador(this);
             LoggerCentral.info(TAG, "✅ VentanaPrincipal suscrita a eventos de ServicioSincronizacionDatos");
+        } else {
+            LoggerCentral.warn(TAG, "⚠️ servicioSincronizacion es null al inicializar controladores; la ventana no recibirá eventos de sync todavía.");
         }
 
         LoggerCentral.info(TAG, "✓ Todos los controladores inicializados");
@@ -141,9 +144,9 @@ public class VentanaPrincipal extends JFrame implements IObservador {
 
         // 3. Obtener el servicio de sincronización P2P del ServicioP2P (NO crear uno nuevo)
         // Este servicio YA está conectado a la red y tiene el gestor de conexiones configurado
-        servicio.p2p.ServicioP2P servicioP2PInterno = controladorP2P.getServicioP2PInterno();
-        if (servicioP2PInterno != null) {
-            servicioSincronizacion = servicioP2PInterno.getServicioSincronizacion();
+        servicio.p2p.ServicioP2P servicioP2DInterno = controladorP2P.getServicioP2PInterno();
+        if (servicioP2DInterno != null) {
+            servicioSincronizacion = servicioP2DInterno.getServicioSincronizacion();
 
             if (servicioSincronizacion != null) {
                 // 4. Conectar servicio de usuarios con sincronización P2P
@@ -156,7 +159,7 @@ public class VentanaPrincipal extends JFrame implements IObservador {
 
                 // ✅ NUEVO: 6. Configurar el peer local en GestorUsuarios para asignación automática
                 try {
-                    java.util.UUID peerLocalId = servicioP2PInterno.getIdPeerLocal();
+                    java.util.UUID peerLocalId = servicioP2DInterno.getIdPeerLocal();
                     if (peerLocalId != null) {
                         gestorUsuarios.setPeerLocalId(peerLocalId);
                         LoggerCentral.info(TAG, "✅ Peer local configurado en GestorUsuarios: " + peerLocalId);
@@ -434,7 +437,7 @@ public class VentanaPrincipal extends JFrame implements IObservador {
 
     @Override
     public void actualizar(String tipoDeDato, Object datos) {
-        LoggerCentral.debug(TAG, "Evento recibido: " + tipoDeDato);
+        LoggerCentral.debug(TAG, "Evento recibido: " + tipoDeDato + " | datos=" + datos);
 
         switch (tipoDeDato) {
             case "RED_INICIADA":
@@ -452,6 +455,7 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                 break;
 
             case "SINCRONIZACION_P2P_INICIADA":
+                LoggerCentral.info(TAG, "🔔 Evento SINCRONIZACION_P2P_INICIADA recibido en VentanaPrincipal");
                 SwingUtilities.invokeLater(() -> {
                     if (lblEstadoSyncP2P != null) {
                         lblEstadoSyncP2P.setText("Sync P2P: RUNNING");
@@ -464,6 +468,7 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                 break;
 
             case "SINCRONIZACION_P2P_TERMINADA":
+                LoggerCentral.info(TAG, "🔔 Evento SINCRONIZACION_P2P_TERMINADA recibido en VentanaPrincipal (datos=" + datos + ")");
                 SwingUtilities.invokeLater(() -> {
                     boolean huboCambios = datos instanceof Boolean && (Boolean) datos;
                     if (lblEstadoSyncP2P != null) {

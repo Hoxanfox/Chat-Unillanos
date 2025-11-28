@@ -305,7 +305,8 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
             return;
         }
         LoggerCentral.warn(TAG, "Forzando sincronización manual...");
-        coordinador.forzarSincronizacion();
+        // ✅ Usar siempre el flujo con notificación para que la UI reciba SINCRONIZACION_P2P_INICIADA
+        iniciarSincronizacionConNotificacion();
     }
 
     /**
@@ -318,7 +319,8 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
         }
         LoggerCentral.info(TAG, VERDE + "📨 Activando sincronización por nuevo mensaje..." + RESET);
         coordinador.marcarCambios();
-        coordinador.iniciarSincronizacion();
+        // ✅ Usar también el flujo con notificación
+        iniciarSincronizacionConNotificacion();
     }
 
     /**
@@ -338,7 +340,8 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
         if ("PEER_CONECTADO".equals(tipo)) {
             LoggerCentral.info(TAG, VERDE + "=== Peer conectado: " + datos + " ===" + RESET);
             if (coordinador != null) {
-                coordinador.iniciarSincronizacion();
+                // ✅ Usar flujo con notificación para que la UI vea el inicio
+                iniciarSincronizacionConNotificacion();
             }
             return;
         }
@@ -349,7 +352,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
             if (coordinador != null) {
                 coordinador.marcarCambios();
                 coordinador.reconstruirArboles();
-                coordinador.iniciarSincronizacion();
+                iniciarSincronizacionConNotificacion();
             }
             return;
         }
@@ -360,7 +363,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
             if (coordinador != null) {
                 coordinador.marcarCambios();
                 coordinador.reconstruirArboles();
-                coordinador.iniciarSincronizacion();
+                iniciarSincronizacionConNotificacion();
             }
             return;
         }
@@ -371,6 +374,19 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
             if (coordinador != null) {
                 coordinador.marcarCambios();
                 coordinador.reconstruirArboles();
+                // Opcional: si quieres que estos cambios también disparen sync inmediata con indicador:
+                iniciarSincronizacionConNotificacion();
+            }
+            return;
+        }
+
+        // ✅ EVENTO 5: Cambio en invitación de canal
+        if ("CAMBIO_INVITACION_CANAL".equals(tipo)) {
+            LoggerCentral.info(TAG, AZUL + "✉️ Cambio en invitación de canal. Activando sincronización..." + RESET);
+            if (coordinador != null) {
+                coordinador.marcarCambios();
+                coordinador.reconstruirArboles();
+                iniciarSincronizacionConNotificacion();
             }
             return;
         }

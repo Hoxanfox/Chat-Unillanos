@@ -9,6 +9,7 @@ import dominio.clienteServidor.Archivo;
 import dominio.clienteServidor.Canal;
 import dominio.clienteServidor.Mensaje;
 import dominio.clienteServidor.Usuario;
+import dominio.clienteServidor.relaciones.CanalInvitacion;
 import dominio.clienteServidor.relaciones.CanalMiembro;
 import dominio.merkletree.IMerkleEntity;
 import dto.comunicacion.DTORequest;
@@ -50,6 +51,7 @@ public class Fase5ComparacionContenido {
     private final CanalMiembroRepositorio repoMiembro;
     private final MensajeRepositorio repoMensaje;
     private final ArchivoRepositorio repoArchivo;
+    private final CanalInvitacionRepositorio repoInvitacion; // ✅ NUEVO REPOSITORIO
 
     // Control de comparaciones pendientes
     private final AtomicInteger comparacionesPendientes = new AtomicInteger(0);
@@ -66,6 +68,7 @@ public class Fase5ComparacionContenido {
         this.repoMiembro = new CanalMiembroRepositorio();
         this.repoMensaje = new MensajeRepositorio();
         this.repoArchivo = new ArchivoRepositorio();
+        this.repoInvitacion = new CanalInvitacionRepositorio(); // ✅ INICIALIZAR
     }
 
     /**
@@ -149,6 +152,11 @@ public class Fase5ComparacionContenido {
                 case "ARCHIVO":
                     Archivo archivoRemoto = gson.fromJson(dataRemota, Archivo.class);
                     huboCambios = compararArchivo(archivoRemoto);
+                    break;
+
+                case "CANAL_INVITACION": // ✅ NUEVO CASO
+                    CanalInvitacion invitacionRemota = gson.fromJson(dataRemota, CanalInvitacion.class);
+                    huboCambios = compararInvitacion(invitacionRemota);
                     break;
 
                 default:
@@ -384,6 +392,38 @@ public class Fase5ComparacionContenido {
             return false;
         }
     }
+
+    /**
+     * ✅ NUEVO: Compara dos invitaciones de canal.
+     */
+    private boolean compararInvitacion(CanalInvitacion remoto) {
+        CanalInvitacion local = repoInvitacion.obtenerPorId(remoto.getIdUUID());
+
+        if (local == null) {
+            LoggerCentral.warn(TAG, AMARILLO + "Invitación no existe localmente. Guardando..." + RESET);
+            repoInvitacion.guardar(remoto);
+            return true;
+        }
+
+        // La lógica de comparación se basa en el estado.
+        // Si los estados son diferentes, se asume que el cambio es válido.
+        // Podríamos añadir una columna 'fecha_actualizacion' para ser más precisos.
+        if (!local.getEstado().equals(remoto.getEstado())) {
+            LoggerCentral.warn(TAG, AMARILLO + "  Diferencia en ESTADO de invitación" + RESET);
+            LoggerCentral.warn(TAG, "    Local: " + local.getEstado());
+            LoggerCentral.warn(TAG, "    Remoto: " + remoto.getEstado());
+
+            // Aquí, una política simple: el estado remoto siempre gana si es diferente.
+            // Esto permite que una aceptación/rechazo en otro nodo se propague.
+            LoggerCentral.info(TAG, VERDE + "  Estado remoto es diferente. Actualizando invitación local." + RESET);
+            repoInvitacion.actualizarEstado(local.getIdUUID(), remoto.getEstado());
+            return true;
+        }
+
+        LoggerCentral.debug(TAG, "Invitación sin cambios relevantes.");
+        return false;
+    }
+
 
     /**
      * Resuelve conflicto basándose en timestamps.

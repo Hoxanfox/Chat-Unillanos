@@ -8,6 +8,7 @@ import dominio.clienteServidor.relaciones.CanalInvitacion;
 import dominio.clienteServidor.relaciones.CanalMiembro;
 import dto.comunicacion.DTOResponse;
 import gestorClientes.interfaces.IServicioCliente;
+import gestorP2P.servicios.ServicioNotificacionCambios;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
 import logger.LoggerCentral;
 import repositorio.clienteServidor.CanalInvitacionRepositorio;
@@ -42,8 +43,9 @@ public class ServicioResponderInvitacion implements IServicioCliente {
     private final Gson gson;
 
     // Referencias a servicios
-    private ServicioNotificacionCliente servicioNotificacion;
     private ServicioSincronizacionDatos servicioSyncP2P;
+    private ServicioNotificacionCliente servicioNotificacion;
+    private ServicioNotificacionCambios servicioNotificacionCambios; // ✅ NUEVO
 
     public ServicioResponderInvitacion() {
         this.invitacionRepositorio = new CanalInvitacionRepositorio();
@@ -51,6 +53,14 @@ public class ServicioResponderInvitacion implements IServicioCliente {
         this.canalRepositorio = new CanalRepositorio();
         this.gson = new Gson();
         LoggerCentral.info(TAG, AZUL + "Constructor: ServicioResponderInvitacion creado" + RESET);
+    }
+
+    /**
+     * Inyecta el servicio de sincronización P2P.
+     */
+    public void setServicioSincronizacionP2P(ServicioSincronizacionDatos servicioSyncP2P) {
+        this.servicioSyncP2P = servicioSyncP2P;
+        LoggerCentral.info(TAG, VERDE + "Servicio de sincronización P2P configurado" + RESET);
     }
 
     /**
@@ -62,11 +72,11 @@ public class ServicioResponderInvitacion implements IServicioCliente {
     }
 
     /**
-     * Inyecta el servicio de sincronización P2P.
+     * ✅ NUEVO: Inyecta el notificador de cambios central.
      */
-    public void setServicioSincronizacionP2P(ServicioSincronizacionDatos servicioSyncP2P) {
-        this.servicioSyncP2P = servicioSyncP2P;
-        LoggerCentral.info(TAG, VERDE + "Servicio de sincronización P2P configurado" + RESET);
+    public void setServicioNotificacionCambios(ServicioNotificacionCambios servicio) {
+        this.servicioNotificacionCambios = servicio;
+        LoggerCentral.info(TAG, VERDE + "Servicio de notificación de cambios configurado" + RESET);
     }
 
     @Override
@@ -188,16 +198,30 @@ public class ServicioResponderInvitacion implements IServicioCliente {
                     LoggerCentral.error(TAG, ROJO + "❌ CRÍTICO: Servicio P2P es NULL - NO SE SINCRONIZARÁ" + RESET);
                 }
 
-                // 9. Preparar respuesta
+                // 9. Notificar cambios de invitación a través del ServicioNotificacionCambios
+                if (servicioNotificacionCambios != null) {
+                    servicioNotificacionCambios.notificarCambio(
+                            ServicioNotificacionCambios.TipoEvento.CAMBIO_INVITACION_CANAL,
+                            invitacionCanal
+                    );
+                    LoggerCentral.info(TAG, CYAN + "🔄 Notificación de cambio de invitación enviada para sync P2P" + RESET);
+                } else {
+                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ Notificador de cambios es NULL - La sync P2P podría no activarse" + RESET);
+                }
+
+                // 10. Preparar respuesta (definir invitacionId a partir de la entidad)
+                UUID invitacionId = invitacionCanal.getIdUUID();
                 Map<String, Object> respuesta = new HashMap<>();
+                respuesta.put("invitacionId", invitacionId.toString());
+                respuesta.put("accion", accepted ? "ACEPTADA" : "RECHAZADA");
                 respuesta.put("canalId", canalId.toString());
                 respuesta.put("usuarioId", usuarioId.toString());
-                respuesta.put("accion", accepted ? "ACEPTADA" : "RECHAZADA");
-                respuesta.put("invitacionId", invitacionCanal.getId().toString());
 
                 LoggerCentral.info(TAG, VERDE + "✅ Invitación procesada exitosamente" + RESET);
 
-                return new DTOResponse("responderInvitacion", "success",
+                return new DTOResponse(
+                    "responderInvitacion",
+                    "success",
                     accepted ? "Invitación aceptada" : "Invitación rechazada",
                     gson.toJsonTree(respuesta));
 

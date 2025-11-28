@@ -7,9 +7,11 @@ import dominio.clienteServidor.relaciones.CanalInvitacion;
 import dto.canales.DTORechazarInvitacion;
 import dto.comunicacion.DTOResponse;
 import gestorClientes.interfaces.IServicioCliente;
+import gestorP2P.servicios.ServicioNotificacionCambios;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
 import logger.LoggerCentral;
 import repositorio.clienteServidor.CanalInvitacionRepositorio;
+import repositorio.clienteServidor.CanalRepositorio;
 
 import java.util.HashMap;
 import java.util.List;
@@ -35,14 +37,17 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
 
     private IGestorConexionesCliente gestor;
     private final CanalInvitacionRepositorio invitacionRepositorio;
+    private final CanalRepositorio canalRepositorio;
     private final Gson gson;
 
     // Referencias a servicios
     private ServicioNotificacionCliente servicioNotificacion;
-    private ServicioSincronizacionDatos servicioSyncP2P;
+    private ServicioNotificacionCambios servicioNotificacionCambios;
+    private ServicioSincronizacionDatos servicioSyncP2P; // ✅ NUEVO
 
     public ServicioRechazarInvitacion() {
         this.invitacionRepositorio = new CanalInvitacionRepositorio();
+        this.canalRepositorio = new CanalRepositorio();
         this.gson = new Gson();
         LoggerCentral.info(TAG, AZUL + "Constructor: ServicioRechazarInvitacion creado" + RESET);
     }
@@ -55,12 +60,18 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
         LoggerCentral.info(TAG, VERDE + "Servicio de notificaciones CS configurado" + RESET);
     }
 
-    /**
-     * Inyecta el servicio de sincronización P2P.
-     */
+    /** ✅ NUEVO: Inyecta el servicio de sincronización P2P. */
     public void setServicioSincronizacionP2P(ServicioSincronizacionDatos servicioSyncP2P) {
         this.servicioSyncP2P = servicioSyncP2P;
         LoggerCentral.info(TAG, VERDE + "Servicio de sincronización P2P configurado" + RESET);
+    }
+
+    /**
+     * ✅ NUEVO: Inyecta el notificador de cambios central.
+     */
+    public void setServicioNotificacionCambios(ServicioNotificacionCambios servicio) {
+        this.servicioNotificacionCambios = servicio;
+        LoggerCentral.info(TAG, VERDE + "Servicio de notificación de cambios configurado" + RESET);
     }
 
     @Override
@@ -134,7 +145,7 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
 
                 LoggerCentral.info(TAG, VERDE + "✅ Estado de invitación actualizado a RECHAZADA" + RESET);
 
-                // 7. ✅ Notificar sobre el rechazo (opcional - puede servir para métricas)
+                // 7. Notificar sobre el rechazo (opcional)
                 if (servicioNotificacion != null) {
                     Map<String, Object> notificacionData = new HashMap<>();
                     notificacionData.put("invitacionId", invitacionCanal.getId());
@@ -145,7 +156,7 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
                     LoggerCentral.info(TAG, VERDE + "✅ SIGNAL_UPDATE enviado para invitación rechazada" + RESET);
                 }
 
-                // 8. ✅ Activar sincronización P2P
+                // 8. Activar sincronización P2P
                 if (servicioSyncP2P != null) {
                     LoggerCentral.info(TAG, CYAN + "🔄 Activando sincronización P2P..." + RESET);
                     servicioSyncP2P.onBaseDeDatosCambio();
@@ -155,9 +166,21 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
                     LoggerCentral.warn(TAG, AMARILLO + "⚠️ Servicio P2P no disponible, sincronización omitida" + RESET);
                 }
 
-                // 9. Preparar respuesta
+                // 9. Notificar al sistema de cambios para activar P2P
+                if (servicioNotificacionCambios != null) {
+                    servicioNotificacionCambios.notificarCambio(
+                            ServicioNotificacionCambios.TipoEvento.CAMBIO_INVITACION_CANAL,
+                            invitacionCanal
+                    );
+                    LoggerCentral.info(TAG, CYAN + "🔄 Notificación de cambio de invitación enviada para sync P2P" + RESET);
+                } else {
+                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ Notificador de cambios es NULL - La sync P2P podría no activarse" + RESET);
+                }
+
+                // 10. Preparar respuesta (definir invitacionId correctamente)
+                UUID invitacionId = invitacionCanal.getIdUUID();
                 Map<String, Object> respuesta = new HashMap<>();
-                respuesta.put("invitacionId", invitacionCanal.getId());
+                respuesta.put("invitacionId", invitacionId.toString());
                 respuesta.put("canalId", canalId.toString());
                 respuesta.put("estado", "RECHAZADA");
                 respuesta.put("mensaje", "Invitación rechazada exitosamente");
@@ -189,4 +212,3 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
         LoggerCentral.info(TAG, "Servicio de rechazar invitación detenido");
     }
 }
-

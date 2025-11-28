@@ -8,6 +8,7 @@ import dominio.clienteServidor.relaciones.CanalInvitacion;
 import dto.canales.DTOInvitarMiembro;
 import dto.comunicacion.DTOResponse;
 import gestorClientes.interfaces.IServicioCliente;
+import gestorP2P.servicios.ServicioNotificacionCambios;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
 import logger.LoggerCentral;
 import repositorio.clienteServidor.CanalInvitacionRepositorio;
@@ -43,6 +44,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
     private ServicioNotificacionCliente servicioNotificacion;
     private ServicioSincronizacionDatos servicioSyncP2P;
     private ServicioNotificarInvitacionCanal servicioNotificarInvitacion;
+    private ServicioNotificacionCambios servicioNotificacionCambios; // ✅ NUEVO
 
     public ServicioInvitarMiembro() {
         this.invitacionRepositorio = new CanalInvitacionRepositorio();
@@ -73,6 +75,14 @@ public class ServicioInvitarMiembro implements IServicioCliente {
     public void setServicioNotificarInvitacion(ServicioNotificarInvitacionCanal servicioNotificarInvitacion) {
         this.servicioNotificarInvitacion = servicioNotificarInvitacion;
         LoggerCentral.info(TAG, VERDE + "Servicio de notificación de invitaciones configurado" + RESET);
+    }
+
+    /**
+     * ✅ NUEVO: Inyecta el notificador de cambios central.
+     */
+    public void setServicioNotificacionCambios(ServicioNotificacionCambios servicio) {
+        this.servicioNotificacionCambios = servicio;
+        LoggerCentral.info(TAG, VERDE + "Servicio de notificación de cambios configurado" + RESET);
     }
 
     @Override
@@ -179,20 +189,17 @@ public class ServicioInvitarMiembro implements IServicioCliente {
                     LoggerCentral.info(TAG, VERDE + "✅ SIGNAL_UPDATE enviado para nueva invitación" + RESET);
                 }
 
-                // 12. ✅ Activar sincronización P2P
-                if (servicioSyncP2P != null) {
-                    LoggerCentral.info(TAG, CYAN + "🔄 Activando sincronización P2P..." + RESET);
-                    try {
-                        servicioSyncP2P.onBaseDeDatosCambio();
-                        servicioSyncP2P.forzarSincronizacion();
-                        LoggerCentral.info(TAG, VERDE + "✅ Sincronización P2P activada exitosamente" + RESET);
-                    } catch (Exception e) {
-                        LoggerCentral.error(TAG, ROJO + "❌ Error al forzar sincronización P2P: " + e.getMessage() + RESET);
-                    }
+                // 12. ✅ Notificar al sistema de cambios para activar P2P
+                if (servicioNotificacionCambios != null) {
+                    servicioNotificacionCambios.notificarCambio(
+                            ServicioNotificacionCambios.TipoEvento.CAMBIO_INVITACION_CANAL,
+                            invitacion
+                    );
+                    LoggerCentral.info(TAG, CYAN + "🔄 Notificación de cambio de invitación enviada para sync P2P" + RESET);
                 } else {
-                    LoggerCentral.error(TAG, ROJO + "❌ CRÍTICO: Servicio P2P es NULL - NO SE SINCRONIZARÁ" + RESET);
-                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ La invitación se guardó pero NO se sincronizó con otros nodos" + RESET);
+                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ Notificador de cambios es NULL - La sync P2P podría no activarse" + RESET);
                 }
+
 
                 // 13. Preparar respuesta
                 Map<String, Object> respuesta = new HashMap<>();
