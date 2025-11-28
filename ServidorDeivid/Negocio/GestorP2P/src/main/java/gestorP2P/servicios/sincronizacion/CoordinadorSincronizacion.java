@@ -203,10 +203,14 @@ public class CoordinadorSincronizacion {
         if (resultado.hayFaltantes()) {
             LoggerCentral.info(TAG, AMARILLO + String.format("⬇ Solicitadas %d entidades faltantes",
                 resultado.getCantidadFaltantes()) + RESET);
+            // ✅ NUEVO: Marcar que hubo cambios porque hay entidades faltantes
+            huboCambiosEnEsteCiclo = true;
             // Las entidades se solicitaron en fase4, esperamos que lleguen
         } else if (resultado.todosLosIDsCoinciden()) {
             // Tenemos todos los IDs pero los hashes difieren - comparar contenido
             LoggerCentral.info(TAG, CYAN + "▶ FASE 5: Comparando contenido de " + tipo + RESET);
+            // ✅ NUEVO: Marcar que hubo actividad de sincronización (diferencias detectadas)
+            huboCambiosEnEsteCiclo = true;
             fase5.iniciarComparaciones(tipo, idsRemotos);
         } else {
             // No hay diferencias reales, continuar

@@ -380,7 +380,7 @@ public class Fase5ComparacionContenido {
 
     /**
      * Resuelve conflicto basándose en timestamps.
-     * Regla: El que tiene fecha de creación más antigua (creado primero) gana.
+     * ✅ REGLA CORRECTA: La versión MÁS RECIENTE gana (última modificación del usuario).
      */
     private boolean resolverConflictoTemporal(Instant fechaLocal, Instant fechaRemota,
                                               Runnable guardarRemoto, String tipoEntidad) {
@@ -388,15 +388,18 @@ public class Fase5ComparacionContenido {
         LoggerCentral.info(TAG, "    Local:  " + fechaLocal);
         LoggerCentral.info(TAG, "    Remoto: " + fechaRemota);
 
-        if (fechaRemota.isBefore(fechaLocal)) {
-            LoggerCentral.warn(TAG, ROJO + "  ⚠ Versión REMOTA es más antigua. Actualizando..." + RESET);
+        if (fechaRemota.isAfter(fechaLocal)) {
+            // ✅ CORRECTO: Remoto es MÁS RECIENTE → Actualizar
+            LoggerCentral.warn(TAG, ROJO + "  ⚠ Versión REMOTA es más reciente. Actualizando..." + RESET);
             guardarRemoto.run();
             LoggerCentral.info(TAG, VERDE + "  ✓ " + tipoEntidad + " actualizado" + RESET);
             return true;
-        } else if (fechaRemota.isAfter(fechaLocal)) {
-            LoggerCentral.info(TAG, VERDE + "  ✓ Versión LOCAL es más antigua. Manteniendo local." + RESET);
+        } else if (fechaRemota.isBefore(fechaLocal)) {
+            // ✅ CORRECTO: Local es MÁS RECIENTE → Mantener local
+            LoggerCentral.info(TAG, VERDE + "  ✓ Versión LOCAL es más reciente. Manteniendo local." + RESET);
             return false;
         } else {
+            // Misma fecha → Mantener local por defecto
             LoggerCentral.warn(TAG, AMARILLO + "  ⚠ Misma fecha. Manteniendo local por defecto." + RESET);
             return false;
         }
