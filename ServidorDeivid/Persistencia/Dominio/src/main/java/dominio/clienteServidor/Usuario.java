@@ -50,16 +50,15 @@ public class Usuario implements Serializable, IMerkleEntity {
     @Override
     public String getDatosParaHash() {
         // Hash basado en los datos persistentes e importantes de identidad.
-        // Excluimos 'estado', 'ip' y 'fechaCreacion' porque cambian frecuentemente
-        // y no representan cambios reales en el contenido del usuario
+        // 'ip' y 'fechaCreacion' se excluyen porque cambian frecuentemente o son específicos del peer.
+        // 'estado' se incluye para reflejar cambios de disponibilidad del usuario.
         return id.toString() + "|" +
                 (nombre != null ? nombre : "") + "|" +
                 (email != null ? email : "") + "|" +
                 (foto != null ? foto : "") + "|" +
                 (peerPadre != null ? peerPadre.toString() : "") + "|" +
-                (contrasena != null ? contrasena : "")+ "|" +
-                (estado != null ? estado : "");
-                // fechaCreacion excluido para evitar diferencias de sincronización entre peers
+                (contrasena != null ? contrasena : "") + "|" +
+                (estado != null ? estado.toString() : "");
     }
 
     // Getters y setters

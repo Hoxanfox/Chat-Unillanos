@@ -278,10 +278,18 @@ public class ServicioTopologiaRed implements IServicioP2P, ISujeto {
      * Obtiene la topología completa (local + remotas)
      */
     public Map<String, DTOTopologiaRed> obtenerTopologiaCompleta() {
-        Map<String, DTOTopologiaRed> topologiaTotal = new HashMap<>(topologiasRemotas);
+        Map<String, DTOTopologiaRed> topologiaTotal = new HashMap<>();
 
+        // 1. Añadir la topología local primero
         if (topologiaLocal != null) {
             topologiaTotal.put(topologiaLocal.getIdPeer(), topologiaLocal);
+        }
+
+        // 2. Añadir las topologías remotas, evitando duplicados del peer local
+        for (Map.Entry<String, DTOTopologiaRed> entry : topologiasRemotas.entrySet()) {
+            if (topologiaLocal == null || !entry.getKey().equals(topologiaLocal.getIdPeer())) {
+                topologiaTotal.put(entry.getKey(), entry.getValue());
+            }
         }
 
         return topologiaTotal;
