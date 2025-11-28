@@ -18,7 +18,9 @@ public class UsuarioRepositorio {
 
     public List<Usuario> obtenerTodosParaSync() {
         List<Usuario> lista = new ArrayList<>();
-        String sql = "SELECT * FROM usuarios ORDER BY id ASC";
+        // Ordenar por fecha de creación para mantener consistencia entre peers
+        // pero sin incluir la fecha en el hash para evitar diferencias falsas
+        String sql = "SELECT * FROM usuarios ORDER BY fecha_creacion ASC, id ASC";
         try (Connection conn = mysql.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {

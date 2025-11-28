@@ -68,12 +68,9 @@ public class ServicioNotificacionCliente implements IServicioCliente, IObservado
         if ("SINCRONIZACION_TERMINADA".equals(tipoEvento)) {
             boolean huboCambios = datos instanceof Boolean ? (Boolean) datos : false;
 
-            if (huboCambios) {
-                LoggerCentral.info(TAG, VERDE + "🔄 Sincronización terminada CON cambios. Notificando clientes..." + RESET);
-                enviarSenalDeActualizacion("SYNC_UPDATE");
-            } else {
-                LoggerCentral.debug(TAG, "Sincronización terminada SIN cambios. No se notifica.");
-            }
+            // SIEMPRE notificar cuando termine la sincronización
+            LoggerCentral.info(TAG, VERDE + "🔄 Sincronización terminada. Notificando clientes... (cambios: " + huboCambios + ")" + RESET);
+            enviarSenalDeActualizacion("SYNC_UPDATE");
             return;
         }
 

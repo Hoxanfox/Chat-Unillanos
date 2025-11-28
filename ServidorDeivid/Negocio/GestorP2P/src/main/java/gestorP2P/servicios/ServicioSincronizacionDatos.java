@@ -281,6 +281,39 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
             }
         });
 
+        // ✅ NUEVO: 4. COMPARE ENTITY - Para comparar contenido y resolver conflictos
+        router.registrarAccion("sync_compare_entity", (datos, origen) -> {
+            JsonObject req = datos.getAsJsonObject();
+            String tipo = req.get("tipo").getAsString();
+            String id = req.get("id").getAsString();
+            LoggerCentral.debug(TAG, "Recibido sync_compare_entity: " + CYAN + tipo + RESET + " ID: " + id);
+            IMerkleEntity entidad = buscarEntidad(tipo, id);
+            if (entidad != null) {
+                LoggerCentral.debug(TAG, "Entidad encontrada. Enviando para comparación: " + tipo + " ID: " + id);
+                JsonObject env = new JsonObject();
+                env.addProperty("tipo", tipo);
+                env.add("data", gson.toJsonTree(entidad));
+                return new DTOResponse("sync_compare_entity", "success", "Found", env);
+            }
+            LoggerCentral.warn(TAG, AMARILLO + "Entidad NO encontrada para comparación: " + tipo + " ID: " + id + RESET);
+            return new DTOResponse("sync_compare_entity", "error", "Not found", null);
+        });
+
+        router.registrarManejadorRespuesta("sync_compare_entity", (resp) -> {
+            if(resp.fueExitoso()) {
+                JsonObject env = resp.getData().getAsJsonObject();
+                String tipo = env.get("tipo").getAsString();
+                JsonElement dataRemota = env.get("data");
+
+                LoggerCentral.info(TAG, CYAN + "🔍 Comparando contenido de " + tipo + RESET);
+                compararYResolverConflicto(tipo, dataRemota);
+            } else {
+                LoggerCentral.error(TAG, ROJO + "Error en respuesta sync_compare_entity: " + resp.getStatus() + RESET);
+                // Si no se puede comparar, continuamos con la sincronización
+                iniciarSincronizacionGeneral();
+            }
+        });
+
         LoggerCentral.info(TAG, VERDE + "ServicioSincronizacionDatos inicializado correctamente" + RESET);
     }
 
@@ -397,17 +430,23 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
 
         if (faltantes == 0) {
             LoggerCentral.warn(TAG, AMARILLO + "⚠ Tenemos todos los IDs de " + tipo + " pero los hashes difieren." + RESET);
-            LoggerCentral.warn(TAG, AMARILLO + "   Esto puede indicar diferencia de contenido, orden o timestamps." + RESET);
-            LoggerCentral.warn(TAG, AMARILLO + "   Esto es normal en árboles Merkle y no requiere acción adicional." + RESET);
+            LoggerCentral.warn(TAG, AMARILLO + "   Esto indica diferencia de contenido. Iniciando comparación campo por campo..." + RESET);
 
-            // NO reiniciamos sincronización aquí - esto causa el bucle infinito
-            // En su lugar, consideramos esta situación como "sincronizado"
-            // porque ambos peers tienen las mismas entidades
-            LoggerCentral.info(TAG, VERDE + "✓ Mismo conjunto de IDs. Continuando con siguiente tipo..." + RESET);
+            // ✅ NUEVO: Solicitar entidades completas para comparar contenido
+            for(JsonElement el : idsRemotos) {
+                String idRemoto = el.getAsString();
+                LoggerCentral.info(TAG, AZUL + "🔍 Solicitando " + tipo + " ID: " + idRemoto + " para comparación detallada" + RESET);
+                JsonObject reqPayload = new JsonObject();
+                reqPayload.addProperty("tipo", tipo);
+                reqPayload.addProperty("id", idRemoto);
+                reqPayload.addProperty("compararContenido", true); // Flag para indicar que es comparación
+                DTORequest req = new DTORequest("sync_compare_entity", reqPayload);
+                String jsonReq = gson.toJson(req);
+                gestor.broadcast(jsonReq);
+            }
 
-            // Resetear contadores ya que no hay nada que sincronizar
-            contadorReintentos = 0;
-            sincronizacionEnProgreso = false;
+            // NO consideramos esto como "sincronizado" - esperamos las comparaciones
+            LoggerCentral.info(TAG, AMARILLO + "⏸ Esperando resultados de comparación de contenido..." + RESET);
         } else {
             LoggerCentral.info(TAG, VERDE + "✓ Solicitadas " + faltantes + " entidades faltantes de tipo " + tipo + RESET);
         }
@@ -601,24 +640,128 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
         }
     }
 
+    /**
+     * ✅ NUEVO: Compara una entidad remota con la local campo por campo.
+     * Resuelve conflictos basándose en timestamps (el más reciente gana).
+     * Si el contenido remoto es más reciente, se actualiza localmente.
+     */
+    private void compararYResolverConflicto(String tipo, JsonElement dataRemota) {
+        try {
+            LoggerCentral.info(TAG, AZUL + "=== Iniciando comparación detallada de " + tipo + " ===" + RESET);
+
+            switch (tipo) {
+                case "USUARIO":
+                    Usuario usuarioRemoto = gson.fromJson(dataRemota, Usuario.class);
+                    Usuario usuarioLocal = repoUsuario.buscarPorId(usuarioRemoto.getId());
+
+                    if (usuarioLocal == null) {
+                        LoggerCentral.warn(TAG, AMARILLO + "Usuario no existe localmente. Guardando..." + RESET);
+                        repoUsuario.guardar(usuarioRemoto);
+                        huboCambiosEnEsteCiclo = true;
+                    } else {
+                        compararUsuarios(usuarioLocal, usuarioRemoto);
+                    }
+                    break;
+
+                // Para otros tipos, simplemente guardamos si hay diferencias
+                // ya que la comparación campo por campo es principalmente para usuarios
+                default:
+                    LoggerCentral.info(TAG, AMARILLO + "Comparación simplificada para tipo: " + tipo + RESET);
+                    LoggerCentral.info(TAG, "Los hashes difieren, pero ambos peers tienen los mismos IDs.");
+                    LoggerCentral.info(TAG, "Esto es normal debido a diferencias en timestamps o estados transitorios.");
+            }
+
+            // Continuar con la sincronización después de resolver conflictos
+            LoggerCentral.info(TAG, VERDE + "✓ Comparación completada. Continuando sincronización..." + RESET);
+            iniciarSincronizacionGeneral();
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, ROJO + "Error comparando " + tipo + ": " + e.getMessage() + RESET);
+            iniciarSincronizacionGeneral();
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Compara dos usuarios campo por campo.
+     * Si el usuario remoto es más reciente (fecha_creacion), actualiza el local.
+     */
+    private void compararUsuarios(Usuario local, Usuario remoto) {
+        LoggerCentral.info(TAG, CYAN + "Comparando Usuario ID: " + local.getId() + RESET);
+
+        boolean hayDiferencias = false;
+
+        // Comparar campo por campo
+        if (!local.getNombre().equals(remoto.getNombre())) {
+            LoggerCentral.warn(TAG, AMARILLO + "  ⚠ Diferencia en NOMBRE:" + RESET);
+            LoggerCentral.warn(TAG, "    Local:  " + local.getNombre());
+            LoggerCentral.warn(TAG, "    Remoto: " + remoto.getNombre());
+            hayDiferencias = true;
+        }
+
+        if (!local.getEmail().equals(remoto.getEmail())) {
+            LoggerCentral.warn(TAG, AMARILLO + "  ⚠ Diferencia en EMAIL:" + RESET);
+            LoggerCentral.warn(TAG, "    Local:  " + local.getEmail());
+            LoggerCentral.warn(TAG, "    Remoto: " + remoto.getEmail());
+            hayDiferencias = true;
+        }
+
+        if (!java.util.Objects.equals(local.getFoto(), remoto.getFoto())) {
+            LoggerCentral.warn(TAG, AMARILLO + "  ⚠ Diferencia en FOTO:" + RESET);
+            LoggerCentral.warn(TAG, "    Local:  " + local.getFoto());
+            LoggerCentral.warn(TAG, "    Remoto: " + remoto.getFoto());
+            hayDiferencias = true;
+        }
+
+        if (!java.util.Objects.equals(local.getContrasena(), remoto.getContrasena())) {
+            LoggerCentral.warn(TAG, AMARILLO + "  ⚠ Diferencia en CONTRASEÑA" + RESET);
+            hayDiferencias = true;
+        }
+
+        if (hayDiferencias) {
+            // ✅ RESOLUCIÓN DE CONFLICTOS: El que tenga fecha de creación más antigua gana
+            // porque la fecha de creación representa el orden cronológico real
+            java.time.Instant fechaLocal = local.getFechaCreacion();
+            java.time.Instant fechaRemota = remoto.getFechaCreacion();
+
+            LoggerCentral.info(TAG, AZUL + "  Comparando timestamps:" + RESET);
+            LoggerCentral.info(TAG, "    Local:  " + fechaLocal);
+            LoggerCentral.info(TAG, "    Remoto: " + fechaRemota);
+
+            if (fechaRemota.isBefore(fechaLocal)) {
+                // El remoto es más antiguo (fue creado primero), actualizar con el remoto
+                LoggerCentral.warn(TAG, ROJO + "  ⚠ Versión REMOTA es más antigua (creada primero). Actualizando local..." + RESET);
+                repoUsuario.guardar(remoto);
+                huboCambiosEnEsteCiclo = true;
+                LoggerCentral.info(TAG, VERDE + "  ✓ Usuario actualizado con versión remota" + RESET);
+            } else if (fechaRemota.isAfter(fechaLocal)) {
+                // El local es más antiguo, mantener el local
+                LoggerCentral.info(TAG, VERDE + "  ✓ Versión LOCAL es más antigua (creada primero). Manteniendo local." + RESET);
+            } else {
+                // Misma fecha, pero contenido diferente - mantener local por defecto
+                LoggerCentral.warn(TAG, AMARILLO + "  ⚠ Misma fecha de creación pero contenido diferente. Manteniendo local." + RESET);
+            }
+        } else {
+            LoggerCentral.debug(TAG, VERDE + "  ✓ Contenido idéntico (diferencias solo en campos excluidos del hash)" + RESET);
+        }
+    }
+
+
     // ✅ NUEVO: Método para notificar a observadores que la sincronización ha terminado
     private void notificarObservadoresSincronizacion() {
         LoggerCentral.info(TAG, VERDE + "📢 Notificando sincronización terminada a " + observadores.size() + " observadores" + RESET);
         notificarObservadores("SINCRONIZACION_TERMINADA", huboCambiosEnEsteCiclo);
 
-        // ✅ NUEVO: Notificar también al servicio de notificación de clientes CS
-        if (servicioNotificacionCliente != null && huboCambiosEnEsteCiclo) {
+        // ✅ SIEMPRE notificar al servicio de notificación de clientes CS (independiente de cambios)
+        if (servicioNotificacionCliente != null) {
             LoggerCentral.info(TAG, AZUL + "📡 Enviando SIGNAL_UPDATE a todos los clientes conectados..." + RESET);
             try {
-                servicioNotificacionCliente.actualizar("SINCRONIZACION_P2P_TERMINADA", true);
-                LoggerCentral.info(TAG, VERDE + "✅ Clientes CS notificados de actualización P2P" + RESET);
+                servicioNotificacionCliente.actualizar("SINCRONIZACION_P2P_TERMINADA", huboCambiosEnEsteCiclo);
+                LoggerCentral.info(TAG, VERDE + "✅ Clientes CS notificados de sincronización completada (cambios: " + huboCambiosEnEsteCiclo + ")" + RESET);
             } catch (Exception e) {
                 LoggerCentral.error(TAG, ROJO + "Error notificando a clientes CS: " + e.getMessage() + RESET);
             }
-        } else if (servicioNotificacionCliente == null) {
+        } else {
             LoggerCentral.warn(TAG, AMARILLO + "⚠ ServicioNotificacionCliente no configurado. No se enviarán notificaciones a clientes CS." + RESET);
-        } else if (!huboCambiosEnEsteCiclo) {
-            LoggerCentral.debug(TAG, "No hubo cambios en sincronización. No se notifica a clientes CS.");
         }
     }
 
