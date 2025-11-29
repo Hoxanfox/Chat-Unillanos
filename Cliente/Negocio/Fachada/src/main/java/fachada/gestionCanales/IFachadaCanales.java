@@ -40,4 +40,10 @@ public interface IFachadaCanales {
     CompletableFuture<List<dto.canales.DTOCanalCreado>> solicitarInvitacionesPendientes();
     CompletableFuture<Void> responderInvitacion(String canalId, boolean aceptar);
     void registrarObservadorInvitaciones(IObservador observador);
+
+    // 🆕 === CANAL ACTIVO ===
+    void setCanalActivo(String canalId);
+
+    // === REPRODUCCIÓN DE AUDIO ===
+    CompletableFuture<Void> reproducirAudio(String fileId);
 }

@@ -35,6 +35,15 @@ public class RepositorioNotificacionImpl implements IRepositorioNotificacion {
 
     @Override
     public void guardar(DTONotificacion notificacion) {
+        // ✅ Verificar si ya existe una notificación con el mismo ID
+        boolean yaExiste = notificacionesCache.stream()
+                .anyMatch(n -> n.getId().equals(notificacion.getId()));
+
+        if (yaExiste) {
+            System.err.println("⚠️ [RepositorioNotificacion]: Notificación duplicada detectada y OMITIDA - ID: " + notificacion.getId());
+            return;
+        }
+
         // Agregar al inicio para que las más recientes aparezcan primero
         notificacionesCache.add(0, notificacion);
         System.err.println("💾💾💾 [RepositorioNotificacion]: Notificación guardada en caché: " + notificacion.getId());

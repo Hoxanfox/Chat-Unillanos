@@ -130,7 +130,14 @@ public class ServicioCanalesImpl implements IServicioCanales, IObservador {
     @Override
     public CompletableFuture<Void> reproducirAudio(String fileId) {
         System.out.println("🎵 [ServicioCanales]: Reproduciendo audio - FileId: " + fileId);
-        return FachadaGeneralImpl.getInstancia().getFachadaArchivos().reproducirAudio(fileId);
+        return fachadaCanales.reproducirAudio(fileId);
+    }
+
+    // 🆕 Método para establecer el canal activo
+    @Override
+    public void setCanalActivo(String canalId) {
+        System.out.println("📍 [ServicioCanales]: Estableciendo canal activo: " + canalId);
+        fachadaCanales.setCanalActivo(canalId);
     }
 
     @Override

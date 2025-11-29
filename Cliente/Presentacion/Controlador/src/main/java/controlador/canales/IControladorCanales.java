@@ -26,4 +26,7 @@ public interface IControladorCanales {
 
     // Método para reproducir audio
     CompletableFuture<Void> reproducirAudio(String fileId);
+
+    // 🆕 Método para informar al gestor del canal activo
+    void setCanalActivo(String canalId);
 }

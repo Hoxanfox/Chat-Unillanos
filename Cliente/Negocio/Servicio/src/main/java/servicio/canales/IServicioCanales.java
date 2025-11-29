@@ -41,4 +41,7 @@ public interface IServicioCanales {
 
     // === AUDIO ===
     CompletableFuture<Void> reproducirAudio(String fileId);
+
+    // 🆕 === CANAL ACTIVO ===
+    void setCanalActivo(String canalId);
 }

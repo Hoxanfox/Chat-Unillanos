@@ -38,7 +38,7 @@ db.name=chat_unillanos
 
 # Credenciales de tu base de datos local
 db.user=root
-db.pass=123456
+db.pass=rootpassword
 
 # Rendimiento: Máximo de conexiones simultáneas a la BD
 db.max.pool=10

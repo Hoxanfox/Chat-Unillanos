@@ -1,6 +1,7 @@
 package fachada.gestionCanales;
 
 import dominio.Canal;
+import fachada.FachadaGeneralImpl;
 import gestionCanales.invitarMiembro.IInvitadorMiembro;
 import gestionCanales.invitarMiembro.InvitadorMiembro;
 import gestionCanales.invitaciones.IGestorInvitaciones;
@@ -49,7 +50,8 @@ public class FachadaCanalesImpl implements IFachadaCanales {
 
         this.creadorCanal = new CreadorCanal(repositorioCanal);
         this.listadorCanales = new ListadorCanales(repositorioCanal);
-        this.gestorMensajes = new GestorMensajesCanalImpl(repositorioMensajes, gestionArchivos);
+        // 🆕 Pasar el repositorio de canales al gestor de mensajes
+        this.gestorMensajes = new GestorMensajesCanalImpl(repositorioMensajes, gestionArchivos, repositorioCanal);
         this.invitadorMiembro = new InvitadorMiembro(repositorioCanal);
         this.listadorMiembros = new ListadorMiembros(repositorioCanal);
         this.gestorInvitaciones = new GestorInvitacionesImpl(repositorioCanal);
@@ -167,5 +169,18 @@ public class FachadaCanalesImpl implements IFachadaCanales {
      */
     public IGestorInvitaciones getGestorInvitaciones() {
         return gestorInvitaciones;
+    }
+
+    @Override
+    public CompletableFuture<Void> reproducirAudio(String fileId) {
+        System.out.println("🎵 [FachadaCanales]: Reproduciendo audio - FileId: " + fileId);
+        return FachadaGeneralImpl.getInstancia().getFachadaArchivos().reproducirAudio(fileId);
+    }
+
+    // 🆕 Método para establecer el canal activo
+    @Override
+    public void setCanalActivo(String canalId) {
+        System.out.println("📍 [FachadaCanales]: Estableciendo canal activo en el gestor de mensajes");
+        gestorMensajes.setCanalActivo(canalId);
     }
 }
