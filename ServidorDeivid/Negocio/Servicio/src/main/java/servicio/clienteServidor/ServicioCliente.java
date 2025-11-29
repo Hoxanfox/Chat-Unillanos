@@ -340,6 +340,17 @@ public class ServicioCliente implements IServicioClienteControl {
         return gestionRed != null ? gestionRed.getSesionesActivas() : List.of();
     }
 
+    @Override
+    public void desconectarCliente(String idSesion) {
+        LoggerCentral.info(TAG, "Desconectando cliente con sesión: " + idSesion);
+        if (fachada != null && fachada.getGestorClientes() != null) {
+            fachada.getGestorClientes().desconectar(idSesion);
+            LoggerCentral.info(TAG, "✓ Cliente desconectado: " + idSesion);
+        } else {
+            LoggerCentral.error(TAG, "❌ No se pudo desconectar el cliente: Fachada no disponible");
+        }
+    }
+
     // --- PATRÓN OBSERVER (delegado al ServicioGestionRed y ServicioAutenticacion) ---
 
     public void registrarObservador(IObservador observador) {

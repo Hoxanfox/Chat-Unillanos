@@ -1,39 +1,44 @@
-# configuracion.txt
-# Formato: clave=valor
-# Comentarios con '#'.
-# Valores relevantes para los pools de conexión
+# ==========================================
+# CONFIGURACIÓN DEL NODO P2P (SERVER)
+# ==========================================
 
-# Host y puerto por defecto para clientes
-cliente.host=192.168.1.9
-cliente.puerto=8000
-
-# Host y puerto por defecto para peers
+# IP pública o local de este nodo (donde otros peers lo buscarán)
+# Si es local usa 127.0.0.1, si es en red usa tu IP LAN (ej. 192.168.1.X)
 peer.host=192.168.1.9
+
+# Puerto donde este nodo escucha conexiones de otros PEERS (comunicación servidor-servidor)
 peer.puerto=9000
 
-# Peer inicial (opcional) - ejemplo
-#peer.inicial.host=192.168.1.9
-#peer.inicial.puerto=9000
+# ==========================================
+# CONFIGURACIÓN DEL PEER INICIAL (BOOTSTRAP)
+# ==========================================
+# Si este es el PRIMER nodo de la red (Nodo Génesis), deja estas líneas COMENTADAS o vacías.
+# Si te quieres conectar a una red existente, pon aquí la IP y puerto de un nodo ya conectado.
 
-# Transporte a usar por defecto (FabricaTransporte.crearTransporte)
-# Valores típicos: TCP, UDP, etc. (depende de las implementaciones disponibles)
-transporte.tipo=TCP
+peer.inicial.host=192.168.1.14
+peer.inicial.puerto=9000
 
-# Configuración del pool de clientes
-# pool.clientes.min: número mínimo de sesiones a mantener en el pool de clientes
-# pool.clientes.max: número máximo de sesiones permitidas en el pool de clientes
-pool.clientes.min=1
-pool.clientes.max=10
+# ==========================================
+# CONFIGURACIÓN PARA CLIENTES (FRONTEND)
+# ==========================================
 
-# Configuración del pool de peers
-# pool.peers.min: número mínimo de sesiones a mantener en el pool de peers
-# pool.peers.max: número máximo de sesiones permitidas en el pool de peers
-pool.peers.min=0
-pool.peers.max=10
+# IP donde escuchará peticiones de los clientes (App de Escritorio/Móvil)
+cliente.host=192.168.1.9
 
-# Notas:
-# - `GestorConexion` lee estas claves a través de `Configuracion.getInstance()` y crea
-#   dos pools (Clientes y Peers) con los valores min/max configurados.
-# - `transporte.tipo` decide el tipo de transporte que usa la fábrica `FabricaTransporte`.
-# - Cambiar estos valores y reiniciar la aplicación afectará el comportamiento del pool.
+# Puerto para los clientes (socket del chat usuario-servidor)
+cliente.puerto=8000
 
+# ==========================================
+# BASE DE DATOS (MySQL)
+# ==========================================
+
+db.host=localhost
+db.port=3306
+db.name=chat_unillanos
+
+# Credenciales de tu base de datos local
+db.user=root
+db.pass=123456
+
+# Rendimiento: Máximo de conexiones simultáneas a la BD
+db.max.pool=10

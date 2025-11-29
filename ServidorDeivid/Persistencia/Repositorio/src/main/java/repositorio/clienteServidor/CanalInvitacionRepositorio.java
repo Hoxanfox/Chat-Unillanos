@@ -223,11 +223,12 @@ public class CanalInvitacionRepositorio {
      * Actualiza el estado de una invitación.
      */
     public boolean actualizarEstado(UUID invitacionId, String nuevoEstado) {
-        String sql = "UPDATE canal_invitaciones SET estado = ? WHERE id = ?";
+        String sql = "UPDATE canal_invitaciones SET estado = ?, fecha_creacion = ? WHERE id = ?";
         try (Connection conn = mysql.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, nuevoEstado);
-            ps.setString(2, invitacionId.toString());
+            ps.setTimestamp(2, Timestamp.from(Instant.now()));
+            ps.setString(3, invitacionId.toString());
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
             System.err.println("[CanalInvitacionRepo] Error al actualizar estado: " + e.getMessage());
@@ -235,4 +236,5 @@ public class CanalInvitacionRepositorio {
             return false;
         }
     }
+
 }

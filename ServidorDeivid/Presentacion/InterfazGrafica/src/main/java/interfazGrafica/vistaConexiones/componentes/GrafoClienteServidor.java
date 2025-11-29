@@ -139,6 +139,100 @@ public class GrafoClienteServidor extends JPanel implements IObservador {
         this.setBorder(BorderFactory.createLineBorder(new Color(189, 195, 199), 1));
         // Tamaño más grande para mejor visualización con zoom
         this.setPreferredSize(new Dimension(800, 600));
+
+        // ✅ NUEVO: Agregar listener para clics en usuarios (desconectar)
+        agregarListenerClics();
+    }
+
+    /**
+     * ✅ NUEVO: Agregar listener de clics para desconectar clientes
+     */
+    private void agregarListenerClics() {
+        addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (controlador == null) return;
+
+                // Detectar clic derecho o doble clic en un usuario
+                boolean clicDerecho = SwingUtilities.isRightMouseButton(evt);
+                boolean dobleClick = evt.getClickCount() == 2;
+
+                if (clicDerecho || dobleClick) {
+                    int mouseX = evt.getX();
+                    int mouseY = evt.getY();
+
+                    // Buscar usuario bajo el cursor
+                    for (NodoUsuario usuario : usuarios) {
+                        int radio = 15;
+                        double distancia = Math.sqrt(Math.pow(mouseX - usuario.x, 2) + Math.pow(mouseY - usuario.y, 2));
+
+                        if (distancia <= radio) {
+                            // Usuario encontrado - confirmar desconexión
+                            confirmarYDesconectarCliente(usuario);
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        // ✅ NUEVO: Tooltip para indicar cómo desconectar
+        setToolTipText("Clic derecho o doble clic en un usuario para desconectarlo");
+    }
+
+    /**
+     * ✅ NUEVO: Confirmar y desconectar un cliente
+     */
+    private void confirmarYDesconectarCliente(NodoUsuario usuario) {
+        String nombreMostrar = usuario.nombre != null ? usuario.nombre : "Cliente anónimo";
+        String estado = usuario.esOnline ? "autenticado" : "conectado";
+
+        int opcion = JOptionPane.showConfirmDialog(
+            this,
+            "¿Desconectar a " + nombreMostrar + " (" + estado + ")?",
+            "Confirmar Desconexión",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+
+        if (opcion == JOptionPane.YES_OPTION) {
+            // Buscar la sesión real del usuario
+            List<dto.cliente.DTOSesionCliente> sesiones = controlador.getSesionesActivas();
+            for (dto.cliente.DTOSesionCliente sesion : sesiones) {
+                String idUsuario = sesion.getIdUsuario();
+                String idSesion = sesion.getIdSesion();
+
+                // Comparar por idUsuario si está autenticado, o por idSesion si no
+                boolean coincide = false;
+                if (usuario.esOnline && idUsuario != null) {
+                    coincide = usuario.nombre.equals(idUsuario);
+                } else {
+                    coincide = usuario.nombre.equals(idSesion);
+                }
+
+                if (coincide) {
+                    boolean exito = controlador.desconectarCliente(idSesion);
+                    if (exito) {
+                        LoggerCentral.info(TAG, "✓ Cliente desconectado exitosamente: " + nombreMostrar);
+                        JOptionPane.showMessageDialog(
+                            this,
+                            "Cliente desconectado exitosamente",
+                            "Desconexión Exitosa",
+                            JOptionPane.INFORMATION_MESSAGE
+                        );
+                    } else {
+                        LoggerCentral.error(TAG, "✗ Error al desconectar cliente: " + nombreMostrar);
+                        JOptionPane.showMessageDialog(
+                            this,
+                            "Error al desconectar el cliente",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE
+                        );
+                    }
+                    break;
+                }
+            }
+        }
     }
 
     public void agregarPeer(String id, String ip) {
