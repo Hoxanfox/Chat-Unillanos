@@ -74,18 +74,50 @@ public class FeatureNotificaciones extends VBox implements IObservador {
 
     @Override
     public void actualizar(String tipoDeDato, Object datos) {
-        System.out.println("🔔 [FeatureNotificaciones]: Notificación recibida - Tipo: " + tipoDeDato);
+        System.err.println("🔔🔔🔔 [FeatureNotificaciones]: ========== ACTUALIZAR INVOCADO ==========");
+        System.err.println("🔔 [FeatureNotificaciones]: Notificación recibida - Tipo: " + tipoDeDato);
+        System.err.println("🔔 [FeatureNotificaciones]: Tipo de datos: " + (datos != null ? datos.getClass().getName() : "null"));
 
         Platform.runLater(() -> {
-            if ("ACTUALIZAR_NOTIFICACIONES".equals(tipoDeDato) && datos instanceof List) {
-                @SuppressWarnings("unchecked")
-                List<DTONotificacion> notificaciones = (List<DTONotificacion>) datos;
-                System.out.println("✅ [FeatureNotificaciones]: Actualizando lista con " + notificaciones.size() + " notificaciones");
-                cargarNotificaciones(notificaciones);
+            if ("ACTUALIZAR_NOTIFICACIONES".equals(tipoDeDato)) {
+                // Simplemente solicitar los datos actualizados al controlador
+                System.err.println("🔄🔄🔄 [FeatureNotificaciones]: Solicitando actualización de notificaciones al controlador...");
+                controlador.solicitarActualizacionNotificaciones();
+
+            } else if ("LISTA_NOTIFICACIONES".equals(tipoDeDato) && datos instanceof List) {
+                // Este es el evento que trae los datos reales
+                List<?> listaRaw = (List<?>) datos;
+
+                System.err.println("📋📋📋 [FeatureNotificaciones]: Recibido evento LISTA_NOTIFICACIONES con " + listaRaw.size() + " elementos");
+
+                if (listaRaw.isEmpty()) {
+                    System.err.println("⚠️⚠️⚠️ [FeatureNotificaciones]: Lista vacía recibida");
+                    tarjetasContainer.getChildren().clear();
+                    Label sinNotificaciones = new Label("No hay invitaciones a canales");
+                    sinNotificaciones.setStyle("-fx-text-fill: gray; -fx-font-size: 14px;");
+                    tarjetasContainer.getChildren().add(sinNotificaciones);
+                    return;
+                }
+
+                // Validar que sean DTONotificacion
+                Object primerElemento = listaRaw.get(0);
+                System.err.println("🔍🔍🔍 [FeatureNotificaciones]: Tipo de objeto recibido: " + primerElemento.getClass().getSimpleName());
+
+                if (primerElemento instanceof DTONotificacion) {
+                    @SuppressWarnings("unchecked")
+                    List<DTONotificacion> listaNotificaciones = (List<DTONotificacion>) listaRaw;
+                    System.err.println("✅✅✅ [FeatureNotificaciones]: Actualizando UI con " + listaNotificaciones.size() + " notificaciones");
+                    cargarNotificaciones(listaNotificaciones);
+                } else {
+                    System.err.println("❌❌❌ [FeatureNotificaciones]: Tipo de dato no soportado: " + primerElemento.getClass().getName());
+                }
+
             } else if ("ERROR_NOTIFICACIONES".equals(tipoDeDato)) {
-                mostrarError(datos.toString());
+                System.err.println("❌ [FeatureNotificaciones]: Error recibido");
+                mostrarError(datos != null ? datos.toString() : "Error desconocido");
             }
         });
+        System.err.println("🔔🔔🔔 [FeatureNotificaciones]: ========== ACTUALIZAR FINALIZADO ==========");
     }
 
     private void cargarNotificaciones(List<DTONotificacion> notificaciones) {

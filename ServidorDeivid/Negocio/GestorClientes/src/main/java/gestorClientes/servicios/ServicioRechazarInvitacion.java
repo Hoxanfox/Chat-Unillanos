@@ -29,11 +29,7 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
 
     // Colores ANSI para logs
     private static final String RESET = "\u001B[0m";
-    private static final String VERDE = "\u001B[32m";
-    private static final String AMARILLO = "\u001B[33m";
-    private static final String CYAN = "\u001B[36m";
     private static final String ROJO = "\u001B[31m";
-    private static final String AZUL = "\u001B[34m";
 
     private IGestorConexionesCliente gestor;
     private final CanalInvitacionRepositorio invitacionRepositorio;
@@ -49,7 +45,7 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
         this.invitacionRepositorio = new CanalInvitacionRepositorio();
         this.canalRepositorio = new CanalRepositorio();
         this.gson = new Gson();
-        LoggerCentral.info(TAG, AZUL + "Constructor: ServicioRechazarInvitacion creado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Constructor: ServicioRechazarInvitacion creado" + RESET);
     }
 
     /**
@@ -57,13 +53,13 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
      */
     public void setServicioNotificacion(ServicioNotificacionCliente servicioNotificacion) {
         this.servicioNotificacion = servicioNotificacion;
-        LoggerCentral.info(TAG, VERDE + "Servicio de notificaciones CS configurado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de notificaciones CS configurado" + RESET);
     }
 
     /** ✅ NUEVO: Inyecta el servicio de sincronización P2P. */
     public void setServicioSincronizacionP2P(ServicioSincronizacionDatos servicioSyncP2P) {
         this.servicioSyncP2P = servicioSyncP2P;
-        LoggerCentral.info(TAG, VERDE + "Servicio de sincronización P2P configurado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de sincronización P2P configurado" + RESET);
     }
 
     /**
@@ -71,7 +67,7 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
      */
     public void setServicioNotificacionCambios(ServicioNotificacionCambios servicio) {
         this.servicioNotificacionCambios = servicio;
-        LoggerCentral.info(TAG, VERDE + "Servicio de notificación de cambios configurado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de notificación de cambios configurado" + RESET);
     }
 
     @Override
@@ -82,17 +78,17 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
     @Override
     public void inicializar(IGestorConexionesCliente gestor, IRouterMensajesCliente router) {
         this.gestor = gestor;
-        LoggerCentral.info(TAG, AZUL + "Inicializando ServicioRechazarInvitacion..." + RESET);
+        LoggerCentral.info(TAG, ROJO + "Inicializando ServicioRechazarInvitacion..." + RESET);
 
         // ==================== RUTA: Rechazar Invitación ====================
         router.registrarAccion("rechazarInvitacion", (datos, idSesion) -> {
             try {
-                LoggerCentral.info(TAG, CYAN + "📥 Recibida petición de rechazar invitación" + RESET);
+                LoggerCentral.info(TAG, ROJO + "📥 Recibida petición de rechazar invitación" + RESET);
 
                 // 1. Validar autenticación
                 String usuarioIdSesion = gestor.obtenerUsuarioDeSesion(idSesion);
                 if (usuarioIdSesion == null) {
-                    LoggerCentral.warn(TAG, AMARILLO + "Usuario no autenticado" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "Usuario no autenticado" + RESET);
                     return new DTOResponse("rechazarInvitacion", "error", "Usuario no autenticado", null);
                 }
 
@@ -101,12 +97,12 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
 
                 // 3. Validar datos
                 if (dto.getCanalId() == null || dto.getCanalId().trim().isEmpty()) {
-                    LoggerCentral.warn(TAG, AMARILLO + "ID de canal inválido" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "ID de canal inválido" + RESET);
                     return new DTOResponse("rechazarInvitacion", "error", "ID de canal requerido", null);
                 }
 
                 if (dto.getUsuarioId() == null || dto.getUsuarioId().trim().isEmpty()) {
-                    LoggerCentral.warn(TAG, AMARILLO + "ID de usuario inválido" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "ID de usuario inválido" + RESET);
                     return new DTOResponse("rechazarInvitacion", "error", "ID de usuario requerido", null);
                 }
 
@@ -115,13 +111,13 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
 
                 // 4. Verificar que el usuario del DTO coincide con el de la sesión
                 if (!usuarioId.toString().equals(usuarioIdSesion)) {
-                    LoggerCentral.warn(TAG, AMARILLO + "Usuario no coincide con la sesión" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "Usuario no coincide con la sesión" + RESET);
                     return new DTOResponse("rechazarInvitacion", "error", "No autorizado", null);
                 }
 
-                LoggerCentral.info(TAG, CYAN + "📤 Procesando rechazo de invitación" + RESET);
-                LoggerCentral.info(TAG, "   → Canal: " + canalId);
-                LoggerCentral.info(TAG, "   → Usuario: " + usuarioId);
+                LoggerCentral.info(TAG, ROJO + "📤 Procesando rechazo de invitación" + RESET);
+                LoggerCentral.info(TAG, ROJO + "   → Canal: " + canalId + RESET);
+                LoggerCentral.info(TAG, ROJO + "   → Usuario: " + usuarioId + RESET);
 
                 // 5. Verificar que existe una invitación pendiente
                 List<CanalInvitacion> invitaciones = invitacionRepositorio.obtenerInvitacionesPendientesPorUsuario(usuarioId);
@@ -131,7 +127,7 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
                         .orElse(null);
 
                 if (invitacionCanal == null) {
-                    LoggerCentral.warn(TAG, AMARILLO + "No existe invitación pendiente para este canal" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "No existe invitación pendiente para este canal" + RESET);
                     return new DTOResponse("rechazarInvitacion", "error", "No existe invitación pendiente", null);
                 }
 
@@ -143,7 +139,7 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
                     return new DTOResponse("rechazarInvitacion", "error", "Error al rechazar invitación", null);
                 }
 
-                LoggerCentral.info(TAG, VERDE + "✅ Estado de invitación actualizado a RECHAZADA" + RESET);
+                LoggerCentral.info(TAG, ROJO + "✅ Estado de invitación actualizado a RECHAZADA" + RESET);
 
                 // 7. Notificar sobre el rechazo (opcional)
                 if (servicioNotificacion != null) {
@@ -153,17 +149,17 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
                     notificacionData.put("usuarioId", usuarioId.toString());
 
                     servicioNotificacion.actualizar("INVITACION_RECHAZADA", notificacionData);
-                    LoggerCentral.info(TAG, VERDE + "✅ SIGNAL_UPDATE enviado para invitación rechazada" + RESET);
+                    LoggerCentral.info(TAG, ROJO + "✅ SIGNAL_UPDATE enviado para invitación rechazada" + RESET);
                 }
 
                 // 8. Activar sincronización P2P
                 if (servicioSyncP2P != null) {
-                    LoggerCentral.info(TAG, CYAN + "🔄 Activando sincronización P2P..." + RESET);
+                    LoggerCentral.info(TAG, ROJO + "🔄 Activando sincronización P2P..." + RESET);
                     servicioSyncP2P.onBaseDeDatosCambio();
                     servicioSyncP2P.forzarSincronizacion();
-                    LoggerCentral.info(TAG, VERDE + "✅ Sincronización P2P activada" + RESET);
+                    LoggerCentral.info(TAG, ROJO + "✅ Sincronización P2P activada" + RESET);
                 } else {
-                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ Servicio P2P no disponible, sincronización omitida" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "⚠️ Servicio P2P no disponible, sincronización omitida" + RESET);
                 }
 
                 // 9. Notificar al sistema de cambios para activar P2P
@@ -172,9 +168,9 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
                             ServicioNotificacionCambios.TipoEvento.CAMBIO_INVITACION_CANAL,
                             invitacionCanal
                     );
-                    LoggerCentral.info(TAG, CYAN + "🔄 Notificación de cambio de invitación enviada para sync P2P" + RESET);
+                    LoggerCentral.info(TAG, ROJO + "🔄 Notificación de cambio de invitación enviada para sync P2P" + RESET);
                 } else {
-                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ Notificador de cambios es NULL - La sync P2P podría no activarse" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "⚠️ Notificador de cambios es NULL - La sync P2P podría no activarse" + RESET);
                 }
 
                 // 10. Preparar respuesta (definir invitacionId correctamente)
@@ -185,7 +181,7 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
                 respuesta.put("estado", "RECHAZADA");
                 respuesta.put("mensaje", "Invitación rechazada exitosamente");
 
-                LoggerCentral.info(TAG, VERDE + "✅ Invitación rechazada exitosamente" + RESET);
+                LoggerCentral.info(TAG, ROJO + "✅ Invitación rechazada exitosamente" + RESET);
 
                 return new DTOResponse("rechazarInvitacion", "success", "Invitación rechazada exitosamente", gson.toJsonTree(respuesta));
 
@@ -199,16 +195,16 @@ public class ServicioRechazarInvitacion implements IServicioCliente {
             }
         });
 
-        LoggerCentral.info(TAG, VERDE + "✅ Servicio inicializado - Ruta 'rechazarInvitacion' registrada" + RESET);
+        LoggerCentral.info(TAG, ROJO + "✅ Servicio inicializado - Ruta 'rechazarInvitacion' registrada" + RESET);
     }
 
     @Override
     public void iniciar() {
-        LoggerCentral.info(TAG, "Servicio de rechazar invitación iniciado");
+        LoggerCentral.info(TAG, ROJO + "Servicio de rechazar invitación iniciado" + RESET);
     }
 
     @Override
     public void detener() {
-        LoggerCentral.info(TAG, "Servicio de rechazar invitación detenido");
+        LoggerCentral.info(TAG, ROJO + "Servicio de rechazar invitación detenido" + RESET);
     }
 }

@@ -21,6 +21,7 @@ public class ServiciosMensajeContactos implements IServicioCliente {
 
     private final ServicioMensajesDirectos servicioTexto;
     private final ServicioMensajesAudio servicioAudio;
+    private gestorP2P.servicios.ServicioNotificacionCambios servicioNotificacionCambios; // ✅ NUEVO
 
     public ServiciosMensajeContactos() {
         LoggerCentral.info(TAG, "🔧 Inicializando coordinador de mensajería...");
@@ -47,6 +48,15 @@ public class ServiciosMensajeContactos implements IServicioCliente {
         servicioTexto.setServicioSincronizacionP2P(servicioSyncP2P);
         servicioAudio.setServicioSincronizacionP2P(servicioSyncP2P);
         LoggerCentral.info(TAG, "✅ Servicio de sincronización P2P configurado en todos los servicios");
+    }
+
+    /**
+     * ✅ NUEVO: Inyecta el servicio de notificación de cambios para activar sincronización automática.
+     */
+    public void setServicioNotificacionCambios(gestorP2P.servicios.ServicioNotificacionCambios servicio) {
+        this.servicioNotificacionCambios = servicio;
+        // Propagar a los servicios internos si tienen el método
+        LoggerCentral.info(TAG, "✅ Servicio de notificación de cambios configurado");
     }
 
     @Override

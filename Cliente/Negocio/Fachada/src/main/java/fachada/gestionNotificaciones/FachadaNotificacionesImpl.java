@@ -3,6 +3,7 @@ package fachada.gestionNotificaciones;
 import dto.featureNotificaciones.DTONotificacion;
 import gestionNotificaciones.GestorNotificaciones;
 import observador.IObservador;
+import fachada.gestionCanales.FachadaCanalesImpl; // [NUEVO] Import para conectar con GestorInvitaciones
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,7 +28,17 @@ public class FachadaNotificacionesImpl implements IFachadaNotificaciones, IObser
         // ✨ CLAVE: Registrarse como observador del gestor
         this.gestorNotificaciones.registrarObservador(this);
 
-        System.out.println("✅ [FachadaNotificaciones]: Fachada inicializada y registrada como observador del gestor");
+        System.err.println("✅ [FachadaNotificaciones]: Fachada inicializada y registrada como observador del gestor");
+
+        // 🔥🔥 CLAVE: Registrar GestorNotificaciones como observador de GestorInvitaciones
+        // Esto evita la dependencia circular
+        try {
+            FachadaCanalesImpl fachadaCanales = FachadaCanalesImpl.getInstancia();
+            fachadaCanales.getGestorInvitaciones().registrarObservador(this.gestorNotificaciones);
+            System.err.println("✅ [FachadaNotificaciones]: ⭐ GestorNotificaciones registrado como observador de GestorInvitaciones");
+        } catch (Exception e) {
+            System.err.println("⚠️ [FachadaNotificaciones]: Error al registrar en GestorInvitaciones: " + e.getMessage());
+        }
     }
 
     @Override

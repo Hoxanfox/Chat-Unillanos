@@ -9,6 +9,7 @@ import dto.comunicacion.DTOResponse;
 import dto.mensajeria.DTOEnviarMensajeAudio;
 import gestorClientes.interfaces.IServicioCliente;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
+import gestorTranscripcion.FachadaTranscripcion;
 import logger.LoggerCentral;
 import repositorio.clienteServidor.ArchivoRepositorio;
 import repositorio.clienteServidor.MensajeRepositorio;
@@ -43,11 +44,13 @@ public class ServicioMensajesAudio implements IServicioCliente {
     // Referencias a servicios
     private ServicioNotificacionCliente servicioNotificacion;
     private ServicioSincronizacionDatos servicioSyncP2P;
+    private FachadaTranscripcion fachadaTranscripcion;
 
     public ServicioMensajesAudio() {
         this.repoMensaje = new MensajeRepositorio();
         this.repoArchivo = new ArchivoRepositorio();
         this.gson = new Gson();
+        this.fachadaTranscripcion = FachadaTranscripcion.getInstance();
         LoggerCentral.info(TAG, AZUL + "Constructor: ServicioMensajesAudio creado" + RESET);
     }
 
@@ -150,6 +153,13 @@ public class ServicioMensajesAudio implements IServicioCliente {
                     servicioSyncP2P.onBaseDeDatosCambio();
                     servicioSyncP2P.forzarSincronizacion();
                     LoggerCentral.info(TAG, VERDE + "✅ Sincronización P2P activada" + RESET);
+                }
+
+                // ✅ 3. Notificar a sistema de transcripción
+                if (fachadaTranscripcion != null) {
+                    LoggerCentral.info(TAG, CYAN + "📝 Notificando a sistema de transcripción..." + RESET);
+                    fachadaTranscripcion.notificarNuevoAudio(dto.getAudioId());
+                    LoggerCentral.info(TAG, VERDE + "✅ Sistema de transcripción notificado" + RESET);
                 }
 
                 // Preparar respuesta para el remitente

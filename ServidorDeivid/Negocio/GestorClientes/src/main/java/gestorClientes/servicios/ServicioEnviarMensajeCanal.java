@@ -40,6 +40,7 @@ public class ServicioEnviarMensajeCanal implements IServicioCliente {
     private ServicioNotificacionCliente servicioNotificacion;
     private ServicioSincronizacionDatos servicioSyncP2P;
     private ServicioNotificarMensajeCanal servicioNotificarCanal;
+    private gestorP2P.servicios.ServicioNotificacionCambios servicioNotificacionCambios; // ✅ NUEVO
 
     public ServicioEnviarMensajeCanal() {
         this.repoMensaje = new MensajeRepositorio();
@@ -69,6 +70,14 @@ public class ServicioEnviarMensajeCanal implements IServicioCliente {
     public void setServicioNotificarCanal(ServicioNotificarMensajeCanal servicioNotificarCanal) {
         this.servicioNotificarCanal = servicioNotificarCanal;
         LoggerCentral.info(TAG, VERDE + "Servicio de notificaciones de canal configurado" + RESET);
+    }
+
+    /**
+     * ✅ NUEVO: Inyecta el servicio de notificación de cambios para activar sincronización automática.
+     */
+    public void setServicioNotificacionCambios(gestorP2P.servicios.ServicioNotificacionCambios servicio) {
+        this.servicioNotificacionCambios = servicio;
+        LoggerCentral.info(TAG, VERDE + "Servicio de notificación de cambios configurado" + RESET);
     }
 
     @Override

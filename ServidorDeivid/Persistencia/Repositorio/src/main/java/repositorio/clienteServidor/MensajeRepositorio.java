@@ -232,4 +232,32 @@ public class MensajeRepositorio {
             return null;
         }
     }
+
+    /**
+     * ✅ NUEVO: Busca un mensaje por su contenido (útil para buscar mensajes de audio por fileId)
+     */
+    public Mensaje buscarPorContenido(String contenido) {
+        if (contenido == null || contenido.trim().isEmpty()) return null;
+
+        String sql = "SELECT id, remitente_id, destinatario_usuario_id, canal_id, tipo, contenido, fecha_envio, peer_remitente_id, peer_destino_id " +
+                "FROM mensajes " +
+                "WHERE contenido = ? " +
+                "LIMIT 1";
+
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, contenido);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return mapearMensaje(rs);
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[MensajeRepo] Error buscando mensaje por contenido: " + e.getMessage());
+        }
+
+        return null;
+    }
 }

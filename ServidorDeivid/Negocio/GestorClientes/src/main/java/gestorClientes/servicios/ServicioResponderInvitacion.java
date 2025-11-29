@@ -30,11 +30,7 @@ public class ServicioResponderInvitacion implements IServicioCliente {
 
     // Colores ANSI para logs
     private static final String RESET = "\u001B[0m";
-    private static final String VERDE = "\u001B[32m";
-    private static final String AMARILLO = "\u001B[33m";
-    private static final String CYAN = "\u001B[36m";
     private static final String ROJO = "\u001B[31m";
-    private static final String AZUL = "\u001B[34m";
 
     private IGestorConexionesCliente gestor;
     private final CanalInvitacionRepositorio invitacionRepositorio;
@@ -52,7 +48,7 @@ public class ServicioResponderInvitacion implements IServicioCliente {
         this.miembroRepositorio = new CanalMiembroRepositorio();
         this.canalRepositorio = new CanalRepositorio();
         this.gson = new Gson();
-        LoggerCentral.info(TAG, AZUL + "Constructor: ServicioResponderInvitacion creado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Constructor: ServicioResponderInvitacion creado" + RESET);
     }
 
     /**
@@ -60,7 +56,7 @@ public class ServicioResponderInvitacion implements IServicioCliente {
      */
     public void setServicioSincronizacionP2P(ServicioSincronizacionDatos servicioSyncP2P) {
         this.servicioSyncP2P = servicioSyncP2P;
-        LoggerCentral.info(TAG, VERDE + "Servicio de sincronización P2P configurado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de sincronización P2P configurado" + RESET);
     }
 
     /**
@@ -68,7 +64,7 @@ public class ServicioResponderInvitacion implements IServicioCliente {
      */
     public void setServicioNotificacion(ServicioNotificacionCliente servicioNotificacion) {
         this.servicioNotificacion = servicioNotificacion;
-        LoggerCentral.info(TAG, VERDE + "Servicio de notificaciones CS configurado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de notificaciones CS configurado" + RESET);
     }
 
     /**
@@ -76,7 +72,7 @@ public class ServicioResponderInvitacion implements IServicioCliente {
      */
     public void setServicioNotificacionCambios(ServicioNotificacionCambios servicio) {
         this.servicioNotificacionCambios = servicio;
-        LoggerCentral.info(TAG, VERDE + "Servicio de notificación de cambios configurado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de notificación de cambios configurado" + RESET);
     }
 
     @Override
@@ -87,17 +83,17 @@ public class ServicioResponderInvitacion implements IServicioCliente {
     @Override
     public void inicializar(IGestorConexionesCliente gestor, IRouterMensajesCliente router) {
         this.gestor = gestor;
-        LoggerCentral.info(TAG, AZUL + "Inicializando ServicioResponderInvitacion..." + RESET);
+        LoggerCentral.info(TAG, ROJO + "Inicializando ServicioResponderInvitacion..." + RESET);
 
         // ==================== RUTA: Responder Invitación ====================
         router.registrarAccion("responderInvitacion", (datos, idSesion) -> {
             try {
-                LoggerCentral.info(TAG, CYAN + "📥 Recibida petición de responder invitación" + RESET);
+                LoggerCentral.info(TAG, ROJO + "📥 Recibida petición de responder invitación" + RESET);
 
                 // 1. Validar autenticación
                 String usuarioIdSesion = gestor.obtenerUsuarioDeSesion(idSesion);
                 if (usuarioIdSesion == null) {
-                    LoggerCentral.warn(TAG, AMARILLO + "Usuario no autenticado" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "Usuario no autenticado" + RESET);
                     return new DTOResponse("responderInvitacion", "error", "Usuario no autenticado", null);
                 }
 
@@ -108,27 +104,27 @@ public class ServicioResponderInvitacion implements IServicioCliente {
 
                 // 3. Validar datos
                 if (channelId == null || channelId.trim().isEmpty()) {
-                    LoggerCentral.warn(TAG, AMARILLO + "ID de canal inválido" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "ID de canal inválido" + RESET);
                     return new DTOResponse("responderInvitacion", "error", "ID de canal requerido", null);
                 }
 
                 if (accepted == null) {
-                    LoggerCentral.warn(TAG, AMARILLO + "Campo 'accepted' requerido" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "Campo 'accepted' requerido" + RESET);
                     return new DTOResponse("responderInvitacion", "error", "Campo 'accepted' requerido", null);
                 }
 
                 UUID canalId = UUID.fromString(channelId);
                 UUID usuarioId = UUID.fromString(usuarioIdSesion);
 
-                LoggerCentral.info(TAG, CYAN + "📤 Procesando respuesta a invitación" + RESET);
-                LoggerCentral.info(TAG, "   → Canal: " + canalId);
-                LoggerCentral.info(TAG, "   → Usuario: " + usuarioId);
-                LoggerCentral.info(TAG, "   → Acción: " + (accepted ? "ACEPTAR" : "RECHAZAR"));
+                LoggerCentral.info(TAG, ROJO + "📤 Procesando respuesta a invitación" + RESET);
+                LoggerCentral.info(TAG, ROJO + "   → Canal: " + canalId + RESET);
+                LoggerCentral.info(TAG, ROJO + "   → Usuario: " + usuarioId + RESET);
+                LoggerCentral.info(TAG, ROJO + "   → Acción: " + (accepted ? "ACEPTAR" : "RECHAZAR") + RESET);
 
                 // 4. Verificar que el canal existe
                 Canal canal = canalRepositorio.obtenerPorId(canalId);
                 if (canal == null) {
-                    LoggerCentral.warn(TAG, AMARILLO + "Canal no encontrado" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "Canal no encontrado" + RESET);
                     return new DTOResponse("responderInvitacion", "error", "Canal no encontrado", null);
                 }
 
@@ -140,14 +136,14 @@ public class ServicioResponderInvitacion implements IServicioCliente {
                         .orElse(null);
 
                 if (invitacionCanal == null) {
-                    LoggerCentral.warn(TAG, AMARILLO + "No existe invitación pendiente para este canal" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "No existe invitación pendiente para este canal" + RESET);
                     return new DTOResponse("responderInvitacion", "error", "No existe invitación pendiente", null);
                 }
 
                 // 6. Procesar según la respuesta
                 if (accepted) {
                     // ACEPTAR: Agregar como miembro y actualizar invitación
-                    LoggerCentral.info(TAG, VERDE + "✅ Aceptando invitación..." + RESET);
+                    LoggerCentral.info(TAG, ROJO + "✅ Aceptando invitación..." + RESET);
 
                     // Agregar al usuario como miembro del canal
                     CanalMiembro nuevoMiembro = new CanalMiembro(canalId, usuarioId);
@@ -161,21 +157,21 @@ public class ServicioResponderInvitacion implements IServicioCliente {
                     // Actualizar estado de la invitación a ACEPTADA
                     boolean actualizado = invitacionRepositorio.actualizarEstado(invitacionCanal.getIdUUID(), "ACEPTADA");
                     if (!actualizado) {
-                        LoggerCentral.warn(TAG, AMARILLO + "⚠️ No se pudo actualizar estado de invitación" + RESET);
+                        LoggerCentral.warn(TAG, ROJO + "⚠️ No se pudo actualizar estado de invitación" + RESET);
                     }
 
-                    LoggerCentral.info(TAG, VERDE + "✅ Usuario agregado al canal exitosamente" + RESET);
+                    LoggerCentral.info(TAG, ROJO + "✅ Usuario agregado al canal exitosamente" + RESET);
 
                 } else {
                     // RECHAZAR: Solo actualizar estado de la invitación
-                    LoggerCentral.info(TAG, AMARILLO + "❌ Rechazando invitación..." + RESET);
+                    LoggerCentral.info(TAG, ROJO + "❌ Rechazando invitación..." + RESET);
 
                     boolean actualizado = invitacionRepositorio.actualizarEstado(invitacionCanal.getIdUUID(), "RECHAZADA");
                     if (!actualizado) {
-                        LoggerCentral.warn(TAG, AMARILLO + "⚠️ No se pudo actualizar estado de invitación" + RESET);
+                        LoggerCentral.warn(TAG, ROJO + "⚠️ No se pudo actualizar estado de invitación" + RESET);
                     }
 
-                    LoggerCentral.info(TAG, VERDE + "✅ Invitación rechazada exitosamente" + RESET);
+                    LoggerCentral.info(TAG, ROJO + "✅ Invitación rechazada exitosamente" + RESET);
                 }
 
                 // 7. Notificar cambio a todos los clientes
@@ -186,11 +182,11 @@ public class ServicioResponderInvitacion implements IServicioCliente {
 
                 // 8. Sincronizar con P2P
                 if (servicioSyncP2P != null) {
-                    LoggerCentral.info(TAG, CYAN + "🔄 Activando sincronización P2P..." + RESET);
+                    LoggerCentral.info(TAG, ROJO + "🔄 Activando sincronización P2P..." + RESET);
                     try {
                         servicioSyncP2P.onBaseDeDatosCambio();
                         servicioSyncP2P.forzarSincronizacion();
-                        LoggerCentral.info(TAG, VERDE + "✅ Sincronización P2P activada exitosamente" + RESET);
+                        LoggerCentral.info(TAG, ROJO + "✅ Sincronización P2P activada exitosamente" + RESET);
                     } catch (Exception e) {
                         LoggerCentral.error(TAG, ROJO + "❌ Error al forzar sincronización P2P: " + e.getMessage() + RESET);
                     }
@@ -204,9 +200,9 @@ public class ServicioResponderInvitacion implements IServicioCliente {
                             ServicioNotificacionCambios.TipoEvento.CAMBIO_INVITACION_CANAL,
                             invitacionCanal
                     );
-                    LoggerCentral.info(TAG, CYAN + "🔄 Notificación de cambio de invitación enviada para sync P2P" + RESET);
+                    LoggerCentral.info(TAG, ROJO + "🔄 Notificación de cambio de invitación enviada para sync P2P" + RESET);
                 } else {
-                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ Notificador de cambios es NULL - La sync P2P podría no activarse" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "⚠️ Notificador de cambios es NULL - La sync P2P podría no activarse" + RESET);
                 }
 
                 // 10. Preparar respuesta (definir invitacionId a partir de la entidad)
@@ -217,7 +213,7 @@ public class ServicioResponderInvitacion implements IServicioCliente {
                 respuesta.put("canalId", canalId.toString());
                 respuesta.put("usuarioId", usuarioId.toString());
 
-                LoggerCentral.info(TAG, VERDE + "✅ Invitación procesada exitosamente" + RESET);
+                LoggerCentral.info(TAG, ROJO + "✅ Invitación procesada exitosamente" + RESET);
 
                 return new DTOResponse(
                     "responderInvitacion",
@@ -235,16 +231,16 @@ public class ServicioResponderInvitacion implements IServicioCliente {
             }
         });
 
-        LoggerCentral.info(TAG, VERDE + "✅ Servicio inicializado - Ruta 'responderInvitacion' registrada" + RESET);
+        LoggerCentral.info(TAG, ROJO + "✅ Servicio inicializado - Ruta 'responderInvitacion' registrada" + RESET);
     }
 
     @Override
     public void iniciar() {
-        LoggerCentral.info(TAG, "Servicio de responder invitación iniciado");
+        LoggerCentral.info(TAG, ROJO + "Servicio de responder invitación iniciado" + RESET);
     }
 
     @Override
     public void detener() {
-        LoggerCentral.info(TAG, "Servicio de responder invitación detenido");
+        LoggerCentral.info(TAG, ROJO + "Servicio de responder invitación detenido" + RESET);
     }
 }

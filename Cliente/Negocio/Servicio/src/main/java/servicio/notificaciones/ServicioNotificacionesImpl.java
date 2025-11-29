@@ -31,27 +31,29 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones, IObs
 
     @Override
     public void solicitarActualizacionNotificaciones() {
-        System.out.println("📡 [ServicioNotificaciones]: Solicitando lista de notificaciones a la Fachada...");
+        System.err.println("📡📡📡 [ServicioNotificaciones]: ========== SOLICITANDO ACTUALIZACIÓN ==========");
+        System.err.println("📡 [ServicioNotificaciones]: Solicitando lista de notificaciones a la Fachada...");
 
-        fachada.obtenerNotificaciones()
-                .thenAccept(notificaciones -> {
-                    System.out.println("✅ [ServicioNotificaciones]: Recibidas " + notificaciones.size() + " notificaciones del servidor");
+        // ✅ SOLUCIÓN: Obtener directamente del caché local
+        List<DTONotificacion> notificacionesCache = fachada.obtenerNotificacionesCache();
+        System.err.println("📦📦📦 [ServicioNotificaciones]: " + notificacionesCache.size() + " notificaciones en caché local");
 
-                    // También incluir notificaciones del caché local (como invitaciones recibidas por PUSH)
-                    List<DTONotificacion> notificacionesCache = fachada.obtenerNotificacionesCache();
-                    System.out.println("📦 [ServicioNotificaciones]: " + notificacionesCache.size() + " notificaciones en caché local");
+        if (notificacionesCache.isEmpty()) {
+            System.err.println("⚠️⚠️⚠️ [ServicioNotificaciones]: CACHÉ VACÍO - No hay notificaciones para mostrar");
+        } else {
+            System.err.println("✅✅✅ [ServicioNotificaciones]: Notificaciones encontradas:");
+            for (int i = 0; i < notificacionesCache.size(); i++) {
+                DTONotificacion n = notificacionesCache.get(i);
+                System.err.println("   [" + (i+1) + "] ID: " + n.getId() + ", Tipo: " + n.getTipo() + ", Título: " + n.getTitulo());
+            }
+        }
 
-                    List<DTONotificacion> todasNotificaciones = new ArrayList<>(notificaciones);
-                    todasNotificaciones.addAll(notificacionesCache);
+        System.err.println("📋 [ServicioNotificaciones]: Total notificaciones a mostrar: " + notificacionesCache.size());
+        System.err.println("📢 [ServicioNotificaciones]: Notificando a " + observadores.size() + " observadores con evento LISTA_NOTIFICACIONES");
 
-                    System.out.println("📋 [ServicioNotificaciones]: Total notificaciones a mostrar: " + todasNotificaciones.size());
-                    notificarObservadores("ACTUALIZAR_NOTIFICACIONES", todasNotificaciones);
-                })
-                .exceptionally(ex -> {
-                    System.err.println("❌ [ServicioNotificaciones]: Error al obtener notificaciones: " + ex.getMessage());
-                    notificarObservadores("ERROR_NOTIFICACIONES", ex.getMessage());
-                    return null;
-                });
+        // ✅ Notificar inmediatamente con las notificaciones del caché
+        notificarObservadores("LISTA_NOTIFICACIONES", notificacionesCache);
+        System.err.println("📡📡📡 [ServicioNotificaciones]: ========== ACTUALIZACIÓN FINALIZADA ==========");
     }
 
     @Override

@@ -5,6 +5,7 @@ import controlador.clienteServidor.ControladorClienteServidor;
 import controlador.usuarios.ControladorUsuarios;
 import controlador.logs.ControladorLogs;
 import controlador.logs.ControladorLogsApi;
+import controlador.transcripcion.ControladorTranscripcion;
 import gestorUsuarios.GestorUsuarios;
 import gestorLogs.GestorLogs;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
@@ -13,6 +14,7 @@ import servicio.logs.ServicioLogs;
 import interfazGrafica.vistaUsuarios.PanelUsuarios;
 import interfazGrafica.vistaConexiones.PanelConexiones;
 import interfazGrafica.vistaLogs.PanelLogs;
+import interfazGrafica.vistaTranscripcion.PanelTranscripcionAudios;
 import interfazGrafica.vistaPrincipal.PanelPrincipal;
 import logger.LoggerCentral;
 import observador.IObservador;
@@ -36,12 +38,14 @@ public class VentanaPrincipal extends JFrame implements IObservador {
     private PanelUsuarios panelUsuarios;
     private PanelConexiones panelConexiones;
     private PanelLogs panelLogs;
+    private PanelTranscripcionAudios panelTranscripcion;
 
     private ControladorP2P controladorP2P;
     private ControladorClienteServidor controladorCS;
     private ControladorUsuarios controladorUsuarios;
     private ControladorLogs controladorLogs;
     private ControladorLogsApi controladorLogsApi;
+    private ControladorTranscripcion controladorTranscripcion;
 
     // Servicios para integración P2P
     private ServicioSincronizacionDatos servicioSincronizacion;
@@ -84,6 +88,9 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         // Controladores P2P y Cliente-Servidor
         controladorP2P = new ControladorP2P();
         controladorCS = new ControladorClienteServidor();
+
+        // Controlador de transcripción
+        controladorTranscripcion = new ControladorTranscripcion();
 
         // Construir arquitectura de capas para Usuarios
         construirArquitecturaUsuarios();
@@ -192,6 +199,7 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         panelUsuarios = new PanelUsuarios(controladorUsuarios);
         panelConexiones = new PanelConexiones(controladorP2P, controladorCS);
         panelLogs = new PanelLogs();
+        panelTranscripcion = new PanelTranscripcionAudios(controladorTranscripcion);
 
         // Conectar el PanelLogs con su controlador
         panelLogs.setControlador(controladorLogs);
@@ -204,6 +212,7 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         tabbedPane.addTab("Channels", crearPanelTemporal("CHANNELS"));
         tabbedPane.addTab("Connections", panelConexiones);
         tabbedPane.addTab("Logs", panelLogs);
+        tabbedPane.addTab("Transcription", panelTranscripcion);
 
         this.add(tabbedPane, BorderLayout.CENTER);
     }

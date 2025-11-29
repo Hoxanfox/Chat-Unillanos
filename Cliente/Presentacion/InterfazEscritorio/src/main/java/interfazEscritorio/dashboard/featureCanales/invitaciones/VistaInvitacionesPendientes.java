@@ -30,8 +30,12 @@ public class VistaInvitacionesPendientes extends BorderPane implements IObservad
         this.setPadding(new Insets(15));
         this.setStyle("-fx-background-color: #f4f4f4;");
 
+        System.out.println("🔔 [VistaInvitacionesPendientes]: Constructor - Registrándose como observador");
+
         // Registrarse como observador
         controladorCanales.registrarObservadorInvitaciones(this);
+
+        System.out.println("✅ [VistaInvitacionesPendientes]: Registro completado");
 
         VBox mainLayout = new VBox(15);
         mainLayout.setAlignment(Pos.TOP_CENTER);
@@ -88,16 +92,19 @@ public class VistaInvitacionesPendientes extends BorderPane implements IObservad
     }
 
     private void cargarInvitaciones() {
+        System.out.println("[Invitaciones] Iniciando carga de invitaciones...");
         lblEstado.setText("⏳ Cargando invitaciones...");
         lblEstado.setTextFill(Color.BLUE);
 
         controladorCanales.solicitarInvitacionesPendientes()
                 .thenAccept(invitaciones -> Platform.runLater(() -> {
+                    System.out.println("[Invitaciones] Invitaciones cargadas exitosamente. Total: " + (invitaciones != null ? invitaciones.size() : 0));
                     mostrarInvitaciones(invitaciones);
                     actualizarBadge(invitaciones.size());
                     lblEstado.setText("");
                 }))
                 .exceptionally(ex -> {
+                    System.out.println("[Invitaciones] Error al cargar invitaciones: " + ex.getMessage());
                     Platform.runLater(() -> {
                         lblEstado.setText("❌ Error: " + ex.getMessage());
                         lblEstado.setTextFill(Color.RED);
@@ -108,15 +115,28 @@ public class VistaInvitacionesPendientes extends BorderPane implements IObservad
 
     @Override
     public void actualizar(String tipoDeDato, Object datos) {
+        System.out.println("🔔 [VistaInvitacionesPendientes]: Notificación recibida - Tipo: " + tipoDeDato + ", Datos: " + (datos != null ? datos.toString() : "null"));
         Platform.runLater(() -> {
             switch (tipoDeDato) {
+                case "INVITACIONES_PENDIENTES":
+                    if (datos instanceof List) {
+                        @SuppressWarnings("unchecked")
+                        List<DTOCanalCreado> invitaciones = (List<DTOCanalCreado>) datos;
+                        System.out.println("✅ [VistaInvitacionesPendientes]: Actualizando UI con " + invitaciones.size() + " invitaciones");
+                        mostrarInvitaciones(invitaciones);
+                        actualizarBadge(invitaciones.size());
+                        lblEstado.setText("");
+                    }
+                    break;
                 case "NUEVA_INVITACION_CANAL":
                     if (datos instanceof Map) {
+                        System.out.println("🔔 [VistaInvitacionesPendientes]: Nueva invitación recibida, refrescando...");
                         cargarInvitaciones();
                     }
                     break;
                 case "INVITACION_ACEPTADA":
                 case "INVITACION_RECHAZADA":
+                    System.out.println("✅ [VistaInvitacionesPendientes]: Invitación procesada, refrescando...");
                     cargarInvitaciones();
                     break;
             }
@@ -124,9 +144,11 @@ public class VistaInvitacionesPendientes extends BorderPane implements IObservad
     }
 
     private void mostrarInvitaciones(List<DTOCanalCreado> invitaciones) {
+        System.out.println("[Invitaciones] Mostrando " + (invitaciones != null ? invitaciones.size() : 0) + " invitaciones en la UI");
         invitacionesBox.getChildren().clear();
 
         if (invitaciones == null || invitaciones.isEmpty()) {
+            System.out.println("[Invitaciones] No hay invitaciones pendientes para mostrar");
             Label mensaje = new Label("📭 No hay invitaciones pendientes");
             mensaje.setFont(Font.font("Arial", FontWeight.BOLD, 14));
             mensaje.setTextFill(Color.GRAY);
@@ -135,11 +157,13 @@ public class VistaInvitacionesPendientes extends BorderPane implements IObservad
         }
 
         for (DTOCanalCreado invitacion : invitaciones) {
+            System.out.println("[Invitaciones] Invitación: CanalID=" + invitacion.getId() + ", Nombre=" + invitacion.getNombre());
             invitacionesBox.getChildren().add(crearTarjetaInvitacion(invitacion));
         }
     }
 
     private VBox crearTarjetaInvitacion(DTOCanalCreado canal) {
+        System.out.println("[Invitaciones] Creando tarjeta para invitación: CanalID=" + canal.getId() + ", Nombre=" + canal.getNombre());
         VBox tarjeta = new VBox(10);
         tarjeta.setPadding(new Insets(15));
         tarjeta.setStyle("-fx-background-color: #ffffff; -fx-border-color: #3498db; -fx-border-width: 2; -fx-border-radius: 8;");
@@ -165,13 +189,16 @@ public class VistaInvitacionesPendientes extends BorderPane implements IObservad
     }
 
     private void responderInvitacion(String canalId, boolean aceptar) {
+        System.out.println("[Invitaciones] Respondiendo invitación: CanalID=" + canalId + ", Acción=" + (aceptar ? "ACEPTAR" : "RECHAZAR"));
         controladorCanales.responderInvitacion(canalId, aceptar)
                 .thenRun(() -> Platform.runLater(() -> {
+                    System.out.println("[Invitaciones] Invitación " + (aceptar ? "aceptada" : "rechazada") + " correctamente para CanalID=" + canalId);
                     lblEstado.setText(aceptar ? "✅ Invitación aceptada" : "❌ Invitación rechazada");
                     lblEstado.setTextFill(aceptar ? Color.GREEN : Color.ORANGE);
                     cargarInvitaciones();
                 }))
                 .exceptionally(ex -> {
+                    System.out.println("[Invitaciones] Error al responder invitación para CanalID=" + canalId + ": " + ex.getMessage());
                     Platform.runLater(() -> {
                         lblEstado.setText("❌ Error: " + ex.getMessage());
                         lblEstado.setTextFill(Color.RED);
@@ -206,4 +233,3 @@ public class VistaInvitacionesPendientes extends BorderPane implements IObservad
         }
     }
 }
-

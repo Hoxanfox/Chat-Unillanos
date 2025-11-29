@@ -22,6 +22,7 @@ import gestorClientes.servicios.ServicioNotificarInvitacionCanal;
 import gestorClientes.servicios.ServicioObtenerInvitaciones;
 import gestorClientes.servicios.ServicioObtenerNotificaciones;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
+import gestorP2P.servicios.ServicioNotificacionCambios; // ✅ NUEVO IMPORT
 import logger.LoggerCentral;
 import observador.IObservador;
 
@@ -236,6 +237,59 @@ public class ServicioCliente implements IServicioClienteControl {
         } else {
             LoggerCentral.warn(TAG, "⚠️ No se pudo inyectar servicio P2P: servicioEnviarMensajeCanal es null");
         }
+
+        // ✅ NUEVO: Obtener el notificador de cambios desde el servicio de sincronización
+        ServicioNotificacionCambios notificadorCambios = servicioSyncP2P.getServicioNotificacionCambios();
+
+        if (notificadorCambios != null) {
+            LoggerCentral.info(TAG, CYAN + "🔔 Inyectando ServicioNotificacionCambios en servicios CS..." + RESET);
+
+            // Inyectar en ServicioInvitarMiembro
+            if (servicioInvitarMiembro != null) {
+                servicioInvitarMiembro.setServicioNotificacionCambios(notificadorCambios);
+                LoggerCentral.info(TAG, "✅ NotificacionCambios inyectado en ServicioInvitarMiembro");
+            }
+
+            // Inyectar en ServicioCrearCanal
+            if (servicioCrearCanal != null) {
+                servicioCrearCanal.setServicioNotificacionCambios(notificadorCambios);
+                LoggerCentral.info(TAG, "✅ NotificacionCambios inyectado en ServicioCrearCanal");
+            }
+
+            // Inyectar en ServicioUnirseCanal
+            if (servicioUnirseCanal != null) {
+                servicioUnirseCanal.setServicioNotificacionCambios(notificadorCambios);
+                LoggerCentral.info(TAG, "✅ NotificacionCambios inyectado en ServicioUnirseCanal");
+            }
+
+            // Inyectar en ServicioRechazarInvitacion
+            if (servicioRechazarInvitacion != null) {
+                servicioRechazarInvitacion.setServicioNotificacionCambios(notificadorCambios);
+                LoggerCentral.info(TAG, "✅ NotificacionCambios inyectado en ServicioRechazarInvitacion");
+            }
+
+            // Inyectar en ServicioResponderInvitacion
+            if (servicioResponderInvitacion != null) {
+                servicioResponderInvitacion.setServicioNotificacionCambios(notificadorCambios);
+                LoggerCentral.info(TAG, "✅ NotificacionCambios inyectado en ServicioResponderInvitacion");
+            }
+
+            // Inyectar en ServicioEnviarMensajeCanal
+            if (servicioEnviarMensajeCanal != null) {
+                servicioEnviarMensajeCanal.setServicioNotificacionCambios(notificadorCambios);
+                LoggerCentral.info(TAG, "✅ NotificacionCambios inyectado en ServicioEnviarMensajeCanal");
+            }
+
+            // Inyectar en ServiciosMensajeContactos
+            if (servicioMensajes != null) {
+                servicioMensajes.setServicioNotificacionCambios(notificadorCambios);
+                LoggerCentral.info(TAG, "✅ NotificacionCambios inyectado en ServiciosMensajeContactos");
+            }
+
+            LoggerCentral.info(TAG, VERDE + "✅ ServicioNotificacionCambios inyectado en TODOS los servicios CS" + RESET);
+        } else {
+            LoggerCentral.error(TAG, ROJO + "❌ ERROR: ServicioNotificacionCambios es NULL - La sincronización P2P automática NO funcionará" + RESET);
+        }
     }
 
     // --- IMPLEMENTACIÓN DE LA INTERFAZ DE CONTROL ---
@@ -329,4 +383,9 @@ public class ServicioCliente implements IServicioClienteControl {
     public ServicioGestionRed getServicioGestionRed() {
         return fachada.getServicioGestionRed();
     }
+
+    private static final String CYAN = "\u001B[36m";
+    private static final String VERDE = "\u001B[32m";
+    private static final String ROJO = "\u001B[31m";
+    private static final String RESET = "\u001B[0m";
 }

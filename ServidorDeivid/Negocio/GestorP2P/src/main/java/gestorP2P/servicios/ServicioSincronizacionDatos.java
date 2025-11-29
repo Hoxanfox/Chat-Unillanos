@@ -429,4 +429,13 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
     public CoordinadorSincronizacion getCoordinador() {
         return coordinador;
     }
+
+    /**
+     * ✅ NUEVO: Expone el ServicioNotificacionCambios para inyección en servicios CS.
+     * Esto permite que servicios como ServicioInvitarMiembro activen sincronización
+     * automática después de persistir datos.
+     */
+    public ServicioNotificacionCambios getServicioNotificacionCambios() {
+        return notificador;
+    }
 }

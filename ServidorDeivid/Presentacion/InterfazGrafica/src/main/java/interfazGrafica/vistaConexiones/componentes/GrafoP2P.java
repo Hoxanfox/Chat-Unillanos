@@ -120,7 +120,7 @@ public class GrafoP2P extends JPanel implements IObservador {
     }
 
     /**
-     * ✅ NUEVO: Actualizar con lista de peers
+     * ✅ ACTUALIZADO: Actualizar con lista de peers - SOLO PEERS P2P (sin clientes)
      */
     private void actualizarConListaPeers(List<DTOPeerDetails> peers) {
         SwingUtilities.invokeLater(() -> {
@@ -128,45 +128,31 @@ public class GrafoP2P extends JPanel implements IObservador {
 
             LoggerCentral.info(TAG, "📊 Actualizando GrafoP2P: " + peers.size() + " peers recibidos");
 
+            // ✅ SOLO agregar PEERS (identificarlos correctamente)
             for (DTOPeerDetails peer : peers) {
-                // ✅ CORREGIDO: Usar IP y puerto del DTO correctamente
                 String ip = peer.getIp();
                 int puerto = peer.getPuertoServidor() > 0 ? peer.getPuertoServidor() : peer.getPuerto();
 
-                // ✅ CORREGIDO: Identificar correctamente si es el peer local
                 boolean esLocal = esPeerLocal(ip, puerto);
                 boolean esOnline = "ONLINE".equalsIgnoreCase(peer.getEstado());
 
-                LoggerCentral.debug(TAG, "Procesando peer: " + ip + ":" + puerto +
+                LoggerCentral.debug(TAG, "📍 Peer: " + peer.getId() + " | " + ip + ":" + puerto +
                                    " | Local: " + esLocal + " | Online: " + esOnline);
 
-                // ✅ NUEVO: Solo agregar el peer local UNA VEZ
-                // Si es local, agregarlo con etiqueta especial
-                // Si no es local, agregarlo como peer remoto
-                if (esLocal) {
-                    // Solo agregar si no existe ya (evitar duplicados)
-                    if (!nodos.containsKey(peer.getId())) {
-                        LoggerCentral.info(TAG, "✅ Agregando PEER LOCAL: " + ip + ":" + puerto);
-                        agregarPeer(peer.getId(), ip, puerto, true, esOnline);
-                    } else {
-                        LoggerCentral.debug(TAG, "Peer local ya existe, ignorando duplicado");
-                    }
-                } else {
-                    // Peer remoto
-                    LoggerCentral.debug(TAG, "Agregando peer remoto: " + ip + ":" + puerto);
-                    agregarPeer(peer.getId(), ip, puerto, false, esOnline);
+                // Solo agregar si no existe (evitar duplicados)
+                if (!nodos.containsKey(peer.getId())) {
+                    agregarPeer(peer.getId(), ip, puerto, esLocal, esOnline);
                 }
             }
 
-            // Las conexiones se infieren (todos conectados entre sí en P2P)
-            // Filtrar la lista para solo incluir peers que se agregaron
+            // Crear conexiones P2P en malla completa
             List<DTOPeerDetails> peersAgregados = peers.stream()
                 .filter(p -> nodos.containsKey(p.getId()))
                 .collect(java.util.stream.Collectors.toList());
 
             agregarConexionesP2P(peersAgregados);
 
-            LoggerCentral.info(TAG, "✅ Grafo actualizado: " + nodos.size() + " nodos, " +
+            LoggerCentral.info(TAG, "✅ Grafo P2P actualizado: " + nodos.size() + " peers, " +
                               conexiones.size() + " conexiones");
 
             repaint();

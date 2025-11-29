@@ -46,6 +46,7 @@ public class ServicioUnirseCanal implements IServicioCliente {
     // Referencias a servicios
     private ServicioNotificacionCliente servicioNotificacion;
     private ServicioSincronizacionDatos servicioSyncP2P;
+    private gestorP2P.servicios.ServicioNotificacionCambios servicioNotificacionCambios; // ✅ NUEVO
 
     public ServicioUnirseCanal() {
         this.invitacionRepositorio = new CanalInvitacionRepositorio();
@@ -69,6 +70,14 @@ public class ServicioUnirseCanal implements IServicioCliente {
     public void setServicioSincronizacionP2P(ServicioSincronizacionDatos servicioSyncP2P) {
         this.servicioSyncP2P = servicioSyncP2P;
         LoggerCentral.info(TAG, VERDE + "Servicio de sincronización P2P configurado" + RESET);
+    }
+
+    /**
+     * ✅ NUEVO: Inyecta el servicio de notificación de cambios para activar sincronización automática.
+     */
+    public void setServicioNotificacionCambios(gestorP2P.servicios.ServicioNotificacionCambios servicio) {
+        this.servicioNotificacionCambios = servicio;
+        LoggerCentral.info(TAG, VERDE + "Servicio de notificación de cambios configurado" + RESET);
     }
 
     @Override
@@ -216,4 +225,3 @@ public class ServicioUnirseCanal implements IServicioCliente {
         LoggerCentral.info(TAG, "Servicio de unirse a canal detenido");
     }
 }
-

@@ -1,5 +1,6 @@
 -- init.sql: esquema inicial para MySQL
 
+DROP TABLE IF EXISTS transcripciones;
 DROP TABLE IF EXISTS canal_invitaciones;
 DROP TABLE IF EXISTS canal_miembros;
 DROP TABLE IF EXISTS mensajes;
@@ -76,6 +77,27 @@ CREATE TABLE canal_miembros (
   CONSTRAINT fk_miembros_canal FOREIGN KEY (canal_id) REFERENCES canales(id) ON DELETE CASCADE,
   CONSTRAINT fk_miembros_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ✅ TABLA TRANSCRIPCIONES: Movida después de mensajes para resolver dependencias
+CREATE TABLE transcripciones (
+  id CHAR(36) NOT NULL PRIMARY KEY,
+  archivo_id CHAR(36) NOT NULL COMMENT 'Referencia al archivo de audio',
+  mensaje_id CHAR(36) DEFAULT NULL COMMENT 'Referencia al mensaje si aplica',
+  transcripcion TEXT COMMENT 'Texto transcrito del audio',
+  estado ENUM('PENDIENTE','PROCESANDO','COMPLETADA','ERROR') NOT NULL DEFAULT 'PENDIENTE',
+  duracion_segundos DECIMAL(10,2) COMMENT 'Duración del audio en segundos',
+  idioma VARCHAR(10) DEFAULT 'es' COMMENT 'Idioma detectado/configurado',
+  confianza DECIMAL(5,2) COMMENT 'Nivel de confianza de la transcripción (0-100)',
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  fecha_procesamiento TIMESTAMP NULL COMMENT 'Fecha cuando se procesó',
+  fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_transcripciones_archivo FOREIGN KEY (archivo_id) REFERENCES archivos(id) ON DELETE CASCADE,
+  CONSTRAINT fk_transcripciones_mensaje FOREIGN KEY (mensaje_id) REFERENCES mensajes(id) ON DELETE SET NULL,
+  INDEX idx_transcripciones_archivo (archivo_id),
+  INDEX idx_transcripciones_mensaje (mensaje_id),
+  INDEX idx_transcripciones_estado (estado),
+  INDEX idx_transcripciones_fecha (fecha_creacion)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Transcripciones de archivos de audio';
 
 CREATE TABLE canal_invitaciones (
   id CHAR(36) NOT NULL PRIMARY KEY,

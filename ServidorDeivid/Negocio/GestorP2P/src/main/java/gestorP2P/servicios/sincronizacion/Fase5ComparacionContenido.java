@@ -394,33 +394,57 @@ public class Fase5ComparacionContenido {
     }
 
     /**
-     * ✅ NUEVO: Compara dos invitaciones de canal.
+     * ✅ MEJORADO: Compara dos invitaciones de canal.
+     * Ahora compara todos los campos y usa guardarOActualizar para sincronización completa.
      */
     private boolean compararInvitacion(CanalInvitacion remoto) {
         CanalInvitacion local = repoInvitacion.obtenerPorId(remoto.getIdUUID());
 
         if (local == null) {
             LoggerCentral.warn(TAG, AMARILLO + "Invitación no existe localmente. Guardando..." + RESET);
-            repoInvitacion.guardar(remoto);
+            repoInvitacion.guardarOActualizar(remoto);
             return true;
         }
 
-        // La lógica de comparación se basa en el estado.
-        // Si los estados son diferentes, se asume que el cambio es válido.
-        // Podríamos añadir una columna 'fecha_actualizacion' para ser más precisos.
+        boolean hayDiferencias = false;
+
+        // Comparar estado
         if (!local.getEstado().equals(remoto.getEstado())) {
             LoggerCentral.warn(TAG, AMARILLO + "  Diferencia en ESTADO de invitación" + RESET);
             LoggerCentral.warn(TAG, "    Local: " + local.getEstado());
             LoggerCentral.warn(TAG, "    Remoto: " + remoto.getEstado());
-
-            // Aquí, una política simple: el estado remoto siempre gana si es diferente.
-            // Esto permite que una aceptación/rechazo en otro nodo se propague.
-            LoggerCentral.info(TAG, VERDE + "  Estado remoto es diferente. Actualizando invitación local." + RESET);
-            repoInvitacion.actualizarEstado(local.getIdUUID(), remoto.getEstado());
-            return true;
+            hayDiferencias = true;
         }
 
-        LoggerCentral.debug(TAG, "Invitación sin cambios relevantes.");
+        // Comparar canal_id
+        if (!local.getCanalId().equals(remoto.getCanalId())) {
+            LoggerCentral.warn(TAG, AMARILLO + "  Diferencia en CANAL_ID de invitación" + RESET);
+            hayDiferencias = true;
+        }
+
+        // Comparar invitador_id
+        if (!local.getInvitadorId().equals(remoto.getInvitadorId())) {
+            LoggerCentral.warn(TAG, AMARILLO + "  Diferencia en INVITADOR_ID de invitación" + RESET);
+            hayDiferencias = true;
+        }
+
+        // Comparar invitado_id
+        if (!local.getInvitadoId().equals(remoto.getInvitadoId())) {
+            LoggerCentral.warn(TAG, AMARILLO + "  Diferencia en INVITADO_ID de invitación" + RESET);
+            hayDiferencias = true;
+        }
+
+        if (hayDiferencias) {
+            // Usar estrategia de timestamp: el más reciente gana
+            return resolverConflictoTemporal(
+                local.getFechaCreacion(),
+                remoto.getFechaCreacion(),
+                () -> repoInvitacion.guardarOActualizar(remoto),
+                "CanalInvitacion"
+            );
+        }
+
+        LoggerCentral.debug(TAG, VERDE + "  ✓ Invitación idéntica" + RESET);
         return false;
     }
 

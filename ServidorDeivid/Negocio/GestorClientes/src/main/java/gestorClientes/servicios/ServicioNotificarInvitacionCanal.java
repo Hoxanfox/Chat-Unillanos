@@ -5,10 +5,12 @@ import conexion.clientes.interfaces.IGestorConexionesCliente;
 import conexion.clientes.interfaces.IRouterMensajesCliente;
 import dominio.clienteServidor.Canal;
 import dominio.clienteServidor.Usuario;
+import dominio.clienteServidor.relaciones.CanalInvitacion;
 import dto.comunicacion.DTOResponse;
 import gestorClientes.interfaces.IServicioCliente;
 import logger.LoggerCentral;
 import repositorio.clienteServidor.CanalRepositorio;
+import repositorio.clienteServidor.CanalInvitacionRepositorio;
 import repositorio.clienteServidor.UsuarioRepositorio;
 
 import java.util.HashMap;
@@ -28,22 +30,20 @@ public class ServicioNotificarInvitacionCanal implements IServicioCliente {
 
     // Colores ANSI para logs
     private static final String RESET = "\u001B[0m";
-    private static final String VERDE = "\u001B[32m";
-    private static final String AMARILLO = "\u001B[33m";
-    private static final String CYAN = "\u001B[36m";
-    private static final String AZUL = "\u001B[34m";
-    private static final String MAGENTA = "\u001B[35m";
+    private static final String ROJO = "\u001B[31m";
 
     private IGestorConexionesCliente gestor;
     private final CanalRepositorio canalRepositorio;
+    private final CanalInvitacionRepositorio invitacionRepositorio;
     private final UsuarioRepositorio usuarioRepositorio;
     private final Gson gson;
 
     public ServicioNotificarInvitacionCanal() {
         this.canalRepositorio = new CanalRepositorio();
+        this.invitacionRepositorio = new CanalInvitacionRepositorio();
         this.usuarioRepositorio = new UsuarioRepositorio();
         this.gson = new Gson();
-        LoggerCentral.info(TAG, AZUL + "Constructor: ServicioNotificarInvitacionCanal creado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Constructor: ServicioNotificarInvitacionCanal creado" + RESET);
     }
 
     @Override
@@ -54,15 +54,13 @@ public class ServicioNotificarInvitacionCanal implements IServicioCliente {
     @Override
     public void inicializar(IGestorConexionesCliente gestor, IRouterMensajesCliente router) {
         this.gestor = gestor;
-        LoggerCentral.info(TAG, VERDE + "✅ Servicio de notificaciones de invitación a canal inicializado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "✅ Servicio de notificaciones de invitación a canal inicializado" + RESET);
     }
 
     /**
      * Envía una notificación push al usuario invitado sobre una invitación a un canal.
-     * El cliente espera recibir un mensaje tipo "notificacionInvitacionCanal" con:
-     * - channelId
-     * - channelName
-     * - owner (información del invitador)
+     * El cliente espera recibir un mensaje tipo "notificacionInvitacionCanal" con la misma
+     * estructura que obtenerInvitaciones para consistencia.
      *
      * @param canalId El ID del canal al que fue invitado
      * @param usuarioInvitadoId El ID del usuario que recibe la invitación
@@ -70,32 +68,45 @@ public class ServicioNotificarInvitacionCanal implements IServicioCliente {
      */
     public void notificarInvitacion(String canalId, String usuarioInvitadoId, String usuarioInvitadorId) {
         if (canalId == null || usuarioInvitadoId == null || usuarioInvitadorId == null) {
-            LoggerCentral.warn(TAG, AMARILLO + "Parámetros nulos, no se puede notificar" + RESET);
+            LoggerCentral.warn(TAG, ROJO + "Parámetros nulos, no se puede notificar" + RESET);
             return;
         }
 
-        LoggerCentral.info(TAG, CYAN + "📬 Notificando invitación a canal" + RESET);
-        LoggerCentral.info(TAG, "   → Canal: " + canalId);
-        LoggerCentral.info(TAG, "   → Invitado: " + usuarioInvitadoId);
-        LoggerCentral.info(TAG, "   → Invitador: " + usuarioInvitadorId);
+        LoggerCentral.info(TAG, ROJO + "📬 Notificando invitación a canal" + RESET);
+        LoggerCentral.info(TAG, ROJO + "   → Canal: " + canalId + RESET);
+        LoggerCentral.info(TAG, ROJO + "   → Invitado: " + usuarioInvitadoId + RESET);
+        LoggerCentral.info(TAG, ROJO + "   → Invitador: " + usuarioInvitadorId + RESET);
 
         try {
             // Obtener información del canal
             Canal canal = canalRepositorio.obtenerPorId(UUID.fromString(canalId));
             if (canal == null) {
-                LoggerCentral.warn(TAG, AMARILLO + "Canal no encontrado: " + canalId + RESET);
+                LoggerCentral.warn(TAG, ROJO + "Canal no encontrado: " + canalId + RESET);
                 return;
             }
 
             // Obtener información del invitador
             Usuario invitador = usuarioRepositorio.buscarPorId(usuarioInvitadorId);
             if (invitador == null) {
-                LoggerCentral.warn(TAG, AMARILLO + "Usuario invitador no encontrado: " + usuarioInvitadorId + RESET);
+                LoggerCentral.warn(TAG, ROJO + "Usuario invitador no encontrado: " + usuarioInvitadorId + RESET);
                 return;
             }
 
-            // Construir el DTO de la invitación según lo que espera el cliente
-            Map<String, Object> invitacionData = construirInvitacionDTO(canal, invitador);
+            // 🆕 Buscar la invitación en la BD para obtener el invitacionId, estado y fecha
+            CanalInvitacion invitacion = invitacionRepositorio.buscarInvitacionPendiente(
+                UUID.fromString(canalId),
+                UUID.fromString(usuarioInvitadoId)
+            );
+
+            if (invitacion == null) {
+                LoggerCentral.warn(TAG, ROJO + "Invitación no encontrada en BD" + RESET);
+                return;
+            }
+
+            LoggerCentral.info(TAG, ROJO + "✅ Invitación encontrada - ID: " + invitacion.getId() + RESET);
+
+            // Construir el DTO de la invitación según lo que espera el cliente (igual que obtenerInvitaciones)
+            Map<String, Object> invitacionData = construirInvitacionDTO(canal, invitador, invitacion);
 
             // Crear DTOResponse con tipo "notificacionInvitacionCanal"
             DTOResponse notificacion = new DTOResponse(
@@ -111,53 +122,65 @@ public class ServicioNotificarInvitacionCanal implements IServicioCliente {
             // Enviar notificación push al usuario invitado
             gestor.enviarMensajeAUsuario(usuarioInvitadoId, mensajeJson);
 
-            LoggerCentral.info(TAG, VERDE + "✅ Notificación de invitación enviada exitosamente" + RESET);
-            LoggerCentral.info(TAG, MAGENTA + "   → Usuario invitado notificado sobre el canal '" + canal.getNombre() + "'" + RESET);
+            LoggerCentral.info(TAG, ROJO + "✅ Notificación de invitación enviada exitosamente" + RESET);
+            LoggerCentral.info(TAG, ROJO + "   → Usuario invitado notificado sobre el canal '" + canal.getNombre() + "'" + RESET);
 
         } catch (Exception e) {
-            LoggerCentral.error(TAG, "❌ Error enviando notificación de invitación: " + e.getMessage());
+            LoggerCentral.error(TAG, ROJO + "❌ Error enviando notificación de invitación: " + e.getMessage() + RESET);
             e.printStackTrace();
         }
     }
 
     /**
-     * Construye el DTO de la invitación con toda la información necesaria para el cliente.
-     * Estructura esperada por el cliente:
+     * Construye el DTO de la invitación con TODA la información necesaria para el cliente.
+     * 🆕 Estructura UNIFICADA con obtenerInvitaciones:
      * {
+     *   "invitacionId": "...",
      *   "channelId": "...",
      *   "channelName": "...",
-     *   "owner": {
+     *   "estado": "PENDIENTE",
+     *   "fechaCreacion": "...",
+     *   "invitador": {
      *     "userId": "...",
      *     "username": "...",
      *     "userPhoto": "..."
      *   }
      * }
      */
-    private Map<String, Object> construirInvitacionDTO(Canal canal, Usuario invitador) {
+    private Map<String, Object> construirInvitacionDTO(Canal canal, Usuario invitador, CanalInvitacion invitacion) {
         Map<String, Object> dto = new HashMap<>();
 
+        // 🆕 ID de la invitación (importante para responder aceptar/rechazar)
+        dto.put("invitacionId", invitacion.getId().toString());
+
         // Información del canal
-        dto.put("channelId", canal.getId());
+        dto.put("channelId", canal.getId().toString());
         dto.put("channelName", canal.getNombre());
 
-        // Información del invitador (owner)
-        Map<String, String> owner = new HashMap<>();
-        owner.put("userId", invitador.getId());
-        owner.put("username", invitador.getNombre());
-        owner.put("userPhoto", invitador.getFoto() != null ? invitador.getFoto() : "");
+        // 🆕 Estado y fecha de la invitación
+        dto.put("estado", invitacion.getEstado());
+        dto.put("fechaCreacion", invitacion.getFechaCreacion().toString());
 
-        dto.put("owner", owner);
+        // Información del invitador (ahora usa "invitador" en lugar de "owner" para consistencia)
+        Map<String, String> invitadorDTO = new HashMap<>();
+        invitadorDTO.put("userId", invitador.getId());
+        invitadorDTO.put("username", invitador.getNombre());
+        invitadorDTO.put("userPhoto", invitador.getFoto() != null ? invitador.getFoto() : "");
+
+        dto.put("invitador", invitadorDTO);
+
+        LoggerCentral.info(TAG, ROJO + "📦 DTO construido - InvitacionId: " + invitacion.getId() + RESET);
 
         return dto;
     }
 
     @Override
     public void iniciar() {
-        LoggerCentral.info(TAG, VERDE + "Servicio de notificaciones de invitación a canal iniciado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de notificación de invitaciones iniciado" + RESET);
     }
 
     @Override
     public void detener() {
-        LoggerCentral.info(TAG, AMARILLO + "Servicio de notificaciones de invitación a canal detenido" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de notificación de invitaciones detenido" + RESET);
     }
 }

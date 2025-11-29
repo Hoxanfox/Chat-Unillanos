@@ -29,11 +29,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
 
     // Colores ANSI para logs
     private static final String RESET = "\u001B[0m";
-    private static final String VERDE = "\u001B[32m";
-    private static final String AMARILLO = "\u001B[33m";
-    private static final String CYAN = "\u001B[36m";
     private static final String ROJO = "\u001B[31m";
-    private static final String AZUL = "\u001B[34m";
 
     private IGestorConexionesCliente gestor;
     private final CanalInvitacionRepositorio invitacionRepositorio;
@@ -50,7 +46,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
         this.invitacionRepositorio = new CanalInvitacionRepositorio();
         this.canalRepositorio = new CanalRepositorio();
         this.gson = new Gson();
-        LoggerCentral.info(TAG, AZUL + "Constructor: ServicioInvitarMiembro creado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Constructor: ServicioInvitarMiembro creado" + RESET);
     }
 
     /**
@@ -58,7 +54,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
      */
     public void setServicioNotificacion(ServicioNotificacionCliente servicioNotificacion) {
         this.servicioNotificacion = servicioNotificacion;
-        LoggerCentral.info(TAG, VERDE + "Servicio de notificaciones CS configurado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de notificaciones CS configurado" + RESET);
     }
 
     /**
@@ -66,7 +62,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
      */
     public void setServicioSincronizacionP2P(ServicioSincronizacionDatos servicioSyncP2P) {
         this.servicioSyncP2P = servicioSyncP2P;
-        LoggerCentral.info(TAG, VERDE + "Servicio de sincronización P2P configurado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de sincronización P2P configurado" + RESET);
     }
 
     /**
@@ -74,7 +70,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
      */
     public void setServicioNotificarInvitacion(ServicioNotificarInvitacionCanal servicioNotificarInvitacion) {
         this.servicioNotificarInvitacion = servicioNotificarInvitacion;
-        LoggerCentral.info(TAG, VERDE + "Servicio de notificación de invitaciones configurado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de notificación de invitaciones configurado" + RESET);
     }
 
     /**
@@ -82,7 +78,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
      */
     public void setServicioNotificacionCambios(ServicioNotificacionCambios servicio) {
         this.servicioNotificacionCambios = servicio;
-        LoggerCentral.info(TAG, VERDE + "Servicio de notificación de cambios configurado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Servicio de notificación de cambios configurado" + RESET);
     }
 
     @Override
@@ -93,17 +89,17 @@ public class ServicioInvitarMiembro implements IServicioCliente {
     @Override
     public void inicializar(IGestorConexionesCliente gestor, IRouterMensajesCliente router) {
         this.gestor = gestor;
-        LoggerCentral.info(TAG, AZUL + "Inicializando ServicioInvitarMiembro..." + RESET);
+        LoggerCentral.info(TAG, ROJO + "Inicializando ServicioInvitarMiembro..." + RESET);
 
         // ==================== RUTA: Invitar Miembro ====================
         router.registrarAccion("invitarmiembro", (datos, idSesion) -> {
             try {
-                LoggerCentral.info(TAG, CYAN + "📥 Recibida petición de invitar miembro" + RESET);
+                LoggerCentral.info(TAG, ROJO + "📥 Recibida petición de invitar miembro" + RESET);
 
                 // 1. Validar autenticación
                 String adminId = gestor.obtenerUsuarioDeSesion(idSesion);
                 if (adminId == null) {
-                    LoggerCentral.warn(TAG, AMARILLO + "Usuario no autenticado" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "Usuario no autenticado" + RESET);
                     return new DTOResponse("invitarmiembro", "error", "Usuario no autenticado", null);
                 }
 
@@ -112,12 +108,12 @@ public class ServicioInvitarMiembro implements IServicioCliente {
 
                 // 3. Validar datos
                 if (dto.getCanalId() == null || dto.getCanalId().trim().isEmpty()) {
-                    LoggerCentral.warn(TAG, AMARILLO + "ID de canal inválido" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "ID de canal inválido" + RESET);
                     return new DTOResponse("invitarmiembro", "error", "ID de canal requerido", null);
                 }
 
                 if (dto.getContactoId() == null || dto.getContactoId().trim().isEmpty()) {
-                    LoggerCentral.warn(TAG, AMARILLO + "ID de contacto inválido" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "ID de contacto inválido" + RESET);
                     return new DTOResponse("invitarmiembro", "error", "ID de contacto requerido", null);
                 }
 
@@ -125,15 +121,15 @@ public class ServicioInvitarMiembro implements IServicioCliente {
                 UUID contactoId = UUID.fromString(dto.getContactoId());
                 UUID adminUUID = UUID.fromString(adminId);
 
-                LoggerCentral.info(TAG, CYAN + "📤 Procesando invitación" + RESET);
-                LoggerCentral.info(TAG, "   → Canal: " + canalId);
-                LoggerCentral.info(TAG, "   → Invitador (Admin): " + adminId);
-                LoggerCentral.info(TAG, "   → Invitado (Contacto): " + contactoId);
+                LoggerCentral.info(TAG, ROJO + "📤 Procesando invitación" + RESET);
+                LoggerCentral.info(TAG, ROJO + "   → Canal: " + canalId + RESET);
+                LoggerCentral.info(TAG, ROJO + "   → Invitador (Admin): " + adminId + RESET);
+                LoggerCentral.info(TAG, ROJO + "   → Invitado (Contacto): " + contactoId + RESET);
 
                 // 4. Verificar que el canal existe
                 Canal canal = canalRepositorio.obtenerPorId(canalId);
                 if (canal == null) {
-                    LoggerCentral.warn(TAG, AMARILLO + "Canal no encontrado" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "Canal no encontrado" + RESET);
                     return new DTOResponse("invitarmiembro", "error", "Canal no encontrado", null);
                 }
 
@@ -147,7 +143,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
 
                 // 7. Verificar si ya existe una invitación pendiente
                 if (invitacionRepositorio.existeInvitacionPendiente(canalId, contactoId)) {
-                    LoggerCentral.warn(TAG, AMARILLO + "Ya existe una invitación pendiente para este usuario" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "Ya existe una invitación pendiente para este usuario" + RESET);
                     return new DTOResponse("invitarmiembro", "error", "Ya existe una invitación pendiente", null);
                 }
 
@@ -162,7 +158,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
                     return new DTOResponse("invitarmiembro", "error", "Error al guardar invitación", null);
                 }
 
-                LoggerCentral.info(TAG, VERDE + "✅ Invitación guardada en BD - ID: " + invitacion.getId() + RESET);
+                LoggerCentral.info(TAG, ROJO + "✅ Invitación guardada en BD - ID: " + invitacion.getId() + RESET);
 
                 // 10. ✅ Enviar notificación push detallada al usuario invitado
                 if (servicioNotificarInvitacion != null) {
@@ -171,9 +167,9 @@ public class ServicioInvitarMiembro implements IServicioCliente {
                         contactoId.toString(),
                         adminId
                     );
-                    LoggerCentral.info(TAG, VERDE + "✅ Notificación push de invitación enviada" + RESET);
+                    LoggerCentral.info(TAG, ROJO + "✅ Notificación push de invitación enviada" + RESET);
                 } else {
-                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ Servicio de notificación de invitaciones no disponible" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "⚠️ Servicio de notificación de invitaciones no disponible" + RESET);
                 }
 
                 // 11. ✅ Notificar al usuario invitado (SIGNAL_UPDATE genérico)
@@ -186,7 +182,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
                     notificacionData.put("invitadorId", adminId);
 
                     servicioNotificacion.actualizar("NUEVA_INVITACION", notificacionData);
-                    LoggerCentral.info(TAG, VERDE + "✅ SIGNAL_UPDATE enviado para nueva invitación" + RESET);
+                    LoggerCentral.info(TAG, ROJO + "✅ SIGNAL_UPDATE enviado para nueva invitación" + RESET);
                 }
 
                 // 12. ✅ Notificar al sistema de cambios para activar P2P
@@ -195,11 +191,10 @@ public class ServicioInvitarMiembro implements IServicioCliente {
                             ServicioNotificacionCambios.TipoEvento.CAMBIO_INVITACION_CANAL,
                             invitacion
                     );
-                    LoggerCentral.info(TAG, CYAN + "🔄 Notificación de cambio de invitación enviada para sync P2P" + RESET);
+                    LoggerCentral.info(TAG, ROJO + "🔄 Notificación de cambio de invitación enviada para sync P2P" + RESET);
                 } else {
-                    LoggerCentral.warn(TAG, AMARILLO + "⚠️ Notificador de cambios es NULL - La sync P2P podría no activarse" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "⚠️ Notificador de cambios es NULL - La sync P2P podría no activarse" + RESET);
                 }
-
 
                 // 13. Preparar respuesta
                 Map<String, Object> respuesta = new HashMap<>();
@@ -209,7 +204,7 @@ public class ServicioInvitarMiembro implements IServicioCliente {
                 respuesta.put("estado", invitacion.getEstado());
                 respuesta.put("fechaCreacion", invitacion.getFechaCreacion().toString());
 
-                LoggerCentral.info(TAG, VERDE + "✅ Invitación creada exitosamente" + RESET);
+                LoggerCentral.info(TAG, ROJO + "✅ Invitación creada exitosamente" + RESET);
 
                 return new DTOResponse("invitarmiembro", "success", "Invitación enviada exitosamente", gson.toJsonTree(respuesta));
 
@@ -223,16 +218,16 @@ public class ServicioInvitarMiembro implements IServicioCliente {
             }
         });
 
-        LoggerCentral.info(TAG, VERDE + "✅ Servicio inicializado - Ruta 'invitarmiembro' registrada" + RESET);
+        LoggerCentral.info(TAG, ROJO + "✅ Servicio inicializado - Ruta 'invitarmiembro' registrada" + RESET);
     }
 
     @Override
     public void iniciar() {
-        LoggerCentral.info(TAG, "Servicio de invitar miembro iniciado");
+        LoggerCentral.info(TAG, ROJO + "Servicio de invitar miembro iniciado" + RESET);
     }
 
     @Override
     public void detener() {
-        LoggerCentral.info(TAG, "Servicio de invitar miembro detenido");
+        LoggerCentral.info(TAG, ROJO + "Servicio de invitar miembro detenido" + RESET);
     }
 }

@@ -25,11 +25,7 @@ public class ServicioObtenerInvitaciones implements IServicioCliente {
 
     // Colores ANSI para logs
     private static final String RESET = "\u001B[0m";
-    private static final String VERDE = "\u001B[32m";
-    private static final String AMARILLO = "\u001B[33m";
-    private static final String CYAN = "\u001B[36m";
     private static final String ROJO = "\u001B[31m";
-    private static final String AZUL = "\u001B[34m";
 
     private IGestorConexionesCliente gestor;
     private final CanalInvitacionRepositorio invitacionRepositorio;
@@ -42,7 +38,7 @@ public class ServicioObtenerInvitaciones implements IServicioCliente {
         this.canalRepositorio = new CanalRepositorio();
         this.usuarioRepositorio = new UsuarioRepositorio();
         this.gson = new Gson();
-        LoggerCentral.info(TAG, AZUL + "Constructor: ServicioObtenerInvitaciones creado" + RESET);
+        LoggerCentral.info(TAG, ROJO + "Constructor: ServicioObtenerInvitaciones creado" + RESET);
     }
 
     @Override
@@ -53,17 +49,17 @@ public class ServicioObtenerInvitaciones implements IServicioCliente {
     @Override
     public void inicializar(IGestorConexionesCliente gestor, IRouterMensajesCliente router) {
         this.gestor = gestor;
-        LoggerCentral.info(TAG, AZUL + "Inicializando ServicioObtenerInvitaciones..." + RESET);
+        LoggerCentral.info(TAG, ROJO + "Inicializando ServicioObtenerInvitaciones..." + RESET);
 
         // ==================== RUTA: Obtener Invitaciones ====================
         router.registrarAccion("obtenerInvitaciones", (datos, idSesion) -> {
             try {
-                LoggerCentral.info(TAG, CYAN + "📥 Recibida petición de obtener invitaciones" + RESET);
+                LoggerCentral.info(TAG, ROJO + "📥 Recibida petición de obtener invitaciones" + RESET);
 
                 // 1. Validar autenticación
                 String usuarioIdSesion = gestor.obtenerUsuarioDeSesion(idSesion);
                 if (usuarioIdSesion == null) {
-                    LoggerCentral.warn(TAG, AMARILLO + "Usuario no autenticado" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "Usuario no autenticado" + RESET);
                     return new DTOResponse("obtenerInvitaciones", "error", "Usuario no autenticado", null);
                 }
 
@@ -72,48 +68,48 @@ public class ServicioObtenerInvitaciones implements IServicioCliente {
                 String usuarioId = payload.get("usuarioId") != null ? payload.get("usuarioId").toString() : null;
 
                 if (usuarioId == null || usuarioId.trim().isEmpty()) {
-                    LoggerCentral.warn(TAG, AMARILLO + "ID de usuario inválido" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "ID de usuario inválido" + RESET);
                     return new DTOResponse("obtenerInvitaciones", "error", "ID de usuario requerido", null);
                 }
 
                 // 3. Verificar que el usuario del payload coincide con el de la sesión
                 if (!usuarioId.equals(usuarioIdSesion)) {
-                    LoggerCentral.warn(TAG, AMARILLO + "Usuario no autorizado" + RESET);
+                    LoggerCentral.warn(TAG, ROJO + "Usuario no autorizado" + RESET);
                     return new DTOResponse("obtenerInvitaciones", "error", "No autorizado", null);
                 }
 
                 UUID usuarioUUID = UUID.fromString(usuarioId);
 
-                LoggerCentral.info(TAG, CYAN + "📤 Obteniendo invitaciones para usuario: " + usuarioId + RESET);
+                LoggerCentral.info(TAG, ROJO + "📤 Obteniendo invitaciones para usuario: " + usuarioId + RESET);
 
                 // 4. Obtener invitaciones pendientes del usuario
                 List<CanalInvitacion> invitaciones = invitacionRepositorio.obtenerInvitacionesPendientesPorUsuario(usuarioUUID);
 
-                LoggerCentral.info(TAG, VERDE + "✅ Encontradas " + invitaciones.size() + " invitaciones pendientes" + RESET);
+                LoggerCentral.info(TAG, ROJO + "✅ Encontradas " + invitaciones.size() + " invitaciones pendientes" + RESET);
 
                 // 5. Construir la respuesta con información detallada de cada invitación
                 List<Map<String, Object>> invitacionesDTO = new ArrayList<>();
 
-                LoggerCentral.info(TAG, CYAN + "🔄 Procesando " + invitaciones.size() + " invitaciones..." + RESET);
+                LoggerCentral.info(TAG, ROJO + "🔄 Procesando " + invitaciones.size() + " invitaciones..." + RESET);
 
                 for (CanalInvitacion invitacion : invitaciones) {
-                    LoggerCentral.info(TAG, CYAN + "  → Procesando invitación: " + invitacion.getId() + RESET);
+                    LoggerCentral.info(TAG, ROJO + "  → Procesando invitación: " + invitacion.getId() + RESET);
 
                     // Obtener información del canal
                     Canal canal = canalRepositorio.obtenerPorId(invitacion.getCanalId());
                     if (canal == null) {
-                        LoggerCentral.warn(TAG, AMARILLO + "  ⚠️ Canal no encontrado: " + invitacion.getCanalId() + RESET);
+                        LoggerCentral.warn(TAG, ROJO + "  ⚠️ Canal no encontrado: " + invitacion.getCanalId() + RESET);
                         continue;
                     }
-                    LoggerCentral.info(TAG, VERDE + "  ✅ Canal encontrado: " + canal.getNombre() + RESET);
+                    LoggerCentral.info(TAG, ROJO + "  ✅ Canal encontrado: " + canal.getNombre() + RESET);
 
                     // Obtener información del invitador
                     Usuario invitador = usuarioRepositorio.buscarPorId(invitacion.getInvitadorId().toString());
                     if (invitador == null) {
-                        LoggerCentral.warn(TAG, AMARILLO + "  ⚠️ Invitador no encontrado: " + invitacion.getInvitadorId() + RESET);
+                        LoggerCentral.warn(TAG, ROJO + "  ⚠️ Invitador no encontrado: " + invitacion.getInvitadorId() + RESET);
                         continue;
                     }
-                    LoggerCentral.info(TAG, VERDE + "  ✅ Invitador encontrado: " + invitador.getNombre() + RESET);
+                    LoggerCentral.info(TAG, ROJO + "  ✅ Invitador encontrado: " + invitador.getNombre() + RESET);
 
                     // Construir DTO de la invitación
                     Map<String, Object> invitacionDTO = new HashMap<>();
@@ -134,7 +130,7 @@ public class ServicioObtenerInvitaciones implements IServicioCliente {
                     invitacionesDTO.add(invitacionDTO);
                 }
 
-                LoggerCentral.info(TAG, VERDE + "✅ Devolviendo " + invitacionesDTO.size() + " invitaciones al cliente" + RESET);
+                LoggerCentral.info(TAG, ROJO + "✅ Devolviendo " + invitacionesDTO.size() + " invitaciones al cliente" + RESET);
 
                 // 6. Preparar respuesta
                 Map<String, Object> respuesta = new HashMap<>();
@@ -153,17 +149,16 @@ public class ServicioObtenerInvitaciones implements IServicioCliente {
             }
         });
 
-        LoggerCentral.info(TAG, VERDE + "✅ Servicio inicializado - Ruta 'obtenerInvitaciones' registrada" + RESET);
+        LoggerCentral.info(TAG, ROJO + "✅ Servicio inicializado - Ruta 'obtenerInvitaciones' registrada" + RESET);
     }
 
     @Override
     public void iniciar() {
-        LoggerCentral.info(TAG, "Servicio de obtener invitaciones iniciado");
+        LoggerCentral.info(TAG, ROJO + "Servicio de obtener invitaciones iniciado" + RESET);
     }
 
     @Override
     public void detener() {
-        LoggerCentral.info(TAG, "Servicio de obtener invitaciones detenido");
+        LoggerCentral.info(TAG, ROJO + "Servicio de obtener invitaciones detenido" + RESET);
     }
 }
-

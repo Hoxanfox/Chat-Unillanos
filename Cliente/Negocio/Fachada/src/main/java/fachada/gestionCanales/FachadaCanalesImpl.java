@@ -156,6 +156,16 @@ public class FachadaCanalesImpl implements IFachadaCanales {
     @Override
     public void registrarObservadorInvitaciones(IObservador observador) {
         System.out.println("🔔 [FachadaCanales]: Registrando observador de invitaciones");
+        System.out.println("   Tipo de observador: " + observador.getClass().getSimpleName());
         gestorInvitaciones.registrarObservador(observador);
+        System.out.println("✅ [FachadaCanales]: Observador registrado exitosamente");
+    }
+
+    /**
+     * Obtiene el gestor de invitaciones para permitir registro directo de observadores.
+     * @return IGestorInvitaciones
+     */
+    public IGestorInvitaciones getGestorInvitaciones() {
+        return gestorInvitaciones;
     }
 }
