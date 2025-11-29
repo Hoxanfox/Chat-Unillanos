@@ -50,4 +50,10 @@ public interface IServicioClienteControl extends ISujeto {
      * Obtiene la lista de sesiones activas (DTOs transversales).
      */
     List<DTOSesionCliente> getSesionesActivas();
+
+    /**
+     * ✅ NUEVO: Desconecta un cliente específico por su ID de sesión.
+     * @param idSesion ID de la sesión del cliente a desconectar
+     */
+    void desconectarCliente(String idSesion);
 }

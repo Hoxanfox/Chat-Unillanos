@@ -2,6 +2,7 @@ package repositorio.comunicacion;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import configuracion.Configuracion;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Driver;
@@ -17,30 +18,35 @@ public class MySQLManager {
 
     private MySQLManager() {
         try {
-            String host = System.getenv().getOrDefault("DB_HOST", "localhost");
-            String port = System.getenv().getOrDefault("DB_PORT", "3306");
-            String db = System.getenv().getOrDefault("DB_NAME", "chat_unillanos");
-            String user = System.getenv().getOrDefault("DB_USER", "chatuser");
-            String pass = System.getenv().getOrDefault("DB_PASS", "chatpass");
-            int maxPool = Integer.parseInt(System.getenv().getOrDefault("DB_MAX_POOL", "10"));
+            // ✅ NUEVO: Leer configuración desde configuracion.txt
+            Configuracion config = Configuracion.getInstance();
 
-            String jdbcUrl = String.format("jdbc:mysql://%s:%s/%s?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&characterEncoding=UTF-8", host, port, db);
+            String host = config.getDbHost();
+            int port = config.getDbPort();
+            String db = config.getDbName();
+            String user = config.getDbUser();
+            String pass = config.getDbPass();
+            int maxPool = config.getDbMaxPool();
 
-            HikariConfig config = new HikariConfig();
-            config.setJdbcUrl(jdbcUrl);
-            config.setUsername(user);
-            config.setPassword(pass);
-            config.setMaximumPoolSize(maxPool);
-            config.setMinimumIdle(1);
-            config.setPoolName("HikariPool-Repositorio");
-            config.addDataSourceProperty("cachePrepStmts", "true");
-            config.addDataSourceProperty("prepStmtCacheSize", "250");
-            config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+            String jdbcUrl = String.format("jdbc:mysql://%s:%d/%s?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&characterEncoding=UTF-8",
+                host, port, db);
 
-            this.dataSource = new HikariDataSource(config);
-            logger.info("Inicializado HikariCP para MySQL: {}", jdbcUrl);
+            HikariConfig hikariConfig = new HikariConfig();
+            hikariConfig.setJdbcUrl(jdbcUrl);
+            hikariConfig.setUsername(user);
+            hikariConfig.setPassword(pass);
+            hikariConfig.setMaximumPoolSize(maxPool);
+            hikariConfig.setMinimumIdle(1);
+            hikariConfig.setPoolName("HikariPool-Repositorio");
+            hikariConfig.addDataSourceProperty("cachePrepStmts", "true");
+            hikariConfig.addDataSourceProperty("prepStmtCacheSize", "250");
+            hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+
+            this.dataSource = new HikariDataSource(hikariConfig);
+            logger.info("✅ HikariCP inicializado para MySQL: {}", jdbcUrl);
+            logger.info("📊 Configuración DB: host={}, port={}, database={}, maxPool={}", host, port, db, maxPool);
         } catch (Exception e) {
-            logger.error("Error inicializando MySQLManager", e);
+            logger.error("❌ Error inicializando MySQLManager", e);
             throw new RuntimeException(e);
         }
     }

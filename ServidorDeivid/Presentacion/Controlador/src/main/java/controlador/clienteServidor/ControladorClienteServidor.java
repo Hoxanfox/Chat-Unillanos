@@ -161,6 +161,50 @@ public class ControladorClienteServidor implements IObservador {
     }
 
     // =========================================================================
+    // MÉTODOS DE GESTIÓN DE CLIENTES
+    // =========================================================================
+
+    /**
+     * ✅ NUEVO: Desconecta un cliente específico por su ID de sesión.
+     * @param idSesion ID de la sesión del cliente a desconectar
+     * @return true si se desconectó correctamente
+     */
+    public boolean desconectarCliente(String idSesion) {
+        LoggerCentral.info(TAG, "Desconectando cliente: " + idSesion);
+        try {
+            servicio.desconectarCliente(idSesion);
+            LoggerCentral.info(TAG, "✓ Cliente desconectado exitosamente: " + idSesion);
+            return true;
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error al desconectar cliente " + idSesion + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Desconecta un usuario específico (busca su sesión activa).
+     * @param idUsuario ID del usuario a desconectar
+     * @return true si se desconectó correctamente
+     */
+    public boolean desconectarUsuario(String idUsuario) {
+        LoggerCentral.info(TAG, "Desconectando usuario: " + idUsuario);
+        try {
+            // Buscar la sesión del usuario
+            List<DTOSesionCliente> sesiones = getSesionesActivas();
+            for (DTOSesionCliente sesion : sesiones) {
+                if (idUsuario.equals(sesion.getIdUsuario())) {
+                    return desconectarCliente(sesion.getIdSesion());
+                }
+            }
+            LoggerCentral.warn(TAG, "Usuario no encontrado: " + idUsuario);
+            return false;
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error al desconectar usuario " + idUsuario + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    // =========================================================================
     // PATRÓN OBSERVER (componente transversal)
     // =========================================================================
 
