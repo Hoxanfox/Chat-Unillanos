@@ -111,4 +111,17 @@ public class ControladorCanalesImpl implements IControladorCanales {
         System.out.println("🔔 [ControladorCanales]: Registrando observador de invitaciones");
         servicioCanales.registrarObservadorInvitaciones(observador);
     }
+
+    @Override
+    public CompletableFuture<Void> reproducirAudio(String fileId) {
+        System.out.println("🎵 [ControladorCanales]: Delegando reproducción de audio al servicio");
+        return servicioCanales.reproducirAudio(fileId);
+    }
+
+    // 🆕 Método para informar al gestor del canal activo
+    @Override
+    public void setCanalActivo(String canalId) {
+        System.out.println("📍 [ControladorCanales]: Estableciendo canal activo: " + canalId);
+        servicioCanales.setCanalActivo(canalId);
+    }
 }

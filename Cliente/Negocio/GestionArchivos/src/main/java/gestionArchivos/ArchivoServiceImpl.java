@@ -284,27 +284,44 @@ public class ArchivoServiceImpl implements IArchivoService {
 
     /**
      * Construye la ruta completa del archivo basándose en el fileId y nombre.
+     * Compatible con Linux y Windows, previene path traversal.
      */
     private File construirRutaArchivo(String fileId, String nombreArchivo) {
-        // El fileId puede contener subcarpetas (ej: "user_photos/deivid1.jpg")
-        // Extraer el directorio del fileId si lo tiene
-        String fileIdLimpio = fileId.replace("\\", "/");
-        int lastSlash = fileIdLimpio.lastIndexOf('/');
-        
-        if (lastSlash > 0) {
-            String subdirectorio = fileIdLimpio.substring(0, lastSlash);
-            File directorioCompleto = new File(directorioRaiz, subdirectorio);
-            
-            try {
-                crearDirectorioSiNoExiste(directorioCompleto);
-            } catch (IOException e) {
-                System.err.println("[ArchivoService] Error al crear subdirectorio: " + e.getMessage());
+        try {
+            // Normalizar el fileId: reemplazar backslashes por forward slashes
+            String fileIdNormalizado = fileId.replace("\\", "/");
+
+            // Prevenir path traversal eliminando ".."
+            if (fileIdNormalizado.contains("..")) {
+                System.err.println("[ArchivoService] ⚠️ Path traversal detectado y bloqueado: " + fileId);
+                fileIdNormalizado = fileIdNormalizado.replace("..", "");
             }
             
-            return new File(directorioCompleto, nombreArchivo);
+            // Remover barras iniciales
+            fileIdNormalizado = fileIdNormalizado.replaceAll("^/+", "");
+
+            int lastSlash = fileIdNormalizado.lastIndexOf('/');
+
+            if (lastSlash > 0) {
+                // El fileId contiene subdirectorios
+                String subdirectorio = fileIdNormalizado.substring(0, lastSlash);
+
+                // Usar Path para construcción multiplataforma
+                Path directorioCompleto = directorioRaiz.toPath().resolve(subdirectorio).normalize();
+
+                // Crear directorio si no existe
+                crearDirectorioSiNoExiste(directorioCompleto.toFile());
+
+                return new File(directorioCompleto.toFile(), nombreArchivo);
+            }
+
+            return new File(directorioRaiz, nombreArchivo);
+
+        } catch (Exception e) {
+            System.err.println("[ArchivoService] Error al construir ruta: " + e.getMessage());
+            // Fallback seguro
+            return new File(directorioRaiz, nombreArchivo);
         }
-        
-        return new File(directorioRaiz, nombreArchivo);
     }
 
     /**

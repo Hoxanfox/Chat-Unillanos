@@ -81,30 +81,39 @@ public class GestorRespuesta implements IGestorRespuesta {
     private void procesarRespuesta(String jsonResponse) {
         try {
             DTOResponse response = gson.fromJson(jsonResponse, DTOResponse.class);
-            if (response != null && response.getAction() != null) {
-                // Normalizar la acción a minúsculas para comparación case-insensitive
-                String actionNormalizada = response.getAction().toLowerCase();
+            if (response != null) {
+                // Obtener el identificador (puede ser action o type)
+                String identificador = response.getIdentificador();
 
-                // Buscar manejador con la acción original o normalizada
-                Consumer<DTOResponse> manejador = manejadores.get(response.getAction());
-                if (manejador == null) {
-                    // Intentar buscar con todas las claves normalizadas
-                    for (Map.Entry<String, Consumer<DTOResponse>> entry : manejadores.entrySet()) {
-                        if (entry.getKey().toLowerCase().equals(actionNormalizada)) {
-                            manejador = entry.getValue();
-                            break;
+                if (identificador != null) {
+                    // Normalizar el identificador a minúsculas para comparación case-insensitive
+                    String identificadorNormalizado = identificador.toLowerCase();
+
+                    // Buscar manejador con el identificador original o normalizado
+                    Consumer<DTOResponse> manejador = manejadores.get(identificador);
+                    if (manejador == null) {
+                        // Intentar buscar con todas las claves normalizadas
+                        for (Map.Entry<String, Consumer<DTOResponse>> entry : manejadores.entrySet()) {
+                            if (entry.getKey().toLowerCase().equals(identificadorNormalizado)) {
+                                manejador = entry.getValue();
+                                break;
+                            }
                         }
                     }
-                }
 
-                if (manejador != null) {
-                    manejador.accept(response);
+                    if (manejador != null) {
+                        System.out.println("✅ Ejecutando manejador para: " + identificador);
+                        manejador.accept(response);
+                    } else {
+                        System.out.println("⚠️ No se encontró un manejador para: " + identificador);
+                    }
                 } else {
-                    System.out.println("No se encontró un manejador para la acción: " + response.getAction());
+                    System.out.println("⚠️ Respuesta sin identificador (action/type): " + jsonResponse);
                 }
             }
         } catch (JsonSyntaxException e) {
-            System.err.println("Error al parsear la respuesta JSON: " + jsonResponse);
+            System.err.println("❌ Error al parsear la respuesta JSON: " + jsonResponse);
+            e.printStackTrace();
         }
     }
 

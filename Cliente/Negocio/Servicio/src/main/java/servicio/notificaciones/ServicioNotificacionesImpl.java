@@ -1,5 +1,6 @@
 package servicio.notificaciones;
 
+import dto.featureNotificaciones.DTONotificacion;
 import fachada.Fachada;
 import fachada.IFachada;
 import observador.IObservador;
@@ -11,8 +12,9 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Implementación del servicio de notificaciones.
  * Actúa como intermediario entre el Controlador y la Fachada.
+ * Implementa IObservador para recibir notificaciones en tiempo real desde la fachada.
  */
-public class ServicioNotificacionesImpl implements IServicioNotificaciones {
+public class ServicioNotificacionesImpl implements IServicioNotificaciones, IObservador {
 
     private final IFachada fachada;
     private final List<IObservador> observadores;
@@ -20,23 +22,38 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
     public ServicioNotificacionesImpl() {
         this.fachada = Fachada.obtenerInstancia();
         this.observadores = new ArrayList<>();
-        System.out.println("✅ [ServicioNotificaciones]: Creado e instanciado la Fachada.");
+
+        // ✨ CLAVE: Registrarse como observador de la fachada de notificaciones
+        this.fachada.registrarObservadorNotificaciones(this);
+
+        System.out.println("✅ [ServicioNotificaciones]: Creado, instanciado la Fachada y registrado como observador.");
     }
 
     @Override
     public void solicitarActualizacionNotificaciones() {
-        System.out.println("📡 [ServicioNotificaciones]: Solicitando lista de notificaciones a la Fachada...");
+        System.err.println("📡📡📡 [ServicioNotificaciones]: ========== SOLICITANDO ACTUALIZACIÓN ==========");
+        System.err.println("📡 [ServicioNotificaciones]: Solicitando lista de notificaciones a la Fachada...");
 
-        fachada.obtenerNotificaciones()
-                .thenAccept(notificaciones -> {
-                    System.out.println("✅ [ServicioNotificaciones]: Recibidas " + notificaciones.size() + " notificaciones");
-                    notificarObservadores("ACTUALIZAR_NOTIFICACIONES", notificaciones);
-                })
-                .exceptionally(ex -> {
-                    System.err.println("❌ [ServicioNotificaciones]: Error al obtener notificaciones: " + ex.getMessage());
-                    notificarObservadores("ERROR_NOTIFICACIONES", ex.getMessage());
-                    return null;
-                });
+        // ✅ SOLUCIÓN: Obtener directamente del caché local
+        List<DTONotificacion> notificacionesCache = fachada.obtenerNotificacionesCache();
+        System.err.println("📦📦📦 [ServicioNotificaciones]: " + notificacionesCache.size() + " notificaciones en caché local");
+
+        if (notificacionesCache.isEmpty()) {
+            System.err.println("⚠️⚠️⚠️ [ServicioNotificaciones]: CACHÉ VACÍO - No hay notificaciones para mostrar");
+        } else {
+            System.err.println("✅✅✅ [ServicioNotificaciones]: Notificaciones encontradas:");
+            for (int i = 0; i < notificacionesCache.size(); i++) {
+                DTONotificacion n = notificacionesCache.get(i);
+                System.err.println("   [" + (i+1) + "] ID: " + n.getId() + ", Tipo: " + n.getTipo() + ", Título: " + n.getTitulo());
+            }
+        }
+
+        System.err.println("📋 [ServicioNotificaciones]: Total notificaciones a mostrar: " + notificacionesCache.size());
+        System.err.println("📢 [ServicioNotificaciones]: Notificando a " + observadores.size() + " observadores con evento LISTA_NOTIFICACIONES");
+
+        // ✅ Notificar inmediatamente con las notificaciones del caché
+        notificarObservadores("LISTA_NOTIFICACIONES", notificacionesCache);
+        System.err.println("📡📡📡 [ServicioNotificaciones]: ========== ACTUALIZACIÓN FINALIZADA ==========");
     }
 
     @Override
@@ -50,7 +67,8 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
                 })
                 .exceptionally(ex -> {
                     System.err.println("❌ [ServicioNotificaciones]: Error al marcar como leída: " + ex.getMessage());
-                    return null;
+                    notificarObservadores("ERROR_NOTIFICACIONES", "Error al marcar como leída: " + ex.getMessage());
+                    throw new RuntimeException(ex); // ✅ Propagar la excepción
                 });
     }
 
@@ -65,7 +83,8 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
                 })
                 .exceptionally(ex -> {
                     System.err.println("❌ [ServicioNotificaciones]: Error al marcar todas como leídas: " + ex.getMessage());
-                    return null;
+                    notificarObservadores("ERROR_NOTIFICACIONES", "Error al marcar todas como leídas: " + ex.getMessage());
+                    throw new RuntimeException(ex); // ✅ Propagar la excepción
                 });
     }
 
@@ -82,15 +101,15 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
                 .exceptionally(ex -> {
                     System.err.println("❌ [ServicioNotificaciones]: Error al aceptar invitación: " + ex.getMessage());
                     notificarObservadores("ERROR_NOTIFICACIONES", "Error al aceptar invitación: " + ex.getMessage());
-                    return null;
+                    throw new RuntimeException(ex); // ✅ Propagar la excepción
                 });
     }
 
     @Override
-    public CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId) {
-        System.out.println("❌ [ServicioNotificaciones]: Rechazando invitación: " + invitacionId);
+    public CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId, String canalId) {
+        System.out.println("❌ [ServicioNotificaciones]: Rechazando invitación: " + invitacionId + " del canal: " + canalId);
 
-        return fachada.rechazarInvitacionCanal(invitacionId)
+        return fachada.rechazarInvitacionCanal(invitacionId, canalId)
                 .thenRun(() -> {
                     System.out.println("✅ [ServicioNotificaciones]: Invitación rechazada exitosamente");
                     solicitarActualizacionNotificaciones(); // Actualizar la lista
@@ -99,7 +118,7 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
                 .exceptionally(ex -> {
                     System.err.println("❌ [ServicioNotificaciones]: Error al rechazar invitación: " + ex.getMessage());
                     notificarObservadores("ERROR_NOTIFICACIONES", "Error al rechazar invitación: " + ex.getMessage());
-                    return null;
+                    throw new RuntimeException(ex); // ✅ Propagar la excepción
                 });
     }
 
@@ -115,6 +134,20 @@ public class ServicioNotificacionesImpl implements IServicioNotificaciones {
     public void removerObservador(IObservador observador) {
         observadores.remove(observador);
         System.out.println("🗑️ [ServicioNotificaciones]: Observador removido. Total: " + observadores.size());
+    }
+
+    @Override
+    public void actualizar(String tipoDeDato, Object datos) {
+        System.out.println("📢 [ServicioNotificaciones]: Notificación recibida de la fachada - Tipo: " + tipoDeDato);
+
+        // Si es una nueva notificación en tiempo real, actualizar la lista completa
+        if ("NUEVA_NOTIFICACION".equals(tipoDeDato)) {
+            System.out.println("🔔 [ServicioNotificaciones]: Nueva notificación en tiempo real, actualizando lista...");
+            solicitarActualizacionNotificaciones();
+        }
+
+        // Redistribuir la notificación a los observadores del servicio (la UI)
+        notificarObservadores(tipoDeDato, datos);
     }
 
     private void notificarObservadores(String tipoDeDato, Object datos) {

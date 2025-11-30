@@ -158,6 +158,14 @@ public class VistaContactoChat extends BorderPane implements IObservador {
         System.out.println("📥 [VistaContactoChat]: Notificación recibida - Tipo: " + tipoDeDato);
 
         switch (tipoDeDato) {
+            case "REFRESCAR_MENSAJES":
+                // Señal de actualización global - refrescar el historial
+                System.out.println("🔄 [VistaContactoChat]: Refrescando mensajes por SIGNAL_UPDATE");
+                Platform.runLater(() -> {
+                    controlador.solicitarHistorial(contacto.getId());
+                });
+                break;
+
             case "NUEVO_MENSAJE_PRIVADO":
                 // Mensaje recibido de otro usuario (PUSH del servidor)
                 if (datos instanceof DTOMensaje) {
@@ -219,6 +227,32 @@ public class VistaContactoChat extends BorderPane implements IObservador {
                         Platform.runLater(() -> agregarMensaje(mensaje));
                     } else {
                         System.out.println("⚠️ [VistaContactoChat]: Mensaje ignorado (no es del contacto actual)");
+                    }
+                }
+                break;
+
+            case "NUEVO_MENSAJE_AUDIO_PRIVADO":
+                // ✅ NUEVO: Mensaje de audio PUSH (ya procesado por ServicioChat)
+                if (datos instanceof DTOMensaje) {
+                    DTOMensaje mensaje = (DTOMensaje) datos;
+
+                    // Validación null-safe
+                    if (mensaje.getRemitenteId() == null) {
+                        System.err.println("⚠️ [VistaContactoChat]: Audio PUSH con remitenteId null, ignorando...");
+                        break;
+                    }
+
+                    // Solo mostrar si es de nuestro contacto actual o si somos nosotros
+                    if (mensaje.getRemitenteId().equals(contacto.getId()) || mensaje.esMio()) {
+                        System.out.println("🎵 [VistaContactoChat]: Nuevo audio PUSH recibido");
+                        System.out.println("   → De: " + mensaje.getRemitenteNombre());
+                        System.out.println("   → FileId: " + mensaje.getFileId());
+
+                        // El ServicioChat ya procesó el Base64 y guardó el archivo
+                        // Solo necesitamos agregar el mensaje a la vista
+                        Platform.runLater(() -> agregarMensaje(mensaje));
+                    } else {
+                        System.out.println("⚠️ [VistaContactoChat]: Audio PUSH ignorado (no es del contacto actual)");
                     }
                 }
                 break;

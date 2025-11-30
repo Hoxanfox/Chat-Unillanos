@@ -10,7 +10,7 @@ public class FabricaTransporte {
 
     public DTOSesion iniciarConexion(DTOConexion datosConexion) {
         // La fábrica utiliza una implementación de ITransporte para crear la sesión.
-        ITransporte transporte = new TransporteTCP();
+        ITransporte transporte = new NettyClienteTransporte();
         return transporte.conectar(datosConexion);
     }
 }

@@ -167,8 +167,83 @@ public class ServicioChatImpl implements IServicioChat, IObservador {
             return;
         }
 
+        // ✅ NUEVO: Procesar mensajes de audio PUSH que vienen con Base64
+        if ("NUEVO_MENSAJE_AUDIO_PRIVADO".equals(tipoDeDato) && datos instanceof dto.vistaContactoChat.DTOMensaje) {
+            procesarAudioPush((dto.vistaContactoChat.DTOMensaje) datos);
+            return;
+        }
+
         // Pasa solo notificaciones relevantes de mensajes hacia arriba a la vista.
         notificarObservadores(tipoDeDato, datos);
+    }
+
+    /**
+     * Procesa un mensaje de audio PUSH que viene con contenido Base64.
+     * Guarda el audio como archivo local y actualiza el mensaje antes de notificar a la vista.
+     */
+    private void procesarAudioPush(dto.vistaContactoChat.DTOMensaje mensaje) {
+        System.out.println("🎵 [ServicioChat]: Procesando audio PUSH - MensajeId: " + mensaje.getMensajeId());
+
+        String contenido = mensaje.getContenido();
+
+        // Verificar si el contenido es Base64 de audio
+        if (contenido == null || contenido.isEmpty()) {
+            System.err.println("❌ [ServicioChat]: Audio PUSH sin contenido, notificando directamente");
+            notificarObservadores("NUEVO_MENSAJE_AUDIO_PRIVADO", mensaje);
+            return;
+        }
+
+        // Si el contenido es un fileId corto (no Base64), notificar directamente
+        boolean esBase64 = contenido.startsWith("UklGR") ||
+                          contenido.startsWith("data:audio/") ||
+                          contenido.length() > 1000;
+
+        if (!esBase64) {
+            System.out.println("✅ [ServicioChat]: Audio PUSH ya tiene fileId, notificando directamente");
+            notificarObservadores("NUEVO_MENSAJE_AUDIO_PRIVADO", mensaje);
+            return;
+        }
+
+        // El contenido es Base64, necesitamos guardarlo localmente
+        System.out.println("💾 [ServicioChat]: Audio PUSH contiene Base64, guardando localmente...");
+
+        // Extraer Base64 puro (eliminar prefijo data:audio si existe)
+        String base64Puro = contenido;
+        if (contenido.startsWith("data:audio/")) {
+            int comaIndex = contenido.indexOf(",");
+            if (comaIndex != -1) {
+                base64Puro = contenido.substring(comaIndex + 1);
+            }
+        }
+
+        // Guardar el audio usando la fachada
+        guardarAudioDesdeBase64(base64Puro, mensaje.getMensajeId())
+            .thenAccept(archivoGuardado -> {
+                if (archivoGuardado != null && archivoGuardado.exists()) {
+                    // Actualizar el mensaje con el fileId local
+                    String fileId = "audios_push/" + archivoGuardado.getName();
+                    mensaje.setFileId(fileId);
+                    mensaje.setContenido(fileId); // Actualizar contenido con el path local
+
+                    System.out.println("✅ [ServicioChat]: Audio guardado exitosamente");
+                    System.out.println("   → Archivo: " + archivoGuardado.getAbsolutePath());
+                    System.out.println("   → FileId: " + fileId);
+
+                    // Ahora sí, notificar a la vista con el mensaje actualizado
+                    notificarObservadores("NUEVO_MENSAJE_AUDIO_PRIVADO", mensaje);
+                } else {
+                    System.err.println("❌ [ServicioChat]: No se pudo guardar el audio");
+                    // Notificar con el Base64 original (la vista puede intentar manejarlo)
+                    notificarObservadores("NUEVO_MENSAJE_AUDIO_PRIVADO", mensaje);
+                }
+            })
+            .exceptionally(ex -> {
+                System.err.println("❌ [ServicioChat]: Error al guardar audio: " + ex.getMessage());
+                ex.printStackTrace();
+                // Notificar con el mensaje original (mejor que no notificar nada)
+                notificarObservadores("NUEVO_MENSAJE_AUDIO_PRIVADO", mensaje);
+                return null;
+            });
     }
 
     @Override

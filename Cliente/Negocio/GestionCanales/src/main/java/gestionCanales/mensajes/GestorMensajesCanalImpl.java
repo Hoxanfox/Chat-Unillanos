@@ -14,9 +14,13 @@ import dto.comunicacion.DTOResponse;
 import dto.comunicacion.peticion.canal.DTOEnviarMensajeCanal;
 import dto.comunicacion.peticion.canal.DTOSolicitarHistorialCanal;
 import gestionUsuario.sesion.GestorSesionUsuario;
+import gestionArchivos.IGestionArchivos;
+import gestionNotificaciones.GestorSincronizacionGlobal;
 import observador.IObservador;
 import repositorio.mensaje.IRepositorioMensajeCanal;
+import repositorio.canal.IRepositorioCanal;
 
+import java.io.File;
 import java.lang.reflect.Type;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -30,22 +34,37 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Implementación del gestor de mensajes de canal.
  * Maneja el envío, recepción y persistencia de mensajes de canal.
  * Implementa el patrón Observer para notificar a la UI sobre cambios.
+ *
+ * ✅ AHORA implementa IObservador para recibir señales del GestorSincronizacionGlobal
  */
-public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
+public class GestorMensajesCanalImpl implements IGestorMensajesCanal, IObservador {
 
     private final List<IObservador> observadores = new CopyOnWriteArrayList<>();
     private final IRepositorioMensajeCanal repositorioMensajes;
     private final IEnviadorPeticiones enviadorPeticiones;
     private final IGestorRespuesta gestorRespuesta;
     private final GestorSesionUsuario gestorSesion;
+    private final IGestionArchivos gestionArchivos;
     private final Gson gson;
 
-    public GestorMensajesCanalImpl(IRepositorioMensajeCanal repositorioMensajes) {
+    // 🆕 Referencia al repositorio de canales para obtener la lista de canales
+    private final IRepositorioCanal repositorioCanal;
+
+    // 🆕 Campo para almacenar el ID del canal actualmente abierto
+    private String canalActivoId = null;
+
+    public GestorMensajesCanalImpl(IRepositorioMensajeCanal repositorioMensajes, IGestionArchivos gestionArchivos, IRepositorioCanal repositorioCanal) {
         this.repositorioMensajes = repositorioMensajes;
+        this.gestionArchivos = gestionArchivos;
+        this.repositorioCanal = repositorioCanal;
         this.enviadorPeticiones = new EnviadorPeticiones();
         this.gestorRespuesta = GestorRespuesta.getInstancia();
         this.gestorSesion = GestorSesionUsuario.getInstancia();
         this.gson = new Gson();
+
+        // 🆕 Registrarse como observador del GestorSincronizacionGlobal
+        GestorSincronizacionGlobal.getInstancia().registrarObservador(this);
+        System.out.println("✅ [GestorMensajesCanal]: Registrado como observador del GestorSincronizacionGlobal");
     }
 
     @Override
@@ -60,6 +79,50 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
         gestorRespuesta.registrarManejador("enviarMensajeCanal", this::manejarConfirmacionEnvio);
 
         System.out.println("✓ Manejadores de mensajes de canal inicializados");
+    }
+
+    /**
+     * 🆕 Implementación de IObservador.
+     * Recibe señales del GestorSincronizacionGlobal.
+     */
+    @Override
+    public void actualizar(String tipoDeDato, Object datos) {
+        System.out.println("🔔 [GestorMensajesCanal]: Señal recibida del GestorSincronizacionGlobal - Tipo: " + tipoDeDato);
+
+        if ("ACTUALIZAR_MENSAJES_CANALES".equals(tipoDeDato)) {
+            System.out.println("📨 [GestorMensajesCanal]: Procesando ACTUALIZAR_MENSAJES_CANALES");
+            System.out.println("🔄 [GestorMensajesCanal]: Solicitando historial de TODOS los canales...");
+
+            // ✅ Obtener todos los canales del repositorio
+            repositorioCanal.obtenerTodos()
+                .thenAccept(canales -> {
+                    System.out.println("📋 [GestorMensajesCanal]: " + canales.size() + " canales encontrados en caché");
+
+                    // Solicitar historial de cada canal
+                    for (dominio.Canal canal : canales) {
+                        String canalId = canal.getIdCanal().toString();
+                        System.out.println("   → Solicitando historial del canal: " + canal.getNombre() + " (ID: " + canalId + ")");
+                        solicitarHistorialCanal(canalId, 50);
+                    }
+
+                    System.out.println("✅ [GestorMensajesCanal]: Historial solicitado para todos los canales");
+                })
+                .exceptionally(ex -> {
+                    System.err.println("❌ [GestorMensajesCanal]: Error al obtener canales del repositorio: " + ex.getMessage());
+                    return null;
+                });
+        }
+    }
+
+    /**
+     * 🆕 Establece el canal actualmente abierto en la UI.
+     * Las vistas deben llamar a este método cuando un usuario abre un canal.
+     *
+     * @param canalId El ID del canal que está actualmente abierto, o null si ninguno está abierto
+     */
+    public void setCanalActivo(String canalId) {
+        this.canalActivoId = canalId;
+        System.out.println("📍 [GestorMensajesCanal]: Canal activo establecido: " + canalId);
     }
 
     /**
@@ -104,7 +167,7 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
                     if (guardado) {
                         // Notificar a la UI que hay un nuevo mensaje
                         notificarObservadores("MENSAJE_CANAL_RECIBIDO", mensaje);
-                        System.out.println("✓ Nuevo mensaje de canal recibido y guardado: " + mensaje.getMensajeId());
+                        System.out.println("✓ Nuevo mensaje de canal recibido e guardado: " + mensaje.getMensajeId());
                     } else {
                         System.err.println("✗ Error al guardar mensaje recibido");
                     }
@@ -147,9 +210,20 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
 
             for (Map<String, Object> mapa : mensajesData) {
                 DTOMensajeCanal mensaje = construirDTOMensajeDesdeMap(mapa);
+                // ✅ Marcar correctamente si el mensaje es propio comparando IDs
                 mensaje.setEsPropio(mensaje.getRemitenteId().equals(usuarioActual));
                 historial.add(mensaje);
             }
+
+            // ✅ ORDENAR MENSAJES POR TIMESTAMP (del más antiguo al más reciente)
+            historial.sort((m1, m2) -> {
+                if (m1.getFechaEnvio() == null && m2.getFechaEnvio() == null) return 0;
+                if (m1.getFechaEnvio() == null) return 1; // null al final
+                if (m2.getFechaEnvio() == null) return -1; // null al final
+                return m1.getFechaEnvio().compareTo(m2.getFechaEnvio());
+            });
+
+            System.out.println("📋 [GestorMensajesCanal]: Historial ordenado por timestamp - Total: " + historial.size());
 
             // Sincronizar con la base de datos local
             if (!historial.isEmpty()) {
@@ -186,8 +260,25 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
             return;
         }
 
-        // La confirmación de envío no requiere procesamiento adicional por ahora
-        System.out.println("✓ Confirmación de envío recibida: " + respuesta.getMessage());
+        try {
+            // El servidor devuelve el mensaje confirmado con su ID definitivo
+            Map<String, Object> data = (Map<String, Object>) respuesta.getData();
+
+            // Construir el DTO del mensaje desde la respuesta del servidor
+            DTOMensajeCanal mensaje = construirDTOMensajeDesdeMap(data);
+
+            // Marcar el mensaje como propio
+            String usuarioActual = gestorSesion.getUserId();
+            mensaje.setEsPropio(mensaje.getRemitenteId().equals(usuarioActual));
+
+            // Notificar a la UI para que muestre el mensaje
+            notificarObservadores("MENSAJE_CANAL_ENVIADO", mensaje);
+
+            System.out.println("✓ Mensaje propio confirmado por servidor y notificado a la UI: " + mensaje.getMensajeId());
+        } catch (Exception e) {
+            System.err.println("✗ Error procesando confirmación de envío: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -213,7 +304,7 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
             return CompletableFuture.failedFuture(new IllegalStateException("Usuario no autenticado"));
         }
 
-        DTOEnviarMensajeCanal payload = DTOEnviarMensajeCanal.deTexto(remitenteId, canalId, contenido);
+      DTOEnviarMensajeCanal payload = DTOEnviarMensajeCanal.deTexto(remitenteId, canalId, contenido);
 
         MensajeEnviadoCanal mensajeLocal = new MensajeEnviadoCanal(
             UUID.randomUUID(),
@@ -344,10 +435,36 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
         if (messageType != null) {
             messageType = messageType.toUpperCase(); // Normalizar a MAYÚSCULAS
         }
-        mensaje.setTipo(messageType);
 
-        mensaje.setContenido(getString(data, "content"));
-        mensaje.setFileId(getString(data, "fileId"));
+        String content = getString(data, "content");
+        String fileId = getString(data, "fileId");
+
+        // ✅ DETECCIÓN AUTOMÁTICA: Si el content contiene una ruta de archivo, ajustar el tipo
+        if (content != null && (content.startsWith("audio_files/") || content.startsWith("image_files/") ||
+            content.startsWith("document_files/") || content.endsWith(".wav") || content.endsWith(".mp3") ||
+            content.endsWith(".jpg") || content.endsWith(".png") || content.endsWith(".pdf"))) {
+
+            // Es un archivo, mover el content a fileId
+            fileId = content;
+
+            // Determinar el tipo real del archivo
+            if (content.startsWith("audio_files/") || content.endsWith(".wav") || content.endsWith(".mp3")) {
+                messageType = "AUDIO";
+                System.out.println("🔄 [GestorMensajesCanal]: Mensaje detectado como AUDIO - FileId: " + fileId);
+            } else if (content.endsWith(".jpg") || content.endsWith(".png") || content.endsWith(".gif") || content.startsWith("image_files/")) {
+                messageType = "IMAGEN";
+                System.out.println("🔄 [GestorMensajesCanal]: Mensaje detectado como IMAGEN - FileId: " + fileId);
+            } else {
+                messageType = "ARCHIVO";
+                System.out.println("🔄 [GestorMensajesCanal]: Mensaje detectado como ARCHIVO - FileId: " + fileId);
+            }
+
+            content = null; // Limpiar el contenido ya que es un archivo
+        }
+
+        mensaje.setTipo(messageType);
+        mensaje.setContenido(content);
+        mensaje.setFileId(fileId);
 
         // Manejo de la fecha
         String fechaStr = getString(data, "timestamp") != null ? getString(data, "timestamp") : getString(data, "fechaEnvio");
@@ -363,7 +480,65 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
             }
         }
 
+        // ✅ NUEVA FUNCIONALIDAD: Descargar automáticamente archivos cuando lleguen
+        if (fileId != null && !fileId.isEmpty()) {
+            descargarArchivoAutomaticamente(mensaje);
+        }
+
         return mensaje;
+    }
+
+    /**
+     * Descarga automáticamente un archivo del servidor cuando llega un mensaje con fileId.
+     * Similar al comportamiento del chat de contactos.
+     *
+     * @param mensaje El mensaje que contiene el fileId a descargar
+     */
+    private void descargarArchivoAutomaticamente(DTOMensajeCanal mensaje) {
+        String fileId = mensaje.getFileId();
+        String tipo = mensaje.getTipo();
+
+        System.out.println("📥 [GestorMensajesCanal]: Iniciando descarga automática de archivo");
+        System.out.println("   → FileId: " + fileId);
+        System.out.println("   → Tipo: " + tipo);
+
+        // Determinar el directorio de destino según el tipo de archivo
+        File directorioDestino;
+        if ("AUDIO".equalsIgnoreCase(tipo)) {
+            directorioDestino = new File("data/archivos/audios");
+        } else if ("IMAGEN".equalsIgnoreCase(tipo)) {
+            directorioDestino = new File("data/archivos/images");
+        } else {
+            directorioDestino = new File("data/archivos/documents");
+        }
+
+        // Asegurar que el directorio existe
+        if (!directorioDestino.exists()) {
+            directorioDestino.mkdirs();
+        }
+
+        // Descargar el archivo de forma asíncrona
+        gestionArchivos.descargarArchivo(fileId, directorioDestino)
+            .thenAccept(archivoDescargado -> {
+                System.out.println("✅ [GestorMensajesCanal]: Archivo descargado exitosamente");
+                System.out.println("   → Ruta local: " + archivoDescargado.getAbsolutePath());
+
+                // Actualizar el mensaje con la ruta local del archivo descargado
+                mensaje.setContenido(archivoDescargado.getAbsolutePath());
+
+                // Notificar a la UI que el archivo está listo para ser usado
+                notificarObservadores("ARCHIVO_DESCARGADO", mensaje);
+            })
+            .exceptionally(ex -> {
+                System.err.println("✗ [GestorMensajesCanal]: Error al descargar archivo automáticamente");
+                System.err.println("   → FileId: " + fileId);
+                System.err.println("   → Error: " + ex.getMessage());
+
+                // Notificar a la UI del error
+                notificarObservadores("ERROR_DESCARGA_ARCHIVO",
+                    "No se pudo descargar el archivo: " + fileId);
+                return null;
+            });
     }
 
     private MensajeRecibidoCanal convertirDTOAMensajeRecibido(DTOMensajeCanal dto) {
@@ -380,6 +555,8 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
         mensaje.setIdMensaje(mensajeId);
 
         mensaje.setIdRemitenteCanal(UUID.fromString(dto.getCanalId()));
+        // Establecer el ID del usuario actual como destinatario
+        mensaje.setIdDestinatario(UUID.fromString(gestorSesion.getUserId()));
         mensaje.setTipo(dto.getTipo());
         mensaje.setFechaEnvio(dto.getFechaEnvio());
 
@@ -396,3 +573,4 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal {
         return value != null ? value.toString() : null;
     }
 }
+
