@@ -1,0 +1,76 @@
+# =============================================================================
+# TEMPO - CONFIGURACION
+# =============================================================================
+# Sistema de trazas distribuidas
+# Recibe trazas desde el OpenTelemetry Collector via OTLP
+# =============================================================================
+
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9095
+  log_level: info
+
+# =============================================================================
+# DISTRIBUTOR - Recibe y distribuye trazas
+# =============================================================================
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+# =============================================================================
+# INGESTER - Procesa y almacena trazas
+# =============================================================================
+ingester:
+  max_block_duration: 5m
+
+# =============================================================================
+# COMPACTOR - Compacta bloques de trazas
+# =============================================================================
+compactor:
+  compaction:
+    block_retention: 48h
+
+# =============================================================================
+# METRICS GENERATOR - Genera metricas desde trazas
+# =============================================================================
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+      cluster: chat-unillanos
+  storage:
+    path: /tmp/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+
+# =============================================================================
+# STORAGE - Almacenamiento local
+# =============================================================================
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /tmp/tempo/wal
+    local:
+      path: /tmp/tempo/blocks
+
+# =============================================================================
+# OVERRIDES - Limites por tenant
+# =============================================================================
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics]
+
+# =============================================================================
+# USAGE REPORT
+# =============================================================================
+usage_report:
+  reporting_enabled: false
+

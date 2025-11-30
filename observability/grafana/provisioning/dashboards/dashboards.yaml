@@ -1,0 +1,21 @@
+# =============================================================================
+# GRAFANA - DASHBOARDS PROVISIONING
+# =============================================================================
+# Configura automaticamente los dashboards al iniciar Grafana
+# =============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: 'Chat-Unillanos'
+    orgId: 1
+    folder: 'Chat-Unillanos'
+    folderUid: 'chat-unillanos'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false
+

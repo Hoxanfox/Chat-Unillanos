@@ -1,2 +1,14 @@
 ip=192.168.1.9
 port=8000
+
+# ==========================================
+# OBSERVABILIDAD (OpenTelemetry)
+# ==========================================
+# IP de la maquina donde corre Grafana/Prometheus/Loki/Tempo
+otel.collector.host=localhost
+
+# Puerto del OpenTelemetry Collector (OTLP HTTP)
+otel.collector.port=4318
+
+# Nombre unico de este cliente (se genera automaticamente con hostname si no se especifica)
+otel.service.name=chat-cliente

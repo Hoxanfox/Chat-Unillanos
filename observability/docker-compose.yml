@@ -1,0 +1,129 @@
+version: '3.8'
+
+# =============================================================================
+# STACK DE OBSERVABILIDAD PARA CHAT-UNILLANOS (Red P2P)
+# =============================================================================
+# Servicios: Grafana, Prometheus, Loki, Tempo, OpenTelemetry Collector
+# 
+# USO: docker-compose up -d
+# GRAFANA: http://localhost:3000 (admin/admin)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector - Punto central de recepcion de telemetria
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8888:8888"   # Prometheus metrics exposed by the collector
+      - "8889:8889"   # Prometheus exporter metrics
+    depends_on:
+      - tempo
+      - loki
+    networks:
+      - observability
+
+  # ---------------------------------------------------------------------------
+  # Prometheus - Almacenamiento de metricas
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-remote-write-receiver'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - observability
+
+  # ---------------------------------------------------------------------------
+  # Loki - Almacenamiento de logs
+  # ---------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:2.9.3
+    container_name: loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - observability
+
+  # ---------------------------------------------------------------------------
+  # Tempo - Almacenamiento de trazas distribuidas
+  # ---------------------------------------------------------------------------
+  tempo:
+    image: grafana/tempo:2.3.1
+    container_name: tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo-config.yaml"]
+    volumes:
+      - ./tempo-config.yaml:/etc/tempo/tempo-config.yaml:ro
+      - tempo_data:/tmp/tempo
+    ports:
+      - "3200:3200"   # Tempo API
+      - "9095:9095"   # Tempo gRPC
+    networks:
+      - observability
+
+  # ---------------------------------------------------------------------------
+  # Grafana - Visualizacion unificada
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - observability
+
+# =============================================================================
+# VOLUMENES PERSISTENTES
+# =============================================================================
+volumes:
+  prometheus_data:
+  loki_data:
+  tempo_data:
+  grafana_data:
+
+# =============================================================================
+# RED INTERNA
+# =============================================================================
+networks:
+  observability:
+    driver: bridge
+
