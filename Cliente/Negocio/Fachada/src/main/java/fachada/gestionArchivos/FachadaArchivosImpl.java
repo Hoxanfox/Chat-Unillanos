@@ -8,6 +8,9 @@ import repositorio.archivo.IRepositorioArchivo;
 import repositorio.archivo.RepositorioArchivoImpl;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -23,6 +26,9 @@ public class FachadaArchivosImpl implements IFachadaArchivos {
     private final IArchivoService archivoService;
 
     public FachadaArchivosImpl() {
+        // Asegurar que los directorios base existan ANTES de inicializar servicios
+        asegurarDirectoriosBase();
+
         // En una aplicación real, esto se inyectaría.
         this.gestionArchivos = new GestionArchivosImpl();
 
@@ -35,6 +41,44 @@ public class FachadaArchivosImpl implements IFachadaArchivos {
         );
 
         System.out.println("✅ [FachadaArchivos]: Inicializada con ArchivoService integrado");
+    }
+
+    /**
+     * Asegura que los directorios base existan antes de que la interfaz los necesite.
+     * Compatible con Linux y Windows.
+     */
+    private void asegurarDirectoriosBase() {
+        try {
+            // Directorio base de datos
+            Path dataDir = Paths.get("data");
+
+            // Directorio de archivos y subdirectorios
+            Path archivosDir = dataDir.resolve("archivos");
+            Path userPhotosDir = archivosDir.resolve("user_photos");
+            Path audiosDir = archivosDir.resolve("audios");
+            Path audioDir = archivosDir.resolve("audio");
+            Path imagesDir = archivosDir.resolve("images");
+            Path documentsDir = archivosDir.resolve("documents");
+            Path otrosDir = archivosDir.resolve("otros");
+
+            // Crear todos los directorios necesarios
+            Files.createDirectories(dataDir);
+            Files.createDirectories(archivosDir);
+            Files.createDirectories(userPhotosDir);
+            Files.createDirectories(audiosDir);
+            Files.createDirectories(audioDir);
+            Files.createDirectories(imagesDir);
+            Files.createDirectories(documentsDir);
+            Files.createDirectories(otrosDir);
+
+            System.out.println("📁 [FachadaArchivos]: Directorios asegurados en: " + archivosDir.toAbsolutePath());
+
+        } catch (Exception e) {
+            System.err.println("❌ [FachadaArchivos]: Error al crear directorios base: " + e.getMessage());
+            e.printStackTrace();
+            // No lanzar excepción para no romper la aplicación
+            // Los métodos de escritura deberían ser defensivos también
+        }
     }
 
     @Override

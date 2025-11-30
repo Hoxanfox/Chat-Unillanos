@@ -27,10 +27,12 @@ public class DTOEnviarMensajeCanal {
     }
 
     public static DTOEnviarMensajeCanal deAudio(String remitenteId, String canalId, String audioFileId) {
+        // El servidor requiere que el fileId esté en el campo 'contenido' para archivos multimedia
         return new DTOEnviarMensajeCanal(remitenteId, canalId, "audio", audioFileId, null);
     }
 
     public static DTOEnviarMensajeCanal deArchivo(String remitenteId, String canalId, String fileId) {
+        // El servidor requiere que el fileId esté en el campo 'contenido' para archivos
         return new DTOEnviarMensajeCanal(remitenteId, canalId, "archivo", fileId, null);
     }
 

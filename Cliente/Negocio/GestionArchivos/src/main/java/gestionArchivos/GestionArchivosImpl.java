@@ -231,6 +231,7 @@ public class GestionArchivosImpl implements IGestionArchivos {
         return futuroTransferencia;
     }
 
+    // java
     private CompletableFuture<Void> enviarChunk(String uploadId, int chunkNumber, String chunkBase64) {
         final String ACCION_RESPUESTA = "uploadFileChunk_" + uploadId + "_" + chunkNumber;
         System.out.println("[GestionArchivos] Registrando manejador para chunk: " + ACCION_RESPUESTA);
@@ -249,11 +250,19 @@ public class GestionArchivosImpl implements IGestionArchivos {
         });
 
         DTOUploadChunk payload = new DTOUploadChunk(uploadId, chunkNumber, chunkBase64);
-        System.out.println("[GestionArchivos] Enviando chunk " + chunkNumber + " - UploadId: " + uploadId + ", Tamaño base64: " + chunkBase64.length());
+
+        // --- Safe logging: create a masked copy for logs to avoid printing Base64 data ---
+        DTOUploadChunk maskedForLog = new DTOUploadChunk(uploadId, chunkNumber, "[DATA_OMITTED]");
+        System.out.println("[GestionArchivos] Enviando chunk " + chunkNumber + " - UploadId: " + uploadId +
+                ", Tamaño base64: " + (chunkBase64 != null ? chunkBase64.length() : 0) +
+                ", Payload: " + gson.toJson(maskedForLog));
+        // ---------------------------------------------------------------------------------
+
         enviadorPeticiones.enviar(new DTORequest("uploadFileChunk", payload));
 
         return futuroChunk;
     }
+
 
     private CompletableFuture<String> finalizarSubida(String uploadId, String fileHash) {
         final String ACCION = "endFileUpload";
@@ -317,9 +326,9 @@ public class GestionArchivosImpl implements IGestionArchivos {
 
     /**
      * Extrae el nombre del archivo del fileId.
-     * Formato esperado: "tipo/nombre.ext" o simplemente "nombre.ext"
+     * Formato esperado: "tipo/nombre.ext" o "tipo\nombre.ext"
      * Ejemplo: "user_photos/1.jpg" -> "1.jpg"
-     * Ejemplo: "documentos/archivo_1234567890.pdf" -> "archivo_1234567890.pdf"
+     * Ejemplo: "documentos\archivo.pdf" -> "archivo.pdf"
      */
     private String extraerNombreDeFileId(String fileId) {
         if (fileId == null || fileId.isEmpty()) {
@@ -327,17 +336,20 @@ public class GestionArchivosImpl implements IGestionArchivos {
             return null;
         }
 
-        // Si contiene "/" (formato: carpeta/archivo)
-        if (fileId.contains("/")) {
-            String[] partes = fileId.split("/");
-            String nombreArchivo = partes[partes.length - 1]; // Última parte
+        try {
+            // ✅ SOLUCIÓN: Usar java.nio.file.Path
+            // Esto obtiene el nombre del archivo final (ej: "1p1.png")
+            // y funciona en Windows (con \) y Linux (con /).
+            String nombreArchivo = java.nio.file.Paths.get(fileId).getFileName().toString();
             System.out.println("[GestionArchivos] Nombre extraído de fileId '" + fileId + "': " + nombreArchivo);
             return nombreArchivo;
-        }
 
-        // Si no contiene "/", el fileId es directamente el nombre del archivo
-        System.out.println("[GestionArchivos] FileId sin carpeta: " + fileId);
-        return fileId;
+        } catch (Exception e) {
+            // Error al parsear la ruta, loguear y usar fallback
+            System.err.println("[GestionArchivos] ERROR al extraer nombre de fileId '" + fileId + "': " + e.getMessage());
+            System.err.println("[GestionArchivos] Usando fileId completo como fallback: " + fileId);
+            return fileId; // Fallback al comportamiento anterior (no ideal)
+        }
     }
 
     private static class UploadIdResponse { String uploadId; }
@@ -365,13 +377,39 @@ public class GestionArchivosImpl implements IGestionArchivos {
                                     if (archivo != null && archivo.getEstado().equals("completo")) {
                                         // Archivo completo en BD, crear archivo físico desde Base64
                                         try {
-                                            File archivoFisico = new File(directorioDestino, archivo.getNombreArchivo());
-                                            byte[] contenido = Base64.getDecoder().decode(archivo.getContenidoBase64());
+                                            String contenidoBase64 = archivo.getContenidoBase64();
+                                            if (contenidoBase64 == null || contenidoBase64.isEmpty()) {
+                                                System.err.println("[GestionArchivos] Caché incompleta al intentar crear archivo físico: contenidoBase64 es null o vacío para fileId: " + fileId);
+                                                // Indicar que no se pudo usar la caché y continuar con descarga normal
+                                                return null;
+                                            }
+
+                                            // Determinar nombre de archivo (usar el que esté guardado en la entidad o extraer del fileId)
+                                            String nombreArchivo = archivo.getNombreArchivo();
+                                            if (nombreArchivo == null || nombreArchivo.isEmpty()) {
+                                                nombreArchivo = extraerNombreDeFileId(fileId);
+                                                if (nombreArchivo == null || nombreArchivo.isEmpty()) {
+                                                    nombreArchivo = "downloaded_file"; // fallback seguro
+                                                }
+                                            }
+
+                                            File archivoFisico = new File(directorioDestino, nombreArchivo);
+
+                                            // Asegurar que el directorio padre existe (compatible Linux/Windows)
+                                            File parentDir = archivoFisico.getParentFile();
+                                            if (parentDir != null && !parentDir.exists()) {
+                                                Files.createDirectories(parentDir.toPath());
+                                                System.out.println("[GestionArchivos] Directorio creado: " + parentDir.getAbsolutePath());
+                                            }
+
+                                            byte[] contenido = Base64.getDecoder().decode(contenidoBase64);
                                             Files.write(archivoFisico.toPath(), contenido);
 
+                                            System.out.println("[GestionArchivos] Archivo escrito desde caché local: " + archivoFisico.getAbsolutePath());
                                             notificarObservadores("DESCARGA_COMPLETADA", archivoFisico);
                                             futuroDescarga.complete(archivoFisico);
                                             return archivoFisico;
+
                                         } catch (IOException e) {
                                             System.err.println("[GestionArchivos] Error al crear archivo desde BD: " + e.getMessage());
                                             // Si falla, continuar con descarga normal
@@ -666,7 +704,14 @@ public class GestionArchivosImpl implements IGestionArchivos {
                                 .thenApply(archivo -> {
                                     if (archivo != null && archivo.getEstado().equals("completo")) {
                                         // Archivo completo en BD, retornar bytes directamente
-                                        byte[] contenido = Base64.getDecoder().decode(archivo.getContenidoBase64());
+                                        String contenidoBase64 = archivo.getContenidoBase64();
+                                        if (contenidoBase64 == null || contenidoBase64.isEmpty()) {
+                                            System.err.println("[GestionArchivos] Caché incompleta: contenidoBase64 es null o vacío para fileId: " + fileId);
+                                            // No completar futuro aquí; indicar que no hay bytes en caché
+                                            return null;
+                                        }
+
+                                        byte[] contenido = Base64.getDecoder().decode(contenidoBase64);
                                         System.out.println("[GestionArchivos] Archivo recuperado de caché - Tamaño: " + contenido.length + " bytes");
                                         futuroDescarga.complete(contenido);
                                         return contenido;

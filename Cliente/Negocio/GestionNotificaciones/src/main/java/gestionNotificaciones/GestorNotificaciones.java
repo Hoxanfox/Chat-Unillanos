@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -33,9 +34,10 @@ import java.util.concurrent.CompletableFuture;
  * <li>Usar el repositorio para almacenamiento en caché local</li>
  * <li>Implementar el patrón Observer para notificar cambios</li>
  * <li>Aceptar/rechazar solicitudes de amistad e invitaciones a canales</li>
+ * <li>Registrarse en el GestorSincronizacionGlobal para actualizaciones automáticas</li>
  * </ul>
  */
-public class GestorNotificaciones implements ISujeto {
+public class GestorNotificaciones implements ISujeto, IObservador {
 
     private final IRepositorioNotificacion repositorioNotificacion;
     private final GestorSesionUsuario gestorSesion;
@@ -45,29 +47,50 @@ public class GestorNotificaciones implements ISujeto {
     private final List<IObservador> observadores;
 
     public GestorNotificaciones() {
-        this.repositorioNotificacion = new RepositorioNotificacionImpl();
+        this.repositorioNotificacion = RepositorioNotificacionImpl.getInstancia();
         this.gestorSesion = GestorSesionUsuario.getInstancia();
         this.enviadorPeticiones = new EnviadorPeticiones();
         this.gestorRespuesta = GestorRespuesta.getInstancia();
         this.gson = new Gson();
         this.observadores = new ArrayList<>();
 
-        System.out.println("✅ [GestorNotificaciones]: Gestor inicializado con comunicación y repositorio");
+        System.err.println("✅ [GestorNotificaciones]: Gestor inicializado con comunicación y repositorio SINGLETON");
+
+        // 🔥 NUEVO: Registrarse en el GestorSincronizacionGlobal para recibir ACTUALIZAR_NOTIFICACIONES
+        GestorSincronizacionGlobal.getInstancia().registrarObservador(this);
+        System.err.println("✅ [GestorNotificaciones]: Registrado en GestorSincronizacionGlobal para actualizaciones automáticas");
+
+        // NOTA: El registro como observador de GestorInvitaciones se hace desde FachadaNotificacionesImpl
+        // para evitar dependencia circular
     }
 
     /**
      * Obtiene la lista de notificaciones del usuario actual desde el servidor.
      */
     public CompletableFuture<List<DTONotificacion>> obtenerNotificaciones() {
+        System.out.println("📨 [GestorNotificaciones]: Solicitando notificaciones...");
+
+        CompletableFuture<List<DTONotificacion>> future = new CompletableFuture<>();
+
+        // ✅ SOLUCIÓN: Primero obtener del caché local
+        List<DTONotificacion> notificacionesCache = repositorioNotificacion.obtenerTodas();
+        System.out.println("📦 [GestorNotificaciones]: Encontradas " + notificacionesCache.size() + " notificaciones en caché");
+
+        // Si hay notificaciones en caché, devolverlas inmediatamente
+        if (!notificacionesCache.isEmpty()) {
+            System.out.println("✅ [GestorNotificaciones]: Devolviendo notificaciones del caché");
+            notificarObservadores("NOTIFICACIONES_RECIBIDAS", notificacionesCache);
+            future.complete(notificacionesCache);
+            return future;
+        }
+
+        // Si no hay en caché, devolver lista vacía (el servidor no soporta esta acción)
         System.out.println("⚠️ [GestorNotificaciones]: La acción 'obtenerNotificaciones' no está implementada en el servidor");
         System.out.println("📋 [GestorNotificaciones]: Devolviendo lista vacía de notificaciones");
 
-        // El servidor no soporta esta acción, devolver lista vacía inmediatamente
-        CompletableFuture<List<DTONotificacion>> future = new CompletableFuture<>();
-        future.complete(new ArrayList<>());
-
         // Notificar con lista vacía para que la UI se actualice correctamente
         notificarObservadores("NOTIFICACIONES_RECIBIDAS", new ArrayList<>());
+        future.complete(new ArrayList<>());
 
         return future;
     }
@@ -250,26 +273,32 @@ public class GestorNotificaciones implements ISujeto {
         String usuarioId = gestorSesion.getUserId();
 
         JsonObject payload = new JsonObject();
-        payload.addProperty("invitacionId", invitacionId);
-        payload.addProperty("usuarioId", usuarioId);
-        payload.addProperty("canalId", canalId);
-        payload.addProperty("accion", "ACEPTAR");
+        payload.addProperty("channelId", canalId);
+        payload.addProperty("accepted", true);
 
-        DTORequest request = new DTORequest("responderInvitacionCanal", payload);
+        // ✨ CORREGIDO: Cambiar de "responderInvitacionCanal" a "responderInvitacion"
+        DTORequest request = new DTORequest("responderInvitacion", payload);
 
         gestorRespuesta.registrarManejador(request.getAction(), (respuesta) -> {
             if ("success".equals(respuesta.getStatus())) {
                 System.out.println("✅ [GestorNotificaciones]: Invitación a canal aceptada exitosamente");
 
-                // Remover de caché
+                // ✅ SOLUCIÓN: Eliminar del caché y solicitar actualización de invitaciones
                 repositorioNotificacion.remover(invitacionId);
+                System.out.println("🗑️ [GestorNotificaciones]: Notificación eliminada del caché: " + invitacionId);
 
                 JsonObject data = new JsonObject();
                 data.addProperty("invitacionId", invitacionId);
                 data.addProperty("canalId", canalId);
 
+                // Notificar eventos
                 notificarObservadores("INVITACION_CANAL_ACEPTADA", data);
                 notificarObservadores("CANAL_UNIDO", canalId);
+
+                // ✅ CLAVE: Solicitar actualización de invitaciones al servidor
+                System.out.println("🔄 [GestorNotificaciones]: Solicitando actualización de invitaciones pendientes...");
+                GestorSincronizacionGlobal.getInstancia().notificarObservadores("ACTUALIZAR_INVITACIONES", null);
+
                 future.complete(null);
             } else {
                 String error = "Error al aceptar invitación: " + respuesta.getMessage();
@@ -285,12 +314,14 @@ public class GestorNotificaciones implements ISujeto {
     /**
      * Rechaza una invitación a un canal.
      */
-    public CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId) {
+    public CompletableFuture<Void> rechazarInvitacionCanal(String invitacionId, String canalId) {
         System.out.println("❌ [GestorNotificaciones]: Rechazando invitación a canal");
+        System.out.println("   → Notificación ID: " + invitacionId);
+        System.out.println("   → Canal ID: " + canalId);
 
-        if (invitacionId == null || invitacionId.trim().isEmpty()) {
+        if (canalId == null || canalId.trim().isEmpty()) {
             return CompletableFuture.failedFuture(
-                    new IllegalArgumentException("ID de invitación inválido")
+                    new IllegalArgumentException("ID de canal inválido")
             );
         }
 
@@ -298,20 +329,25 @@ public class GestorNotificaciones implements ISujeto {
         String usuarioId = gestorSesion.getUserId();
 
         JsonObject payload = new JsonObject();
-        payload.addProperty("invitacionId", invitacionId);
-        payload.addProperty("usuarioId", usuarioId);
-        payload.addProperty("accion", "RECHAZAR");
+        payload.addProperty("channelId", canalId);
+        payload.addProperty("accepted", false);
 
-        DTORequest request = new DTORequest("responderInvitacionCanal", payload);
+        DTORequest request = new DTORequest("responderInvitacion", payload);
 
         gestorRespuesta.registrarManejador(request.getAction(), (respuesta) -> {
             if ("success".equals(respuesta.getStatus())) {
                 System.out.println("✅ [GestorNotificaciones]: Invitación rechazada");
 
-                // Remover de caché
+                // ✅ SOLUCIÓN: Eliminar del caché y solicitar actualización de invitaciones
                 repositorioNotificacion.remover(invitacionId);
+                System.out.println("🗑️ [GestorNotificaciones]: Notificación eliminada del caché: " + invitacionId);
 
-                notificarObservadores("INVITACION_CANAL_RECHAZADA", invitacionId);
+                notificarObservadores("INVITACION_CANAL_RECHAZADA", canalId);
+
+                // ✅ CLAVE: Solicitar actualización de invitaciones al servidor (igual que en aceptar)
+                System.out.println("🔄 [GestorNotificaciones]: Solicitando actualización de invitaciones pendientes...");
+                GestorSincronizacionGlobal.getInstancia().notificarObservadores("ACTUALIZAR_INVITACIONES", null);
+
                 future.complete(null);
             } else {
                 String error = "Error al rechazar: " + respuesta.getMessage();
@@ -331,10 +367,111 @@ public class GestorNotificaciones implements ISujeto {
         System.out.println("🔧 [GestorNotificaciones]: Inicializando manejadores");
         gestorRespuesta.registrarManejador("nuevaNotificacion", this::manejarNuevaNotificacion);
         gestorRespuesta.registrarManejador("solicitudAceptada", this::manejarSolicitudAceptada);
+        gestorRespuesta.registrarManejador("notificacionInvitacionCanal", this::manejarInvitacionCanal);
         System.out.println("✅ [GestorNotificaciones]: Manejadores inicializados");
     }
 
+    // ==================== IMPLEMENTACIÓN DE IObservador ====================
+
+    /**
+     * Recibe actualizaciones del GestorSincronizacionGlobal.
+     * Cuando llega SIGNAL_UPDATE del servidor, este método es invocado.
+     */
+    @Override
+    public void actualizar(String tipoDeDato, Object datos) {
+        System.err.println("🔔🔔🔔 [GestorNotificaciones]: ============ ACTUALIZAR INVOCADO ============");
+        System.err.println("🔔 [GestorNotificaciones]: Actualización recibida del GestorSincronizacionGlobal - Tipo: " + tipoDeDato);
+        System.err.println("🔔 [GestorNotificaciones]: Datos recibidos: " + (datos != null ? datos.getClass().getName() : "null"));
+
+        if ("ACTUALIZAR_NOTIFICACIONES".equals(tipoDeDato)) {
+            System.err.println("📡📡📡 [GestorNotificaciones]: Refrescando notificaciones desde el caché local...");
+            System.err.println("📡 [GestorNotificaciones]: Consultando repositorioNotificacion.obtenerTodas()...");
+
+            // Obtener todas las notificaciones del caché y notificar a los observadores (UI)
+            List<DTONotificacion> notificacionesCache = repositorioNotificacion.obtenerTodas();
+            System.err.println("📦📦📦 [GestorNotificaciones]: " + notificacionesCache.size() + " notificaciones encontradas en caché");
+
+            if (notificacionesCache.isEmpty()) {
+                System.err.println("⚠️⚠️⚠️ [GestorNotificaciones]: CACHÉ VACÍO - El repositorio no tiene notificaciones guardadas");
+            } else {
+                System.err.println("✅✅✅ [GestorNotificaciones]: Notificaciones en caché:");
+                for (int i = 0; i < notificacionesCache.size(); i++) {
+                    DTONotificacion n = notificacionesCache.get(i);
+                    System.err.println("   [" + (i+1) + "] ID: " + n.getId() + ", Tipo: " + n.getTipo() + ", Título: " + n.getTitulo());
+                }
+            }
+
+            System.err.println("📢 [GestorNotificaciones]: Notificando a " + observadores.size() + " observadores - Tipo: ACTUALIZAR_NOTIFICACIONES");
+            // Notificar a los observadores registrados (ServicioNotificaciones -> UI)
+            notificarObservadores("ACTUALIZAR_NOTIFICACIONES", notificacionesCache);
+            System.err.println("🔔🔔🔔 [GestorNotificaciones]: ============ ACTUALIZAR FINALIZADO ============");
+        } else if ("INVITACIONES_PENDIENTES".equals(tipoDeDato)) {
+            System.err.println("📩📩📩 [GestorNotificaciones]: Recibido evento INVITACIONES_PENDIENTES");
+            System.err.println("📩 [GestorNotificaciones]: Datos: " + datos);
+            // Este evento viene del GestorInvitaciones pero NO debería procesar aquí
+            // porque GestorInvitaciones ya guarda las notificaciones en el repositorio
+        }
+    }
+
     // ==================== MÉTODOS PRIVADOS ====================
+
+    private void manejarInvitacionCanal(DTOResponse respuesta) {
+        System.out.println("🔔 [GestorNotificaciones]: Nueva invitación a canal recibida por PUSH");
+
+        try {
+            Object data = respuesta.getData();
+
+            if (data instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> invitacionData = (Map<String, Object>) data;
+
+                String channelId = invitacionData.get("channelId") != null ?
+                        invitacionData.get("channelId").toString() : null;
+                String channelName = invitacionData.get("channelName") != null ?
+                        invitacionData.get("channelName").toString() : null;
+
+                // Extraer información del invitador (owner)
+                String inviterName = null;
+                if (invitacionData.get("owner") instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> ownerMap = (Map<String, Object>) invitacionData.get("owner");
+                    inviterName = ownerMap.get("username") != null ?
+                            ownerMap.get("username").toString() : null;
+                }
+
+                System.out.println("   → Canal: " + channelName);
+                System.out.println("   → Invitado por: " + inviterName);
+
+                // Crear y guardar una DTONotificacion en el repositorio
+                String notificacionId = java.util.UUID.randomUUID().toString();
+                String titulo = "Invitación a canal";
+                String contenido = inviterName != null ?
+                        inviterName + " te ha invitado al canal '" + channelName + "'" :
+                        "Has sido invitado al canal '" + channelName + "'";
+
+                DTONotificacion notificacion = new DTONotificacion(
+                        notificacionId,
+                        "INVITACION_CANAL",
+                        titulo,
+                        contenido,
+                        LocalDateTime.now(),
+                        false,
+                        channelId
+                );
+
+                // Guardar en repositorio
+                repositorioNotificacion.guardar(notificacion);
+                System.out.println("💾 [GestorNotificaciones]: Notificación de invitación guardada - ID: " + notificacionId);
+
+                // Notificar a observadores
+                notificarObservadores("NUEVA_NOTIFICACION", notificacion);
+            }
+
+        } catch (Exception e) {
+            System.err.println("❌ [GestorNotificaciones]: Error procesando invitación a canal: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
 
     private List<DTONotificacion> parsearNotificaciones(DTOResponse respuesta) {
         List<DTONotificacion> notificaciones = new ArrayList<>();

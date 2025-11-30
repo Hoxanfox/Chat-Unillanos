@@ -18,6 +18,7 @@ import fachada.gestionCanales.FachadaCanalesImpl;
 import fachada.gestionCanales.IFachadaCanales;
 import fachada.gestionNotificaciones.FachadaNotificacionesImpl;
 import fachada.gestionNotificaciones.IFachadaNotificaciones;
+import gestionNotificaciones.GestorSincronizacionGlobal;
 
 /**
  * Implementación del Singleton de la Fachada General.
@@ -47,6 +48,23 @@ public class FachadaGeneralImpl implements IFachadaGeneral {
         this.fachadaUsuarios = new FachadaUsuariosImpl();
         this.fachadaCanales = FachadaCanalesImpl.getInstancia(); // ✅ USAR SINGLETON
         this.fachadaNotificaciones = new FachadaNotificacionesImpl();
+
+        // Inicializar el Gestor de Sincronización Global
+        System.out.println("🔧 [FachadaGeneral]: Inicializando gestor de sincronización global...");
+        GestorSincronizacionGlobal.getInstancia().inicializar();
+
+        // Inicializar el Coordinador que conecta el gestor con las fachadas
+        System.out.println("🔧 [FachadaGeneral]: Inicializando coordinador de actualizaciones...");
+        CoordinadorActualizaciones coordinador = CoordinadorActualizaciones.getInstancia(this);
+        coordinador.inicializar();
+
+        // ✅ REGISTRAR el CoordinadorActualizaciones como observador de la autenticación
+        // para que reciba el evento AUTENTICACION_EXITOSA y solicite invitaciones a canales
+        System.out.println("🔧 [FachadaGeneral]: Registrando coordinador en autenticación...");
+        this.fachadaAutenticacion.registrarObservadorAutenticacion(coordinador);
+
+        System.out.println("✅ [FachadaGeneral]: Sistema de sincronización completo inicializado");
+        System.out.println("✅ [FachadaGeneral]: Coordinador registrado en autenticación");
     }
 
     public static synchronized IFachadaGeneral getInstancia() {

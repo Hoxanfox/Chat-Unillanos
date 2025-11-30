@@ -47,7 +47,7 @@ public class VistaLobby extends BorderPane {
         this.controladorUsuario = new ControladorUsuario();
         this.controladorCanales = new ControladorCanalesImpl();
         this.controladorNotificaciones = new ControladorNotificaciones();
-        this.controladorConexion = new ControladorConexion();
+        this.controladorConexion = ControladorConexion.getInstancia();
 
         // Crear componentes con sus controladores
         FeatureHeader header = new FeatureHeader(
@@ -63,6 +63,9 @@ public class VistaLobby extends BorderPane {
 
         this.panelNotificaciones = new FeatureNotificaciones(this.controladorNotificaciones);
         FeatureConexion barraEstado = new FeatureConexion(this.controladorConexion);
+        // Forzar petición de estado tras crear la barra de estado para asegurar sincronización
+        System.out.println("📡 [VistaLobby]: Forzando solicitud de estado al crear FeatureConexion");
+        this.controladorConexion.solicitarActualizacionEstado();
 
         VBox panelIzquierdo = new VBox(20);
         panelIzquierdo.setStyle("-fx-background-color: #2c3e50;");

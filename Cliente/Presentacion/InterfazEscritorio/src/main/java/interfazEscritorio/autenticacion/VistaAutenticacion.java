@@ -16,6 +16,9 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.layout.BorderPane;
+
+import interfazEscritorio.dashboard.featureConexion.FeatureConexion;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -30,7 +33,7 @@ public class VistaAutenticacion extends StackPane {
 
     public VistaAutenticacion(Runnable onAuthExitoso) {
         this.onAuthExitoso = onAuthExitoso;
-        this.controladorConexion = new ControladorConexion();
+        this.controladorConexion = ControladorConexion.getInstancia();
         this.controladorAutenticacion = new ControladorAutenticacion();
 
         // Al iniciar, se muestra la pantalla de carga y se intenta conectar.
@@ -50,7 +53,14 @@ public class VistaAutenticacion extends StackPane {
         ProgressIndicator progressIndicator = new ProgressIndicator();
         conectandoLayout.getChildren().addAll(etiquetaConectando, progressIndicator);
 
-        this.getChildren().setAll(conectandoLayout);
+        // Crear un contenedor con la barra de estado (FeatureConexion) en el bottom para que
+        // la barra se registre como observador antes de iniciar la conexión.
+        BorderPane container = new BorderPane();
+        container.setCenter(conectandoLayout);
+        FeatureConexion barraEstado = new FeatureConexion(controladorConexion);
+        container.setBottom(barraEstado);
+
+        this.getChildren().setAll(container);
 
         // Iniciar la conexión en segundo plano.
         CompletableFuture<Boolean> futuroConexion = controladorConexion.conectar();
@@ -90,4 +100,3 @@ public class VistaAutenticacion extends StackPane {
         this.getChildren().setAll(vistaRegistro);
     }
 }
-

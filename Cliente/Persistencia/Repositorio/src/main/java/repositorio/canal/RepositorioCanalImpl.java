@@ -228,22 +228,115 @@ public class RepositorioCanalImpl implements IRepositorioCanal {
                         }
 
                         if (existe) {
+                            // ✅ FIX: Verificar si el administrador existe ANTES de hacer el UPDATE
+                            String idAdmin = canal.getIdAdministrador() != null ? canal.getIdAdministrador().toString() : null;
+                            if (idAdmin != null) {
+                                // Verificar si el usuario existe en la tabla usuarios
+                                String sqlCheckUser = "SELECT COUNT(1) AS cnt FROM usuarios WHERE id_usuario = ?";
+                                boolean usuarioExiste = false;
+                                try (PreparedStatement pstmtCheck = conn.prepareStatement(sqlCheckUser)) {
+                                    pstmtCheck.setString(1, idAdmin);
+                                    try (ResultSet rsCheck = pstmtCheck.executeQuery()) {
+                                        if (rsCheck.next() && rsCheck.getInt("cnt") > 0) {
+                                            usuarioExiste = true;
+                                        }
+                                    }
+                                }
+
+                                if (!usuarioExiste) {
+                                    System.err.println("⚠️ [RepositorioCanal]: Usuario administrador no existe en BD local: " + idAdmin);
+                                    System.err.println("⚠️ [RepositorioCanal]: Actualizando canal con id_administrador = NULL");
+                                    idAdmin = null; // Establecer como NULL si no existe
+                                }
+                            }
+
                             // Actualizar canal existente
                             String sqlUpdate = "UPDATE canales SET nombre = ?, id_administrador = ? WHERE id_canal = ?";
                             try (PreparedStatement pstmt = conn.prepareStatement(sqlUpdate)) {
                                 pstmt.setString(1, canal.getNombre());
-                                pstmt.setString(2, canal.getIdAdministrador() != null ? canal.getIdAdministrador().toString() : null);
+                                pstmt.setString(2, idAdmin);
                                 pstmt.setString(3, canal.getIdCanal().toString());
                                 pstmt.executeUpdate();
                             }
                         } else {
-                            // Insertar nuevo canal
-                            String sqlInsert = "INSERT INTO canales (id_canal, nombre, id_administrador) VALUES (?, ?, ?)";
-                            try (PreparedStatement pstmt = conn.prepareStatement(sqlInsert)) {
-                                pstmt.setString(1, canal.getIdCanal().toString());
-                                pstmt.setString(2, canal.getNombre());
-                                pstmt.setString(3, canal.getIdAdministrador() != null ? canal.getIdAdministrador().toString() : null);
-                                pstmt.executeUpdate();
+                            // ✅ FIX: Verificar si ya existe un canal con el mismo nombre antes de insertar
+                            String sqlCheckNombre = "SELECT COUNT(1) AS cnt FROM canales WHERE nombre = ?";
+                            boolean nombreExiste = false;
+
+                            try (PreparedStatement pstmt = conn.prepareStatement(sqlCheckNombre)) {
+                                pstmt.setString(1, canal.getNombre());
+                                try (ResultSet rs = pstmt.executeQuery()) {
+                                    if (rs.next() && rs.getInt("cnt") > 0) {
+                                        nombreExiste = true;
+                                    }
+                                }
+                            }
+
+                            if (nombreExiste) {
+                                // Si el nombre ya existe, actualizar ese registro en lugar de insertar
+                                System.err.println("⚠️ [RepositorioCanal]: Canal con nombre '" + canal.getNombre() + "' ya existe, actualizando...");
+
+                                // ✅ FIX: Verificar si el administrador existe ANTES de hacer el UPDATE
+                                String idAdmin = canal.getIdAdministrador() != null ? canal.getIdAdministrador().toString() : null;
+                                if (idAdmin != null) {
+                                    // Verificar si el usuario existe en la tabla usuarios
+                                    String sqlCheckUser = "SELECT COUNT(1) AS cnt FROM usuarios WHERE id_usuario = ?";
+                                    boolean usuarioExiste = false;
+                                    try (PreparedStatement pstmtCheck = conn.prepareStatement(sqlCheckUser)) {
+                                        pstmtCheck.setString(1, idAdmin);
+                                        try (ResultSet rsCheck = pstmtCheck.executeQuery()) {
+                                            if (rsCheck.next() && rsCheck.getInt("cnt") > 0) {
+                                                usuarioExiste = true;
+                                            }
+                                        }
+                                    }
+
+                                    if (!usuarioExiste) {
+                                        System.err.println("⚠️ [RepositorioCanal]: Usuario administrador no existe en BD local: " + idAdmin);
+                                        System.err.println("⚠️ [RepositorioCanal]: Actualizando canal con id_administrador = NULL");
+                                        idAdmin = null; // Establecer como NULL si no existe
+                                    }
+                                }
+
+                                String sqlUpdateByName = "UPDATE canales SET id_canal = ?, id_administrador = ? WHERE nombre = ?";
+                                try (PreparedStatement pstmt = conn.prepareStatement(sqlUpdateByName)) {
+                                    pstmt.setString(1, canal.getIdCanal().toString());
+                                    pstmt.setString(2, idAdmin);
+                                    pstmt.setString(3, canal.getNombre());
+                                    pstmt.executeUpdate();
+                                }
+                            } else {
+                                // Insertar nuevo canal solo si el nombre no existe
+                                String sqlInsert = "INSERT INTO canales (id_canal, nombre, id_administrador) VALUES (?, ?, ?)";
+                                try (PreparedStatement pstmt = conn.prepareStatement(sqlInsert)) {
+                                    pstmt.setString(1, canal.getIdCanal().toString());
+                                    pstmt.setString(2, canal.getNombre());
+
+                                    // ✅ FIX: Verificar si el administrador existe antes de insertar
+                                    String idAdmin = canal.getIdAdministrador() != null ? canal.getIdAdministrador().toString() : null;
+                                    if (idAdmin != null) {
+                                        // Verificar si el usuario existe en la tabla usuarios
+                                        String sqlCheckUser = "SELECT COUNT(1) AS cnt FROM usuarios WHERE id_usuario = ?";
+                                        boolean usuarioExiste = false;
+                                        try (PreparedStatement pstmtCheck = conn.prepareStatement(sqlCheckUser)) {
+                                            pstmtCheck.setString(1, idAdmin);
+                                            try (ResultSet rsCheck = pstmtCheck.executeQuery()) {
+                                                if (rsCheck.next() && rsCheck.getInt("cnt") > 0) {
+                                                    usuarioExiste = true;
+                                                }
+                                            }
+                                        }
+
+                                        if (!usuarioExiste) {
+                                            System.err.println("⚠️ [RepositorioCanal]: Usuario administrador no existe en BD local: " + idAdmin);
+                                            System.err.println("⚠️ [RepositorioCanal]: Insertando canal con id_administrador = NULL");
+                                            idAdmin = null; // Establecer como NULL si no existe
+                                        }
+                                    }
+
+                                    pstmt.setString(3, idAdmin);
+                                    pstmt.executeUpdate();
+                                }
                             }
                         }
 

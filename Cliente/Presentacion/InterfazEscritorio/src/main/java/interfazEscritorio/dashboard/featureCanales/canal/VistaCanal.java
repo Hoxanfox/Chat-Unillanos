@@ -48,6 +48,9 @@ public class VistaCanal extends BorderPane implements IObservador {
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
+    // ✅ Campo de instancia para el ScrollPane
+    private ScrollPane scrollPane;
+
     public VistaCanal(DTOCanalCreado canal, Runnable onVolver, Consumer<DTOCanalCreado> onVerMiembros, IControladorCanales controlador) {
         System.out.println("🔧 [VistaCanal]: Inicializando vista de canal...");
         System.out.println("   → Canal: " + canal.getNombre() + " (ID: " + canal.getId() + ")");
@@ -96,9 +99,10 @@ public class VistaCanal extends BorderPane implements IObservador {
         cargando.setTextFill(Color.GRAY);
         mensajesBox.getChildren().add(cargando);
 
-        ScrollPane scrollPane = new ScrollPane(mensajesBox);
+        scrollPane = new ScrollPane(mensajesBox); // ✅ Asignar a campo de instancia
         scrollPane.setFitToWidth(true);
-        scrollPane.vvalueProperty().bind(mensajesBox.heightProperty());
+        // ✅ ELIMINAR el binding automático que hace scroll hacia arriba
+        // scrollPane.vvalueProperty().bind(mensajesBox.heightProperty());
 
         // === INPUT AREA ===
         VBox inputArea = new VBox(5);
@@ -156,6 +160,10 @@ public class VistaCanal extends BorderPane implements IObservador {
 
         this.setCenter(scrollPane);
         this.setBottom(inputArea);
+
+        // 🆕 Informar al gestor que este canal está activo
+        System.out.println("📍 [VistaCanal]: Informando al gestor que el canal está activo");
+        controlador.setCanalActivo(canal.getId());
 
         // Solicitar historial inicial
         System.out.println("📡 [VistaCanal]: Solicitando historial del canal...");
@@ -421,11 +429,12 @@ public class VistaCanal extends BorderPane implements IObservador {
                     break;
 
                 case "MENSAJE_CANAL_RECIBIDO":
+                case "MENSAJE_CANAL_ENVIADO":
                 case "NUEVO_MENSAJE_CANAL":
                     if (datos instanceof DTOMensajeCanal) {
                         DTOMensajeCanal mensaje = (DTOMensajeCanal) datos;
                         if (mensaje.getCanalId().equals(canal.getId())) {
-                            System.out.println("💬 [VistaCanal]: Nuevo mensaje recibido");
+                            System.out.println("💬 [VistaCanal]: Nuevo mensaje " + (tipoDeDato.equals("MENSAJE_CANAL_ENVIADO") ? "enviado" : "recibido"));
                             System.out.println("   → De: " + mensaje.getNombreRemitente());
                             System.out.println("   → Tipo: " + mensaje.getTipo());
                             agregarMensaje(mensaje);
@@ -461,6 +470,11 @@ public class VistaCanal extends BorderPane implements IObservador {
                 agregarMensaje(mensaje);
             }
             System.out.println("✅ [VistaCanal]: Historial cargado en la vista");
+
+            // ✅ Hacer scroll automático hacia abajo después de cargar el historial
+            Platform.runLater(() -> {
+                scrollPane.setVvalue(1.0); // 1.0 = scroll al final (abajo)
+            });
         }
     }
 
@@ -480,13 +494,17 @@ public class VistaCanal extends BorderPane implements IObservador {
             return;
         }
 
-        // Mensajes propios a la IZQUIERDA (verde), otros a la DERECHA (blanco)
-        Pos alineacion = mensaje.isEsPropio() ? Pos.CENTER_LEFT : Pos.CENTER_RIGHT;
+        // ✅ Mensajes propios a la DERECHA (verde), otros a la IZQUIERDA (blanco)
+        // Esto sigue el patrón estándar de apps de chat (WhatsApp, Telegram, etc.)
+        Pos alineacion = mensaje.isEsPropio() ? Pos.CENTER_RIGHT : Pos.CENTER_LEFT;
 
         System.out.println("🔍 [VistaCanal]: Agregando mensaje:");
+        System.out.println("   → ID: " + mensaje.getMensajeId());
         System.out.println("   → Tipo: " + mensaje.getTipo());
+        System.out.println("   → Remitente: " + mensaje.getNombreRemitente() + " (ID: " + mensaje.getRemitenteId() + ")");
         System.out.println("   → esPropio: " + mensaje.isEsPropio());
-        System.out.println("   → Alineación: " + (mensaje.isEsPropio() ? "IZQUIERDA (propio)" : "DERECHA (otros)"));
+        System.out.println("   → Alineación: " + (mensaje.isEsPropio() ? "DERECHA (propio)" : "IZQUIERDA (otros)"));
+        System.out.println("   → Timestamp: " + mensaje.getFechaEnvio());
 
         VBox burbuja = crearBurbujaMensaje(mensaje, alineacion);
         mensajesBox.getChildren().add(burbuja);
@@ -494,6 +512,11 @@ public class VistaCanal extends BorderPane implements IObservador {
         if (id != null && !id.isEmpty()) {
             mensajesMostrados.add(id);
         }
+
+        // ✅ Hacer scroll automático hacia abajo cuando se agrega un nuevo mensaje
+        Platform.runLater(() -> {
+            scrollPane.setVvalue(1.0); // 1.0 = scroll al final (abajo)
+        });
 
         System.out.println("✅ [VistaCanal]: Mensaje agregado a la vista");
     }
@@ -526,33 +549,57 @@ public class VistaCanal extends BorderPane implements IObservador {
             Button btnPlay = new Button("▶️");
             btnPlay.setStyle("-fx-font-size: 16px;");
             btnPlay.setOnAction(e -> {
-                System.out.println("🎵 [VistaCanal]: Reproducir audio - FileId: " + mensaje.getFileId());
-                // TODO: Implementar reproducción de audio
-                btnPlay.setText("⏳");
-                btnPlay.setDisable(true);
+                // Obtener el fileId del mensaje (puede estar en fileId o content)
+                String audioFileId = mensaje.getFileId() != null ? mensaje.getFileId() : mensaje.getContenido();
 
-                // Simulación - en producción usar controlador.reproducirAudio()
-                new Thread(() -> {
-                    try {
-                        Thread.sleep(2000);
-                    } catch (InterruptedException ex) {
-                        ex.printStackTrace();
-                    }
-                    Platform.runLater(() -> {
-                        btnPlay.setText("✅");
-                        new Thread(() -> {
-                            try {
-                                Thread.sleep(1000);
-                            } catch (InterruptedException ex) {
-                                ex.printStackTrace();
-                            }
+                if (audioFileId != null && !audioFileId.isEmpty()) {
+                    System.out.println("🎵 [VistaCanal]: Reproduciendo audio - FileId: " + audioFileId);
+                    btnPlay.setText("⏳");
+                    btnPlay.setDisable(true);
+
+                    controlador.reproducirAudio(audioFileId)
+                        .thenRun(() -> Platform.runLater(() -> {
+                            btnPlay.setText("✅");
+                            System.out.println("✅ [VistaCanal]: Audio reproducido correctamente");
+
+                            // Volver al estado original después de 1 segundo
+                            new Thread(() -> {
+                                try {
+                                    Thread.sleep(1000);
+                                } catch (InterruptedException ex) {
+                                    Thread.currentThread().interrupt();
+                                }
+                                Platform.runLater(() -> {
+                                    btnPlay.setText("▶️");
+                                    btnPlay.setDisable(false);
+                                });
+                            }).start();
+                        }))
+                        .exceptionally(ex -> {
                             Platform.runLater(() -> {
-                                btnPlay.setText("▶️");
-                                btnPlay.setDisable(false);
+                                btnPlay.setText("❌");
+                                System.err.println("❌ [VistaCanal]: Error al reproducir audio: " + ex.getMessage());
+                                mostrarError("Error al reproducir audio: " + ex.getMessage());
+
+                                // Volver al estado original después de 2 segundos
+                                new Thread(() -> {
+                                    try {
+                                        Thread.sleep(2000);
+                                    } catch (InterruptedException e2) {
+                                        Thread.currentThread().interrupt();
+                                    }
+                                    Platform.runLater(() -> {
+                                        btnPlay.setText("▶️");
+                                        btnPlay.setDisable(false);
+                                    });
+                                }).start();
                             });
-                        }).start();
-                    });
-                }).start();
+                            return null;
+                        });
+                } else {
+                    System.err.println("❌ [VistaCanal]: No se pudo obtener el fileId del audio");
+                    mostrarError("No se pudo obtener el ID del archivo de audio");
+                }
             });
 
             Label audioLabel = new Label("🎤 Mensaje de audio");

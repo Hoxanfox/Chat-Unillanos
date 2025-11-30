@@ -1,6 +1,7 @@
 package fachada.gestionCanales;
 
 import dominio.Canal;
+import fachada.FachadaGeneralImpl;
 import gestionCanales.invitarMiembro.IInvitadorMiembro;
 import gestionCanales.invitarMiembro.InvitadorMiembro;
 import gestionCanales.invitaciones.IGestorInvitaciones;
@@ -13,6 +14,8 @@ import gestionCanales.mensajes.GestorMensajesCanalImpl;
 import gestionCanales.mensajes.IGestorMensajesCanal;
 import gestionCanales.nuevoCanal.CreadorCanal;
 import gestionCanales.nuevoCanal.ICreadorCanal;
+import gestionArchivos.IGestionArchivos;
+import gestionArchivos.GestionArchivosImpl;
 import observador.IObservador;
 import repositorio.canal.IRepositorioCanal;
 import repositorio.canal.RepositorioCanalImpl;
@@ -42,9 +45,13 @@ public class FachadaCanalesImpl implements IFachadaCanales {
         IRepositorioCanal repositorioCanal = new RepositorioCanalImpl();
         IRepositorioMensajeCanal repositorioMensajes = new RepositorioMensajeCanalImpl();
 
+        // ✅ Inicializar IGestionArchivos para descarga automática de archivos
+        IGestionArchivos gestionArchivos = new GestionArchivosImpl();
+
         this.creadorCanal = new CreadorCanal(repositorioCanal);
         this.listadorCanales = new ListadorCanales(repositorioCanal);
-        this.gestorMensajes = new GestorMensajesCanalImpl(repositorioMensajes);
+        // 🆕 Pasar el repositorio de canales al gestor de mensajes
+        this.gestorMensajes = new GestorMensajesCanalImpl(repositorioMensajes, gestionArchivos, repositorioCanal);
         this.invitadorMiembro = new InvitadorMiembro(repositorioCanal);
         this.listadorMiembros = new ListadorMiembros(repositorioCanal);
         this.gestorInvitaciones = new GestorInvitacionesImpl(repositorioCanal);
@@ -151,6 +158,29 @@ public class FachadaCanalesImpl implements IFachadaCanales {
     @Override
     public void registrarObservadorInvitaciones(IObservador observador) {
         System.out.println("🔔 [FachadaCanales]: Registrando observador de invitaciones");
+        System.out.println("   Tipo de observador: " + observador.getClass().getSimpleName());
         gestorInvitaciones.registrarObservador(observador);
+        System.out.println("✅ [FachadaCanales]: Observador registrado exitosamente");
+    }
+
+    /**
+     * Obtiene el gestor de invitaciones para permitir registro directo de observadores.
+     * @return IGestorInvitaciones
+     */
+    public IGestorInvitaciones getGestorInvitaciones() {
+        return gestorInvitaciones;
+    }
+
+    @Override
+    public CompletableFuture<Void> reproducirAudio(String fileId) {
+        System.out.println("🎵 [FachadaCanales]: Reproduciendo audio - FileId: " + fileId);
+        return FachadaGeneralImpl.getInstancia().getFachadaArchivos().reproducirAudio(fileId);
+    }
+
+    // 🆕 Método para establecer el canal activo
+    @Override
+    public void setCanalActivo(String canalId) {
+        System.out.println("📍 [FachadaCanales]: Estableciendo canal activo en el gestor de mensajes");
+        gestorMensajes.setCanalActivo(canalId);
     }
 }
