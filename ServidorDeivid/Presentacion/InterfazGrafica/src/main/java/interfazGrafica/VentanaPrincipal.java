@@ -9,6 +9,7 @@ import controlador.transcripcion.ControladorTranscripcion;
 import gestorUsuarios.GestorUsuarios;
 import gestorLogs.GestorLogs;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
+import gestorLogs.api.LogsApiConfig;
 import servicio.usuario.ServicioGestionUsuarios;
 import servicio.logs.ServicioLogs;
 import interfazGrafica.vistaUsuarios.PanelUsuarios;
@@ -104,7 +105,8 @@ public class VentanaPrincipal extends JFrame implements IObservador {
             servicioSincronizacion.registrarObservador(this);
             LoggerCentral.info(TAG, "✅ VentanaPrincipal suscrita a eventos de ServicioSincronizacionDatos");
         } else {
-            LoggerCentral.warn(TAG, "⚠️ servicioSincronizacion es null al inicializar controladores; la ventana no recibirá eventos de sync todavía.");
+            LoggerCentral.warn(TAG,
+                    "⚠️ servicioSincronizacion es null al inicializar controladores; la ventana no recibirá eventos de sync todavía.");
         }
 
         LoggerCentral.info(TAG, "✓ Todos los controladores inicializados");
@@ -130,6 +132,17 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         // 4. Controlador para el API REST
         controladorLogsApi = new ControladorLogsApi(servicioLogs);
 
+        // ✅ NUEVO: Configurar el proveedor de peers para el API REST
+        // Esto permite que el endpoint /api/network/peers devuelva la lista real de
+        // peers
+        servicio.p2p.ServicioP2P servicioP2P = controladorP2P.getServicioP2PInterno();
+        if (servicioP2P != null) {
+            LogsApiConfig.setProveedorPeers(() -> servicioP2P.obtenerListaPeers());
+            LoggerCentral.info(TAG, "✓ Proveedor de peers configurado para el API REST");
+        } else {
+            LoggerCentral.warn(TAG, "⚠️ No se pudo configurar proveedor de peers (ServicioP2P es null)");
+        }
+
         LoggerCentral.info(TAG, "✓ Arquitectura de logs construida:");
         LoggerCentral.info(TAG, "  Interfaz → ControladorLogs → ServicioLogs → GestorLogs");
         LoggerCentral.info(TAG, "  API REST → ControladorLogsApi → ServicioLogs → GestorLogs");
@@ -149,8 +162,10 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         // 2. Capa de Servicio: ServicioGestionUsuarios
         ServicioGestionUsuarios servicioUsuarios = new ServicioGestionUsuarios(gestorUsuarios);
 
-        // 3. Obtener el servicio de sincronización P2P del ServicioP2P (NO crear uno nuevo)
-        // Este servicio YA está conectado a la red y tiene el gestor de conexiones configurado
+        // 3. Obtener el servicio de sincronización P2P del ServicioP2P (NO crear uno
+        // nuevo)
+        // Este servicio YA está conectado a la red y tiene el gestor de conexiones
+        // configurado
         servicio.p2p.ServicioP2P servicioP2DInterno = controladorP2P.getServicioP2PInterno();
         if (servicioP2DInterno != null) {
             servicioSincronizacion = servicioP2DInterno.getServicioSincronizacion();
@@ -158,13 +173,15 @@ public class VentanaPrincipal extends JFrame implements IObservador {
             if (servicioSincronizacion != null) {
                 // 4. Conectar servicio de usuarios con sincronización P2P
                 servicioUsuarios.setServicioSincronizacion(servicioSincronizacion);
-                LoggerCentral.info(TAG, "✓ ServicioGestionUsuarios conectado con ServicioSincronizacionDatos existente");
+                LoggerCentral.info(TAG,
+                        "✓ ServicioGestionUsuarios conectado con ServicioSincronizacionDatos existente");
 
                 // 5. Registrar GestorUsuarios como observador para cambios desde otros peers
                 gestorUsuarios.registrarObservador(servicioSincronizacion);
                 LoggerCentral.info(TAG, "✓ GestorUsuarios registrado como observador del ServicioSincronizacionDatos");
 
-                // ✅ NUEVO: 6. Configurar el peer local en GestorUsuarios para asignación automática
+                // ✅ NUEVO: 6. Configurar el peer local en GestorUsuarios para asignación
+                // automática
                 try {
                     java.util.UUID peerLocalId = servicioP2DInterno.getIdPeerLocal();
                     if (peerLocalId != null) {
@@ -187,8 +204,10 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         controladorUsuarios = new ControladorUsuarios(servicioUsuarios);
 
         LoggerCentral.info(TAG, "✓ Arquitectura de usuarios construida:");
-        LoggerCentral.info(TAG, "  Interfaz → ControladorUsuarios → ServicioGestionUsuarios → GestorUsuarios → Repositorio");
-        LoggerCentral.info(TAG, "  Con sincronización P2P integrada (usando el ServicioSincronizacionDatos de la red P2P)");
+        LoggerCentral.info(TAG,
+                "  Interfaz → ControladorUsuarios → ServicioGestionUsuarios → GestorUsuarios → Repositorio");
+        LoggerCentral.info(TAG,
+                "  Con sincronización P2P integrada (usando el ServicioSincronizacionDatos de la red P2P)");
     }
 
     private void inicializarComponentes() {
@@ -222,11 +241,11 @@ public class VentanaPrincipal extends JFrame implements IObservador {
      */
     private void suscribirObservadoresUI() {
         try {
-            // 1. Suscribir PanelUsuarios al ServicioCliente (eventos CS: autenticación, conexión/desconexión)
+            // 1. Suscribir PanelUsuarios al ServicioCliente (eventos CS: autenticación,
+            // conexión/desconexión)
             servicio.clienteServidor.IServicioClienteControl servicioCS = controladorCS.getServicioClienteInterno();
             if (servicioCS instanceof servicio.clienteServidor.ServicioCliente) {
-                servicio.clienteServidor.ServicioCliente servicioClienteImpl =
-                    (servicio.clienteServidor.ServicioCliente) servicioCS;
+                servicio.clienteServidor.ServicioCliente servicioClienteImpl = (servicio.clienteServidor.ServicioCliente) servicioCS;
                 servicioClienteImpl.registrarObservador(panelUsuarios);
                 LoggerCentral.info(TAG, "✓ PanelUsuarios suscrito a eventos de ServicioCliente (CS)");
 
@@ -237,11 +256,13 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                 }
             }
 
-            // ✅ NUEVO: 2. Suscribir PanelUsuarios al ServicioSincronizacionDatos (eventos P2P: sincronización terminada)
+            // ✅ NUEVO: 2. Suscribir PanelUsuarios al ServicioSincronizacionDatos (eventos
+            // P2P: sincronización terminada)
             if (servicioSincronizacion != null) {
                 servicioSincronizacion.registrarObservador(panelUsuarios);
                 LoggerCentral.info(TAG, "✅ PanelUsuarios suscrito a eventos de ServicioSincronizacionDatos P2P");
-                LoggerCentral.info(TAG, "   → El panel se actualizará automáticamente cuando termine la sincronización P2P");
+                LoggerCentral.info(TAG,
+                        "   → El panel se actualizará automáticamente cuando termine la sincronización P2P");
             } else {
                 LoggerCentral.warn(TAG, "⚠️ ServicioSincronizacionDatos no disponible para suscribir PanelUsuarios");
             }
@@ -277,15 +298,13 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                     iniciarClienteServidor();
                 } else {
                     LoggerCentral.error(TAG, "✗ Error: P2P no se inició correctamente");
-                    SwingUtilities.invokeLater(() ->
-                        panelPrincipal.agregarEstado("✗ ERROR: P2P no se inició correctamente")
-                    );
+                    SwingUtilities
+                            .invokeLater(() -> panelPrincipal.agregarEstado("✗ ERROR: P2P no se inició correctamente"));
                 }
             } catch (Exception e) {
                 LoggerCentral.error(TAG, "Error iniciando P2P: " + e.getMessage());
-                SwingUtilities.invokeLater(() ->
-                    panelPrincipal.agregarEstado("✗ ERROR iniciando P2P: " + e.getMessage())
-                );
+                SwingUtilities
+                        .invokeLater(() -> panelPrincipal.agregarEstado("✗ ERROR iniciando P2P: " + e.getMessage()));
             }
         }, "Thread-InicioP2P").start();
     }
@@ -315,15 +334,13 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                     iniciarApiRestLogs();
                 } else {
                     LoggerCentral.error(TAG, "✗ Error: Cliente-Servidor no se inició correctamente");
-                    SwingUtilities.invokeLater(() ->
-                        panelPrincipal.agregarEstado("✗ ERROR: Cliente-Servidor no se inició")
-                    );
+                    SwingUtilities
+                            .invokeLater(() -> panelPrincipal.agregarEstado("✗ ERROR: Cliente-Servidor no se inició"));
                 }
             } catch (Exception e) {
                 LoggerCentral.error(TAG, "Error iniciando Cliente-Servidor: " + e.getMessage());
-                SwingUtilities.invokeLater(() ->
-                    panelPrincipal.agregarEstado("✗ ERROR iniciando CS: " + e.getMessage())
-                );
+                SwingUtilities
+                        .invokeLater(() -> panelPrincipal.agregarEstado("✗ ERROR iniciando CS: " + e.getMessage()));
             }
         }, "Thread-InicioCS").start();
     }
@@ -398,10 +415,12 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                     LoggerCentral.info(TAG, "✅ Servicio de sincronización P2P inyectado en servicios CS");
 
                     // ✅ 3. NUEVO: Conexión P2P → CS (para notificar cuando termina sincronización)
-                    gestorClientes.servicios.ServicioNotificacionCliente servicioNotificacionCliente = servicioCS.getServicioNotificacion();
+                    gestorClientes.servicios.ServicioNotificacionCliente servicioNotificacionCliente = servicioCS
+                            .getServicioNotificacion();
                     if (servicioNotificacionCliente != null) {
                         servicioSync.setServicioNotificacionCliente(servicioNotificacionCliente);
-                        LoggerCentral.info(TAG, "✅ ServicioNotificacionCliente inyectado en ServicioSincronizacionDatos");
+                        LoggerCentral.info(TAG,
+                                "✅ ServicioNotificacionCliente inyectado en ServicioSincronizacionDatos");
                     } else {
                         LoggerCentral.warn(TAG, "⚠️ No se pudo obtener ServicioNotificacionCliente");
                     }
@@ -437,8 +456,7 @@ public class VentanaPrincipal extends JFrame implements IObservador {
             panelPrincipal.actualizarEstadisticas(
                     totalClientes, clientesAutenticados,
                     0, 0,
-                    conexionesTotales, conexionesActivas
-            );
+                    conexionesTotales, conexionesActivas);
         } catch (Exception e) {
             LoggerCentral.error(TAG, "Error actualizando estadísticas: " + e.getMessage());
         }
@@ -477,7 +495,8 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                 break;
 
             case "SINCRONIZACION_P2P_TERMINADA":
-                LoggerCentral.info(TAG, "🔔 Evento SINCRONIZACION_P2P_TERMINADA recibido en VentanaPrincipal (datos=" + datos + ")");
+                LoggerCentral.info(TAG,
+                        "🔔 Evento SINCRONIZACION_P2P_TERMINADA recibido en VentanaPrincipal (datos=" + datos + ")");
                 SwingUtilities.invokeLater(() -> {
                     boolean huboCambios = datos instanceof Boolean && (Boolean) datos;
                     if (lblEstadoSyncP2P != null) {
@@ -485,7 +504,8 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                         lblEstadoSyncP2P.setBackground(new Color(0, 128, 0));
                     }
                     if (panelPrincipal != null) {
-                        panelPrincipal.agregarEstado("✅ Sincronización P2P terminada" + (huboCambios ? " con cambios" : " sin cambios"));
+                        panelPrincipal.agregarEstado(
+                                "✅ Sincronización P2P terminada" + (huboCambios ? " con cambios" : " sin cambios"));
                     }
                 });
                 break;

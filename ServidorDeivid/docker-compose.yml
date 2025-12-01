@@ -10,7 +10,7 @@ services:
       MYSQL_USER: chatuser
       MYSQL_PASSWORD: chatpass
     ports:
-      - "3306:3306"
+      - "12000:3306"
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - db_data:/var/lib/mysql
