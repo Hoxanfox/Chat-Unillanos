@@ -1,0 +1,145 @@
+# =============================================================================
+# OPENTELEMETRY COLLECTOR - CONFIGURACION
+# =============================================================================
+# Recibe telemetria de todos los nodos (servidores P2P y clientes)
+# y la distribuye a Prometheus (metricas), Loki (logs) y Tempo (trazas)
+# =============================================================================
+
+receivers:
+  # ---------------------------------------------------------------------------
+  # OTLP Receiver - Recibe datos via gRPC y HTTP
+  # ---------------------------------------------------------------------------
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # ---------------------------------------------------------------------------
+  # Batch Processor - Agrupa telemetria para envio eficiente
+  # ---------------------------------------------------------------------------
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+  # ---------------------------------------------------------------------------
+  # Memory Limiter - Previene uso excesivo de memoria
+  # ---------------------------------------------------------------------------
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # ---------------------------------------------------------------------------
+  # Resource Processor - Agrega atributos a toda la telemetria
+  # ---------------------------------------------------------------------------
+  resource:
+    attributes:
+      - key: service.namespace
+        value: chat-unillanos
+        action: upsert
+      - key: deployment.environment
+        value: development
+        action: upsert
+
+  # ---------------------------------------------------------------------------
+  # Attributes Processor - Para logs
+  # ---------------------------------------------------------------------------
+  attributes:
+    actions:
+      - key: loki.attribute.labels
+        value: service.name,service.namespace,severity
+        action: insert
+
+exporters:
+  # ---------------------------------------------------------------------------
+  # Prometheus Exporter - Exporta metricas a Prometheus
+  # ---------------------------------------------------------------------------
+  prometheusremotewrite:
+    endpoint: http://prometheus:9090/api/v1/write
+    tls:
+      insecure: true
+
+  # ---------------------------------------------------------------------------
+  # Loki Exporter - Exporta logs a Loki
+  # ---------------------------------------------------------------------------
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    tls:
+      insecure: true
+    default_labels_enabled:
+      exporter: true
+      job: true
+
+  # ---------------------------------------------------------------------------
+  # OTLP Exporter - Exporta trazas a Tempo
+  # ---------------------------------------------------------------------------
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # ---------------------------------------------------------------------------
+  # Logging Exporter - Para debug (ver telemetria en consola del collector)
+  # ---------------------------------------------------------------------------
+  logging:
+    verbosity: normal
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+extensions:
+  # ---------------------------------------------------------------------------
+  # Health Check - Endpoint de salud del collector
+  # ---------------------------------------------------------------------------
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  # ---------------------------------------------------------------------------
+  # PProf - Profiling del collector
+  # ---------------------------------------------------------------------------
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+  # ---------------------------------------------------------------------------
+  # zPages - Diagnostico del collector
+  # ---------------------------------------------------------------------------
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+  
+  pipelines:
+    # -------------------------------------------------------------------------
+    # Pipeline de TRAZAS: OTLP -> Batch -> Tempo
+    # -------------------------------------------------------------------------
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp/tempo, logging]
+
+    # -------------------------------------------------------------------------
+    # Pipeline de METRICAS: OTLP -> Batch -> Prometheus
+    # -------------------------------------------------------------------------
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [prometheusremotewrite, logging]
+
+    # -------------------------------------------------------------------------
+    # Pipeline de LOGS: OTLP -> Batch -> Loki
+    # -------------------------------------------------------------------------
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, attributes, batch]
+      exporters: [loki, logging]
+
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888
+
