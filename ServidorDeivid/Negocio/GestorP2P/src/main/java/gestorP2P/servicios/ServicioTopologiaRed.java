@@ -227,12 +227,99 @@ public class ServicioTopologiaRed implements IServicioP2P, ISujeto {
             // Enviar a todos los peers
             gestorConexiones.broadcast(mensaje);
 
-            // Notificar a observadores sobre actualización
+            // ✅ NUEVO: Notificar lista de peers activos a la interfaz
+            notificarListaPeersActivos();
+
+            // Notificar topología completa (para otros observadores)
             notificarObservadores("TOPOLOGIA_ACTUALIZADA", obtenerTopologiaCompleta());
 
         } catch (Exception e) {
             LoggerCentral.error(TAG, "Error en envío de topología: " + e.getMessage());
         }
+    }
+
+    /**
+     * ✅ NUEVO: Notifica la lista de peers activos a la interfaz
+     * Este método extrae los peers de la topología y los envía en formato DTOPeerDetails
+     */
+    private void notificarListaPeersActivos() {
+        try {
+            List<DTOPeerDetails> peersActivos = obtenerListaPeersActivos();
+
+            LoggerCentral.info(TAG, "📢 Notificando LISTA_PEERS_ACTIVOS: " + peersActivos.size() + " peers");
+
+            // Notificar con el evento específico para la interfaz
+            notificarObservadores("LISTA_PEERS_ACTIVOS", peersActivos);
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error notificando peers activos: " + e.getMessage());
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene la lista de peers activos desde la topología y la BD
+     * Combina información de peers conectados en memoria con datos de la BD
+     */
+    public List<DTOPeerDetails> obtenerListaPeersActivos() {
+        List<DTOPeerDetails> peersActivos = new ArrayList<>();
+
+        try {
+            // 1. Obtener peers de la topología local (este servidor)
+            if (topologiaLocal != null) {
+                DTOPeerDetails peerLocal = new DTOPeerDetails(
+                    topologiaLocal.getIdPeer(),
+                    config.getPeerHost(),
+                    topologiaLocal.getPuertoPeer(), // ✅ CORREGIDO
+                    "ONLINE",
+                    java.time.Instant.now().toString()
+                );
+                peersActivos.add(peerLocal);
+                LoggerCentral.debug(TAG, "✓ Peer local agregado: " + peerLocal.getId());
+            }
+
+            // 2. Obtener peers remotos de las topologías recibidas
+            for (Map.Entry<String, DTOTopologiaRed> entry : topologiasRemotas.entrySet()) {
+                DTOTopologiaRed topo = entry.getValue();
+
+                // Evitar duplicar el peer local
+                if (topologiaLocal != null && entry.getKey().equals(topologiaLocal.getIdPeer())) {
+                    continue;
+                }
+
+                DTOPeerDetails peerRemoto = new DTOPeerDetails(
+                    topo.getIdPeer(),
+                    topo.getIpPeer(), // ✅ CORREGIDO
+                    topo.getPuertoPeer(), // ✅ CORREGIDO
+                    "ONLINE", // Si está en topologías remotas, está conectado
+                    java.time.Instant.now().toString()
+                );
+                peersActivos.add(peerRemoto);
+                LoggerCentral.debug(TAG, "✓ Peer remoto agregado: " + peerRemoto.getId() +
+                                   " (" + topo.getNumeroClientes() + " clientes)");
+            }
+
+            // 3. También obtener peers directamente del gestor de conexiones
+            if (gestorConexiones != null) {
+                List<DTOPeerDetails> peersConectados = gestorConexiones.obtenerDetallesPeers();
+                for (DTOPeerDetails peer : peersConectados) {
+                    // Evitar duplicados
+                    boolean existe = peersActivos.stream()
+                        .anyMatch(p -> p.getId().equals(peer.getId()));
+
+                    if (!existe) {
+                        peersActivos.add(peer);
+                        LoggerCentral.debug(TAG, "✓ Peer del gestor agregado: " + peer.getId());
+                    }
+                }
+            }
+
+            LoggerCentral.info(TAG, "📊 Total de peers activos: " + peersActivos.size());
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error obteniendo peers activos: " + e.getMessage());
+        }
+
+        return peersActivos;
     }
 
     /**
@@ -301,6 +388,10 @@ public class ServicioTopologiaRed implements IServicioP2P, ISujeto {
     public void limpiarPeerDesconectado(String idPeer) {
         if (topologiasRemotas.remove(idPeer) != null) {
             LoggerCentral.info(TAG, "🗑️ Topología de peer desconectado eliminada: " + idPeer);
+
+            // ✅ NUEVO: Notificar lista actualizada de peers activos
+            notificarListaPeersActivos();
+
             notificarObservadores("PEER_DESCONECTADO", idPeer);
             notificarObservadores("TOPOLOGIA_ACTUALIZADA", obtenerTopologiaCompleta());
         }

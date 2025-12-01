@@ -46,7 +46,11 @@ public class FachadaTranscripcion implements ISujeto, IObservador {
         // Registrarse como observador del servicio de transcripción
         this.servicioTranscripcion.registrarObservador(this);
 
+        // ✅ NUEVO: Registrarse como observador del repositorio de transcripciones
+        this.transcripcionRepo.registrarObservador(this);
+
         LoggerCentral.info(TAG, "FachadaTranscripcion inicializada");
+        LoggerCentral.info(TAG, "✓ Suscrita a eventos del repositorio de transcripciones");
     }
 
     public static synchronized FachadaTranscripcion getInstance() {
@@ -119,11 +123,36 @@ public class FachadaTranscripcion implements ISujeto, IObservador {
     }
 
     /**
-     * Recibe eventos del ServicioTranscripcion
+     * Recibe eventos del ServicioTranscripcion y ArchivoRepositorio
      */
     @Override
     public void actualizar(String tipo, Object datos) {
         LoggerCentral.debug(TAG, "Evento recibido: " + tipo);
+
+        // ✅ NUEVO: Manejar eventos del ArchivoRepositorio
+        if ("AUDIO_PERSISTIDO".equals(tipo) && datos instanceof Archivo) {
+            Archivo archivo = (Archivo) datos;
+            LoggerCentral.info(TAG, "🔔 Archivo de audio persistido: " + archivo.getFileId());
+
+            // Recargar la lista de audios desde la BD
+            cargarAudiosDesdeBaseDatos();
+
+            // Notificar a las vistas
+            notificarObservadores("NUEVO_AUDIO_RECIBIDO", archivo.getFileId());
+            return;
+        }
+
+        if ("ARCHIVO_PERSISTIDO".equals(tipo) && datos instanceof Archivo) {
+            Archivo archivo = (Archivo) datos;
+            LoggerCentral.info(TAG, "📁 Archivo persistido: " + archivo.getFileId());
+
+            // Si es un archivo de audio, recargar
+            if (archivo.getMimeType() != null && archivo.getMimeType().startsWith("audio/")) {
+                cargarAudiosDesdeBaseDatos();
+                notificarObservadores("NUEVO_AUDIO_RECIBIDO", archivo.getFileId());
+            }
+            return;
+        }
 
         // Propagar eventos a los observadores de la fachada
         notificarObservadores(tipo, datos);
@@ -280,6 +309,57 @@ public class FachadaTranscripcion implements ISujeto, IObservador {
                     .collect(Collectors.toList());
         }
         return obtenerAudios();
+    }
+
+    /**
+     * ✅ NUEVO: Filtra audios por canal específico usando el repositorio
+     */
+    public List<DTOAudioTranscripcion> filtrarPorCanal(UUID canalId) {
+        try {
+            LoggerCentral.info(TAG, "🔍 Filtrando audios por canal: " + canalId);
+
+            // Obtener transcripciones del canal desde el repositorio
+            List<Transcripcion> transcripciones = transcripcionRepo.obtenerPorCanal(canalId);
+
+            // Convertir a DTOs y buscar en la lista de audios
+            return audios.stream()
+                    .filter(a -> a.getCanalId() != null && a.getCanalId().equals(canalId.toString()))
+                    .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error filtrando por canal: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Filtra audios por contacto (mensajes directos entre dos usuarios)
+     */
+    public List<DTOAudioTranscripcion> filtrarPorContacto(UUID usuario1Id, UUID usuario2Id) {
+        try {
+            LoggerCentral.info(TAG, "🔍 Filtrando audios entre contactos");
+
+            // Obtener transcripciones entre contactos desde el repositorio
+            List<Transcripcion> transcripciones = transcripcionRepo.obtenerPorContactos(usuario1Id, usuario2Id);
+
+            // Convertir a DTOs
+            return audios.stream()
+                    .filter(a -> !a.isEsCanal())
+                    .filter(a -> {
+                        String remitenteId = a.getRemitenteId();
+                        String contactoId = a.getContactoId();
+
+                        if (remitenteId == null || contactoId == null) return false;
+
+                        return (remitenteId.equals(usuario1Id.toString()) && contactoId.equals(usuario2Id.toString())) ||
+                               (remitenteId.equals(usuario2Id.toString()) && contactoId.equals(usuario1Id.toString()));
+                    })
+                    .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error filtrando por contacto: " + e.getMessage());
+            return new ArrayList<>();
+        }
     }
 
     /**

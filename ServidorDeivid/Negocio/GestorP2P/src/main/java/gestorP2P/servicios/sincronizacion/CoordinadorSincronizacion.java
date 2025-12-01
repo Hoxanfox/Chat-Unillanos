@@ -86,6 +86,8 @@ public class CoordinadorSincronizacion {
      */
     public void setServicioPadre(observador.ISujeto servicioPadre) {
         this.servicioPadre = servicioPadre;
+        // ✅ NUEVO: Configurar también en Fase2 para notificaciones por tipo
+        this.fase2.setServicioPadre(servicioPadre);
         LoggerCentral.info(TAG, VERDE + "✓ Servicio padre configurado para notificaciones globales" + RESET);
     }
 

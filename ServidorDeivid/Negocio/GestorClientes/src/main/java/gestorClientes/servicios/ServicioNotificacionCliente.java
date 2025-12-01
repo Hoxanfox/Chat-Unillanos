@@ -51,6 +51,17 @@ public class ServicioNotificacionCliente implements IServicioCliente, IObservado
     public void actualizar(String tipoEvento, Object datos) {
         LoggerCentral.info(TAG, AZUL + "📥 Evento recibido: " + tipoEvento + " | Datos: " + datos + RESET);
 
+        // ✅ NUEVO: Manejar eventos específicos de sincronización por tipo
+        if (tipoEvento.startsWith("SINCRONIZADO_")) {
+            String tipoSincronizado = tipoEvento.replace("SINCRONIZADO_", "");
+            LoggerCentral.info(TAG, VERDE + "🔄 Tipo sincronizado: " + tipoSincronizado + ". Notificando clientes..." + RESET);
+
+            // Enviar señal específica según el tipo sincronizado
+            String recursoEspecifico = mapearTipoARecurso(tipoSincronizado);
+            enviarSenalDeActualizacion("SYNC_UPDATE");
+            return;
+        }
+
         // ✅ AJUSTE: Siempre notificar a los clientes cuando termine la sincronización P2P
         if ("SINCRONIZACION_P2P_TERMINADA".equals(tipoEvento)) {
             boolean huboCambios = datos instanceof Boolean ? (Boolean) datos : false;
@@ -114,6 +125,29 @@ public class ServicioNotificacionCliente implements IServicioCliente, IObservado
         } catch (Exception e) {
             LoggerCentral.error(TAG, "❌ Error enviando push: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Mapea tipos de sincronización a recursos específicos para los clientes.
+     * Esto permite que los clientes actualicen solo la parte relevante de su UI.
+     */
+    private String mapearTipoARecurso(String tipoSync) {
+        switch (tipoSync) {
+            case "USUARIO":
+                return "SYNC_USUARIOS";
+            case "CANAL":
+                return "SYNC_CANALES";
+            case "MENSAJE":
+                return "SYNC_MENSAJES";
+            case "CANAL_MIEMBRO":
+                return "SYNC_MIEMBROS";
+            case "CANAL_INVITACION":
+                return "SYNC_INVITACIONES";
+            case "ARCHIVO":
+                return "SYNC_ARCHIVOS";
+            default:
+                return "SYNC_" + tipoSync;
         }
     }
 

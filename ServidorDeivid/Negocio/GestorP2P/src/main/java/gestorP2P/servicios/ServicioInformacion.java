@@ -2,28 +2,67 @@ package gestorP2P.servicios;
 
 import conexion.p2p.interfaces.IRouterMensajes;
 import conexion.p2p.interfaces.IGestorConexiones;
+import dominio.p2p.Peer;
 import dto.p2p.DTOPeerDetails;
 import gestorP2P.interfaces.IServicioP2P;
 import logger.LoggerCentral;
 import repositorio.p2p.PeerRepositorio;
+import observador.IObservador;
+import observador.ISujeto;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Servicio de solo lectura para obtener información del estado de la red.
- * Combina datos en tiempo real (Memoria) con datos históricos (BD).
+ * Servicio para obtener información sobre peers conocidos y activos.
+ * ✅ ACTUALIZADO: Implementa ISujeto para notificar cambios a la interfaz
  */
-public class ServicioInformacion implements IServicioP2P {
+public class ServicioInformacion implements IServicioP2P, ISujeto {
 
     private static final String TAG = "ServicioInfo";
 
     private IGestorConexiones gestorConexiones;
     private final PeerRepositorio repositorio;
+    private final List<IObservador> observadores;
 
     public ServicioInformacion() {
         this.repositorio = new PeerRepositorio();
+        this.observadores = new ArrayList<>();
+
+        // ✅ NUEVO: Suscribirse a eventos del repositorio
+        this.repositorio.registrarObservador(new IObservador() {
+            @Override
+            public void actualizar(String tipoDeDato, Object datos) {
+                // Cuando cambia un peer en la BD, notificar a los observadores
+                LoggerCentral.info(TAG, "🔔 Evento de repositorio: " + tipoDeDato);
+                notificarObservadores(tipoDeDato, datos);
+            }
+        });
+
+        LoggerCentral.info(TAG, "✓ ServicioInformacion suscrito a PeerRepositorio");
+    }
+
+    // ✅ NUEVO: Implementación del patrón Observador
+    @Override
+    public void registrarObservador(IObservador observador) {
+        if (observador != null && !observadores.contains(observador)) {
+            observadores.add(observador);
+            LoggerCentral.info(TAG, "✓ Observador registrado");
+        }
+    }
+
+    @Override
+    public void removerObservador(IObservador observador) {
+        observadores.remove(observador);
+    }
+
+    @Override
+    public void notificarObservadores(String tipoDeDato, Object datos) {
+        for (IObservador observador : observadores) {
+            observador.actualizar(tipoDeDato, datos);
+        }
     }
 
     @Override
@@ -85,6 +124,13 @@ public class ServicioInformacion implements IServicioP2P {
 
         LoggerCentral.info(TAG, "Consulta finalizada. Peers retornados: " + resultado.size());
         return resultado;
+    }
+
+    /**
+     * ✅ NUEVO: Expone el repositorio para que otros componentes puedan suscribirse
+     */
+    public PeerRepositorio getRepositorio() {
+        return repositorio;
     }
 
     @Override
