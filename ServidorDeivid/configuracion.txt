@@ -4,16 +4,16 @@
 # Valores relevantes para los pools de conexión
 
 # Host y puerto por defecto para clientes
-cliente.host=192.168.1.9
+cliente.host= 25.2.20.107
 cliente.puerto=8000
 
 # Host y puerto por defecto para peers
-peer.host=192.168.1.9
-peer.puerto=9000
+peer.host=25.2.20.107
+peer.puerto=9001
 
 # Peer inicial (opcional) - ejemplo
-#peer.inicial.host=192.168.1.9
-#peer.inicial.puerto=9000
+peer.inicial.host=25.2.20.107
+peer.inicial.puerto=9000
 
 # Transporte a usar por defecto (FabricaTransporte.crearTransporte)
 # Valores típicos: TCP, UDP, etc. (depende de las implementaciones disponibles)

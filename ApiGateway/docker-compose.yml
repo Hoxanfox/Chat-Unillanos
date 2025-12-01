@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build: .
+    ports:
+      - "8081:${GATEWAY_PORT:-8080}"
+    environment:
+      - SEED_PEER_URL=http://host.docker.internal:${PEER_API_PORT:-7000}
+      - GATEWAY_PORT=${GATEWAY_PORT:-8080}
+      - PEER_API_PORT=${PEER_API_PORT:-7000}
+    # Para asegurar que host.docker.internal funcione en algunos entornos de Windows/WSL
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build: ../Frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../Frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8081/gateway/logs

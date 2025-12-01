@@ -18,7 +18,7 @@ public class MySQLManager {
     private MySQLManager() {
         try {
             String host = System.getenv().getOrDefault("DB_HOST", "localhost");
-            String port = System.getenv().getOrDefault("DB_PORT", "3306");
+            String port = System.getenv().getOrDefault("DB_PORT", "12000");
             String db = System.getenv().getOrDefault("DB_NAME", "chat_unillanos");
             String user = System.getenv().getOrDefault("DB_USER", "chatuser");
             String pass = System.getenv().getOrDefault("DB_PASS", "chatpass");
