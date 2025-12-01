@@ -61,4 +61,54 @@ public class Configuracion {
     public int getClientePuerto() {
         return Integer.parseInt(props.getProperty("cliente.puerto", "8000"));
     }
+
+    // --- Configuración para Base de Datos MySQL ---
+
+    /**
+     * Obtiene el host de la base de datos MySQL.
+     * @return Host de la base de datos (por defecto: localhost)
+     */
+    public String getDbHost() {
+        return props.getProperty("db.host", "localhost");
+    }
+
+    /**
+     * Obtiene el puerto de la base de datos MySQL.
+     * @return Puerto de la base de datos (por defecto: 3306)
+     */
+    public int getDbPort() {
+        return Integer.parseInt(props.getProperty("db.port", "3306"));
+    }
+
+    /**
+     * Obtiene el nombre de la base de datos.
+     * @return Nombre de la base de datos (por defecto: chat_unillanos)
+     */
+    public String getDbName() {
+        return props.getProperty("db.name", "chat_unillanos");
+    }
+
+    /**
+     * Obtiene el usuario de la base de datos.
+     * @return Usuario de la base de datos (por defecto: chatuser)
+     */
+    public String getDbUser() {
+        return props.getProperty("db.user", "chatuser");
+    }
+
+    /**
+     * Obtiene la contraseña de la base de datos.
+     * @return Contraseña de la base de datos (por defecto: chatpass)
+     */
+    public String getDbPass() {
+        return props.getProperty("db.pass", "chatpass");
+    }
+
+    /**
+     * Obtiene el tamaño máximo del pool de conexiones HikariCP.
+     * @return Tamaño máximo del pool (por defecto: 10)
+     */
+    public int getDbMaxPool() {
+        return Integer.parseInt(props.getProperty("db.max.pool", "10"));
+    }
 }

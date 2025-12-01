@@ -119,7 +119,8 @@ public class InicializadorGestionCanales {
         listadorCanales = new ListadorCanales(repositorioCanal);
         System.out.println("  ✓ ListadorCanales inicializado");
         
-        gestorMensajesCanal = new GestorMensajesCanalImpl(repositorioMensajeCanal, gestionArchivos);
+        // 🆕 Pasar el repositorio de canales al gestor de mensajes
+        gestorMensajesCanal = new GestorMensajesCanalImpl(repositorioMensajeCanal, gestionArchivos, repositorioCanal);
         System.out.println("  ✓ GestorMensajesCanal inicializado");
         
         gestorNotificacionesCanal = new GestorNotificacionesCanal();

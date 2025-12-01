@@ -51,5 +51,12 @@ public interface IGestorMensajesCanal extends ISujeto {
      * Debe llamarse durante la inicialización del sistema.
      */
     void inicializarManejadores();
-}
 
+    /**
+     * 🆕 Establece el canal actualmente abierto en la UI.
+     * Las vistas deben llamar a este método cuando un usuario abre un canal.
+     *
+     * @param canalId El ID del canal que está actualmente abierto, o null si ninguno está abierto
+     */
+    void setCanalActivo(String canalId);
+}

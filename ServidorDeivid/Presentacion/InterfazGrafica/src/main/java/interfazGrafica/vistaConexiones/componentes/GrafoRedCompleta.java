@@ -8,9 +8,6 @@ import observador.IObservador;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.geom.Ellipse2D;
-import java.awt.geom.Line2D;
-import java.awt.geom.Rectangle2D;
 import java.util.*;
 import java.util.List;
 
@@ -23,9 +20,9 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
 
     private static final String TAG = "GrafoRedCompleta";
 
-    private Map<String, NodoPeer> peers;
-    private List<NodoUsuario> usuarios;
-    private List<ConexionP2P> conexionesP2P;
+    private final Map<String, NodoPeer> peers;
+    private final List<NodoUsuario> usuarios;
+    private final List<ConexionP2P> conexionesP2P;
     private ControladorP2P controlador;
 
     // Colores
@@ -149,6 +146,123 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
         this.setBorder(BorderFactory.createLineBorder(new Color(189, 195, 199), 1));
         // Tamaño más grande para mejor visualización con zoom
         this.setPreferredSize(new Dimension(1000, 800));
+
+        // ✅ NUEVO: Agregar listener para clics en usuarios (desconectar)
+        agregarListenerClics();
+    }
+
+    /**
+     * ✅ NUEVO: Agregar listener de clics para desconectar clientes
+     */
+    private void agregarListenerClics() {
+        addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (controlador == null) return;
+
+                // Detectar clic derecho o doble clic en un usuario
+                boolean clicDerecho = SwingUtilities.isRightMouseButton(evt);
+                boolean dobleClick = evt.getClickCount() == 2;
+
+                if (clicDerecho || dobleClick) {
+                    int mouseX = evt.getX();
+                    int mouseY = evt.getY();
+
+                    // Buscar usuario bajo el cursor
+                    for (NodoUsuario usuario : usuarios) {
+                        int radio = 15;
+                        double distancia = Math.sqrt(Math.pow(mouseX - usuario.x, 2) + Math.pow(mouseY - usuario.y, 2));
+
+                        if (distancia <= radio) {
+                            // Usuario encontrado - confirmar desconexión
+                            confirmarYDesconectarCliente(usuario);
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        // ✅ NUEVO: Tooltip para indicar cómo desconectar
+        setToolTipText("Clic derecho o doble clic en un usuario para desconectarlo");
+    }
+
+    /**
+     * ✅ NUEVO: Confirmar y desconectar un cliente
+     */
+    private void confirmarYDesconectarCliente(NodoUsuario usuario) {
+        String nombreMostrar = usuario.nombre != null ? usuario.nombre : "Cliente anónimo";
+        String peerMostrar = usuario.peer != null ? usuario.peer.id : "desconocido";
+        String estado = usuario.esOnline ? "autenticado" : "conectado";
+
+        int opcion = JOptionPane.showConfirmDialog(
+            this,
+            "¿Desconectar a " + nombreMostrar + " (" + estado + ") del peer " + peerMostrar + "?",
+            "Confirmar Desconexión",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.WARNING_MESSAGE
+        );
+
+        if (opcion == JOptionPane.YES_OPTION) {
+            // Obtener topología completa
+            Map<String, DTOTopologiaRed> topologia = controlador.obtenerTopologiaCompleta();
+
+            boolean encontrado = false;
+            for (DTOTopologiaRed topo : topologia.values()) {
+                for (DTOSesionCliente cliente : topo.getClientesConectados()) {
+                    String idUsuario = cliente.getIdUsuario();
+                    String idSesion = cliente.getIdSesion();
+
+                    // Comparar por idUsuario si está autenticado, o por idSesion si no
+                    boolean coincide;
+                    if (usuario.esOnline && idUsuario != null) {
+                        coincide = usuario.nombre.equals(idUsuario);
+                    } else {
+                        coincide = usuario.nombre.equals(idSesion);
+                    }
+
+                    if (coincide) {
+                        // Verificar si es cliente local o remoto
+                        boolean esLocal = "LOCAL".equalsIgnoreCase(topo.getIdPeer());
+
+                        if (esLocal) {
+                            // ✅ CORREGIDO: Cliente local - informar al usuario que debe usar el grafo Cliente-Servidor
+                            LoggerCentral.info(TAG, "Cliente local identificado: " + nombreMostrar);
+                            JOptionPane.showMessageDialog(
+                                this,
+                                "Para desconectar clientes locales, use el grafo 'Cliente-Servidor'.\n" +
+                                "Este grafo muestra la red completa P2P y no permite gestionar clientes directamente.",
+                                "Cliente Local",
+                                JOptionPane.INFORMATION_MESSAGE
+                            );
+                        } else {
+                            // Cliente remoto - no se puede desconectar
+                            JOptionPane.showMessageDialog(
+                                this,
+                                "No se puede desconectar clientes remotos.\n" +
+                                "Los clientes remotos son gestionados por su peer correspondiente.",
+                                "Cliente Remoto",
+                                JOptionPane.INFORMATION_MESSAGE
+                            );
+                        }
+
+                        encontrado = true;
+                        break;
+                    }
+                }
+                if (encontrado) break;
+            }
+
+            if (!encontrado) {
+                LoggerCentral.warn(TAG, "Cliente no encontrado: " + nombreMostrar);
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Cliente no encontrado en la topología actual",
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE
+                );
+            }
+        }
     }
 
     public void agregarPeer(String id, String ip, boolean esLocal, boolean esOnline) {
@@ -197,8 +311,8 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
         int height = getHeight();
 
         if (width == 0 || height == 0) {
-            width = 600;
-            height = 400;
+            width = 1000;
+            height = 800;
         }
 
         if (peers.isEmpty()) return;
@@ -222,9 +336,8 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
                 int radioUsuarios = 90;
                 for (int j = 0; j < cantidadUsuarios; j++) {
                     // Calcular ángulo basado en la posición del peer
-                    double anguloBase = angulo;
                     double rangoAngular = Math.PI / 4; // 45 grados de rango
-                    double anguloUsuario = anguloBase + rangoAngular * ((j - (cantidadUsuarios - 1) / 2.0) / Math.max(cantidadUsuarios - 1, 1));
+                    double anguloUsuario = angulo + rangoAngular * ((j - (cantidadUsuarios - 1) / 2.0) / Math.max(cantidadUsuarios - 1, 1));
 
                     NodoUsuario usuario = peer.usuarios.get(j);
                     usuario.x = (int) (peer.x + radioUsuarios * Math.cos(anguloUsuario));
@@ -249,20 +362,14 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
         g2d.setStroke(new BasicStroke(2.5f));
         for (ConexionP2P conexion : conexionesP2P) {
             g2d.setColor(COLOR_CONEXION_P2P);
-            g2d.draw(new Line2D.Double(
-                conexion.origen.x, conexion.origen.y,
-                conexion.destino.x, conexion.destino.y
-            ));
+            g2d.drawLine(conexion.origen.x, conexion.origen.y, conexion.destino.x, conexion.destino.y);
         }
 
-        // Dibujar conexiones Cliente-Servidor
+        // Dibujar conexiones Cliente-Servidor (usuarios a peers)
         g2d.setStroke(new BasicStroke(1.5f));
         g2d.setColor(COLOR_CONEXION_CS);
         for (NodoUsuario usuario : usuarios) {
-            g2d.draw(new Line2D.Double(
-                usuario.peer.x, usuario.peer.y,
-                usuario.x, usuario.y
-            ));
+            g2d.drawLine(usuario.peer.x, usuario.peer.y, usuario.x, usuario.y);
         }
 
         // Dibujar usuarios
@@ -275,6 +382,7 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
             dibujarPeer(g2d, peer);
         }
 
+        // Si no hay peers, mostrar mensaje
         if (peers.isEmpty()) {
             g2d.setColor(Color.GRAY);
             g2d.setFont(new Font("Arial", Font.ITALIC, 14));
@@ -287,8 +395,9 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
     }
 
     private void dibujarPeer(Graphics2D g2d, NodoPeer peer) {
-        int radio = 28;
+        int radio = 30;
 
+        // Determinar color según estado
         Color color;
         if (peer.esLocal) {
             color = COLOR_PEER_LOCAL;
@@ -298,29 +407,36 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
             color = COLOR_PEER_OFFLINE;
         }
 
-        // Dibujar cuadrado para el peer
-        Rectangle2D rect = new Rectangle2D.Double(
-            peer.x - radio, peer.y - radio,
-            radio * 2, radio * 2
-        );
+        // ✅ MODIFICADO: Dibujar CUADRADO para el peer en lugar de círculo
+        int x = peer.x - radio;
+        int y = peer.y - radio;
+        int tamaño = radio * 2;
+
         g2d.setColor(color);
-        g2d.fill(rect);
+        g2d.fillRect(x, y, tamaño, tamaño);
 
         g2d.setColor(color.darker());
-        g2d.setStroke(new BasicStroke(2.5f));
-        g2d.draw(rect);
+        g2d.setStroke(new BasicStroke(2));
+        g2d.drawRect(x, y, tamaño, tamaño);
 
-        // ID
+        // Texto: ID
         g2d.setColor(COLOR_TEXTO);
-        g2d.setFont(new Font("Arial", Font.BOLD, 9));
+        g2d.setFont(new Font("Arial", Font.BOLD, 10));
         String idTruncado = peer.id.length() > 8 ? peer.id.substring(0, 8) + "..." : peer.id;
         FontMetrics fm = g2d.getFontMetrics();
         int textoX = peer.x - fm.stringWidth(idTruncado) / 2;
-        int textoY = peer.y + radio + 14;
+        int textoY = peer.y + radio + 15;
         g2d.drawString(idTruncado, textoX, textoY);
 
-        // Contador
-        g2d.setFont(new Font("Arial", Font.BOLD, 11));
+        // IP
+        g2d.setFont(new Font("Arial", Font.PLAIN, 9));
+        fm = g2d.getFontMetrics();
+        int ipX = peer.x - fm.stringWidth(peer.ip) / 2;
+        int ipY = textoY + 12;
+        g2d.drawString(peer.ip, ipX, ipY);
+
+        // Contador de usuarios
+        g2d.setFont(new Font("Arial", Font.BOLD, 10));
         g2d.setColor(Color.WHITE);
         String contador = String.valueOf(peer.usuarios.size());
         fm = g2d.getFontMetrics();
@@ -330,29 +446,27 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
     }
 
     private void dibujarUsuario(Graphics2D g2d, NodoUsuario usuario) {
-        int radio = 12;
+        int radio = 15;
 
         Color color = usuario.esOnline ? COLOR_USUARIO_ONLINE : COLOR_USUARIO_OFFLINE;
 
-        Ellipse2D circulo = new Ellipse2D.Double(
-            usuario.x - radio, usuario.y - radio,
-            radio * 2, radio * 2
-        );
+        // Dibujar círculo
         g2d.setColor(color);
-        g2d.fill(circulo);
+        g2d.fillOval(usuario.x - radio, usuario.y - radio, radio * 2, radio * 2);
 
         g2d.setColor(color.darker());
         g2d.setStroke(new BasicStroke(1.5f));
-        g2d.draw(circulo);
+        g2d.drawOval(usuario.x - radio, usuario.y - radio, radio * 2, radio * 2);
 
-        // Nombre
+        // Nombre del usuario
         g2d.setColor(COLOR_TEXTO);
-        g2d.setFont(new Font("Arial", Font.PLAIN, 8));
-        String nombreTruncado = usuario.nombre.length() > 8 ?
-                                usuario.nombre.substring(0, 8) + "..." : usuario.nombre;
+        g2d.setFont(new Font("Arial", Font.BOLD, 9));
+        String nombreTruncado = usuario.nombre != null && usuario.nombre.length() > 12 ?
+                                usuario.nombre.substring(0, 12) + "..." :
+                                (usuario.nombre != null ? usuario.nombre : "Anónimo");
         FontMetrics fm = g2d.getFontMetrics();
         int textoX = usuario.x - fm.stringWidth(nombreTruncado) / 2;
-        int textoY = usuario.y + radio + 10;
+        int textoY = usuario.y + radio + 12;
         g2d.drawString(nombreTruncado, textoX, textoY);
     }
 
@@ -365,28 +479,13 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
 
         switch (tipoDeDato) {
             case "TOPOLOGIA_ACTUALIZADA":
-            case "TOPOLOGIA_REMOTA_RECIBIDA":
-                // La topología cambió, actualizar todo el grafo
-                if (datos instanceof Map) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, DTOTopologiaRed> nuevaTopologia =
-                        (Map<String, DTOTopologiaRed>) datos;
-
-                    SwingUtilities.invokeLater(() -> {
-                        actualizarConTopologia(nuevaTopologia);
-                    });
-                }
-                break;
-
             case "PEER_CONECTADO":
             case "PEER_DESCONECTADO":
             case "CLIENTE_CONECTADO":
             case "CLIENTE_DESCONECTADO":
-            case "USUARIO_AUTENTICADO":
-            case "USUARIO_DESCONECTADO":
-            case "CLIENTE_AUTENTICADO":
-                // Un peer o cliente cambió de estado, refrescar todo el grafo
-                LoggerCentral.info(TAG, "🔄 Actualizando grafo completo por evento: " + tipoDeDato);
+            case "SESIONES_ACTUALIZADAS":
+                // Actualizar grafo completo
+                LoggerCentral.info(TAG, "🔄 Actualizando grafo red completa por evento: " + tipoDeDato);
                 SwingUtilities.invokeLater(this::actualizarDesdeControlador);
                 break;
 
@@ -395,39 +494,10 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
         }
     }
 
-    /**
-     * ✅ NUEVO: Actualizar con topología recibida directamente
-     */
-    private void actualizarConTopologia(Map<String, DTOTopologiaRed> topologia) {
-        limpiar();
+    // =========================================================================
+    // CLASES INTERNAS
+    // =========================================================================
 
-        // Agregar todos los peers y sus clientes usando siempre idPeer
-        for (DTOTopologiaRed topo : topologia.values()) {
-            String idPeer = topo.getIdPeer();
-            boolean esLocal = "LOCAL".equalsIgnoreCase(idPeer);
-            boolean esOnline = "ONLINE".equalsIgnoreCase(topo.getEstadoPeer());
-            agregarPeer(idPeer, topo.getIpPeer(), esLocal, esOnline);
-
-            for (DTOSesionCliente cliente : topo.getClientesConectados()) {
-                String nombreCliente = cliente.getIdUsuario() != null ?
-                    cliente.getIdUsuario() : cliente.getIdSesion();
-                boolean clienteOnline = "AUTENTICADO".equalsIgnoreCase(cliente.getEstado());
-                agregarUsuario(nombreCliente, idPeer, clienteOnline);
-            }
-        }
-
-        // Conectar todos los peers entre sí usando los mismos IDs internos
-        List<String> peerIds = new ArrayList<>(peers.keySet());
-        for (int i = 0; i < peerIds.size(); i++) {
-            for (int j = i + 1; j < peerIds.size(); j++) {
-                agregarConexionP2P(peerIds.get(i), peerIds.get(j));
-            }
-        }
-
-        repaint();
-    }
-
-    // Clases internas
     private static class NodoPeer {
         String id;
         String ip;
@@ -472,3 +542,4 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
         }
     }
 }
+

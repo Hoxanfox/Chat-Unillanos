@@ -142,6 +142,11 @@ public class GestorConexionesClienteImpl implements IGestorConexionesCliente, IM
             // Desconexión física
             transporte.desconectar(sesion.getIp(), sesion.getPuerto());
             System.out.println(TAG + "Cliente desconectado: " + idSesion);
+
+            // ✅ NUEVO: Notificar evento de desconexión
+            if (onClienteDesconectadoCallback != null) {
+                onClienteDesconectadoCallback.accept(idSesion);
+            }
         }
     }
 

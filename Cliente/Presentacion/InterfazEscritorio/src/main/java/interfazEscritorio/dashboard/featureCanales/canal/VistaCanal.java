@@ -161,6 +161,10 @@ public class VistaCanal extends BorderPane implements IObservador {
         this.setCenter(scrollPane);
         this.setBottom(inputArea);
 
+        // 🆕 Informar al gestor que este canal está activo
+        System.out.println("📍 [VistaCanal]: Informando al gestor que el canal está activo");
+        controlador.setCanalActivo(canal.getId());
+
         // Solicitar historial inicial
         System.out.println("📡 [VistaCanal]: Solicitando historial del canal...");
         controlador.solicitarHistorialCanal(canal.getId(), 50);
