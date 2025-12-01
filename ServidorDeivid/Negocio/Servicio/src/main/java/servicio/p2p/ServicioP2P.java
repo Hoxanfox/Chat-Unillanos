@@ -183,6 +183,13 @@ public class ServicioP2P implements IServicioP2PControl {
     }
 
     /**
+     * ✅ NUEVO: Expone el ServicioInformacion para suscripción a eventos
+     */
+    public ServicioInformacion getServicioInformacion() {
+        return servicioInfo;
+    }
+
+    /**
      * ✅ NUEVO: Obtiene el UUID del peer local
      */
     public java.util.UUID getIdPeerLocal() {

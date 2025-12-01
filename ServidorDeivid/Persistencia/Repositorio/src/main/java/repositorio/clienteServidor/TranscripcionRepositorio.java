@@ -3,6 +3,8 @@ package repositorio.clienteServidor;
 import dominio.clienteServidor.Transcripcion;
 import dominio.clienteServidor.Transcripcion.EstadoTranscripcion;
 import repositorio.comunicacion.MySQLManager;
+import observador.IObservador;
+import observador.ISujeto;
 
 import java.math.BigDecimal;
 import java.sql.*;
@@ -12,14 +14,38 @@ import java.util.UUID;
 
 /**
  * Repositorio para gestionar transcripciones de audio en la base de datos
+ * ✅ ACTUALIZADO: Implementa ISujeto para notificar cambios a la interfaz
  */
-public class TranscripcionRepositorio {
+public class TranscripcionRepositorio implements ISujeto {
 
     private static final String TAG = "[TranscripcionRepo]";
     private final MySQLManager mysql;
+    private final List<IObservador> observadores;
 
     public TranscripcionRepositorio() {
         this.mysql = MySQLManager.getInstance();
+        this.observadores = new ArrayList<>();
+    }
+
+    // ✅ NUEVO: Implementación del patrón Observador
+    @Override
+    public void registrarObservador(IObservador observador) {
+        if (observador != null && !observadores.contains(observador)) {
+            observadores.add(observador);
+            System.out.println(TAG + " Observador registrado");
+        }
+    }
+
+    @Override
+    public void removerObservador(IObservador observador) {
+        observadores.remove(observador);
+    }
+
+    @Override
+    public void notificarObservadores(String tipoDeDato, Object datos) {
+        for (IObservador observador : observadores) {
+            observador.actualizar(tipoDeDato, datos);
+        }
     }
 
     /**
@@ -59,6 +85,7 @@ public class TranscripcionRepositorio {
 
     /**
      * Actualiza una transcripción existente
+     * ✅ ACTUALIZADO: Ahora notifica eventos cuando cambia el estado
      */
     public boolean actualizar(Transcripcion transcripcion) {
         String sql = "UPDATE transcripciones SET transcripcion=?, estado=?, duracion_segundos=?, " +
@@ -80,6 +107,9 @@ public class TranscripcionRepositorio {
             int affected = ps.executeUpdate();
             if (affected > 0) {
                 System.out.println(TAG + " ✓ Transcripción actualizada: " + transcripcion.getIdUUID());
+
+                // ✅ NUEVO: Notificar a los observadores del cambio
+                notificarObservadores("TRANSCRIPCION_ACTUALIZADA", transcripcion);
             }
             return affected > 0;
         } catch (SQLException e) {
@@ -237,6 +267,109 @@ public class TranscripcionRepositorio {
     }
 
     /**
+     * ✅ NUEVO: Obtiene transcripciones de audios enviados en canales
+     * Une transcripciones con mensajes para filtrar por canal_id NOT NULL
+     */
+    public List<Transcripcion> obtenerPorCanal(UUID canalId) {
+        List<Transcripcion> lista = new ArrayList<>();
+        String sql = "SELECT t.* FROM transcripciones t " +
+                "INNER JOIN mensajes m ON t.mensaje_id = m.id " +
+                "WHERE m.canal_id = ? " +
+                "ORDER BY t.fecha_creacion DESC";
+
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, canalId.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    lista.add(mapear(rs));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println(TAG + " Error obteniendo por canal: " + e.getMessage());
+        }
+        return lista;
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene transcripciones de audios enviados en todos los canales
+     */
+    public List<Transcripcion> obtenerDeCanales() {
+        List<Transcripcion> lista = new ArrayList<>();
+        String sql = "SELECT t.* FROM transcripciones t " +
+                "INNER JOIN mensajes m ON t.mensaje_id = m.id " +
+                "WHERE m.canal_id IS NOT NULL " +
+                "ORDER BY t.fecha_creacion DESC";
+
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                lista.add(mapear(rs));
+            }
+        } catch (SQLException e) {
+            System.err.println(TAG + " Error obteniendo de canales: " + e.getMessage());
+        }
+        return lista;
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene transcripciones de audios enviados en conversaciones directas (contactos)
+     */
+    public List<Transcripcion> obtenerDeContactos() {
+        List<Transcripcion> lista = new ArrayList<>();
+        String sql = "SELECT t.* FROM transcripciones t " +
+                "INNER JOIN mensajes m ON t.mensaje_id = m.id " +
+                "WHERE m.canal_id IS NULL AND m.destinatario_usuario_id IS NOT NULL " +
+                "ORDER BY t.fecha_creacion DESC";
+
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                lista.add(mapear(rs));
+            }
+        } catch (SQLException e) {
+            System.err.println(TAG + " Error obteniendo de contactos: " + e.getMessage());
+        }
+        return lista;
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene transcripciones de audios entre dos usuarios específicos
+     */
+    public List<Transcripcion> obtenerPorContactos(UUID usuario1Id, UUID usuario2Id) {
+        List<Transcripcion> lista = new ArrayList<>();
+        String sql = "SELECT t.* FROM transcripciones t " +
+                "INNER JOIN mensajes m ON t.mensaje_id = m.id " +
+                "WHERE ((m.remitente_id = ? AND m.destinatario_usuario_id = ?) " +
+                "OR (m.remitente_id = ? AND m.destinatario_usuario_id = ?)) " +
+                "AND m.canal_id IS NULL " +
+                "ORDER BY t.fecha_creacion DESC";
+
+        try (Connection conn = mysql.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, usuario1Id.toString());
+            ps.setString(2, usuario2Id.toString());
+            ps.setString(3, usuario2Id.toString());
+            ps.setString(4, usuario1Id.toString());
+
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    lista.add(mapear(rs));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println(TAG + " Error obteniendo por contactos: " + e.getMessage());
+        }
+        return lista;
+    }
+
+    /**
      * Mapea un ResultSet a una entidad Transcripcion
      */
     private Transcripcion mapear(ResultSet rs) throws SQLException {
@@ -266,4 +399,3 @@ public class TranscripcionRepositorio {
         return t;
     }
 }
-

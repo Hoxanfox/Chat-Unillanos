@@ -58,6 +58,20 @@ public class ControladorTranscripcion {
     }
 
     /**
+     * ✅ NUEVO: Suscribe un observador directamente a la FachadaTranscripcion
+     * para recibir eventos en tiempo real
+     */
+    public void suscribirAFachadaTranscripcion(IObservador observador) {
+        try {
+            FachadaTranscripcion fachada = FachadaTranscripcion.getInstance();
+            fachada.registrarObservador(observador);
+            LoggerCentral.info(TAG, "✓ Observador suscrito a FachadaTranscripcion");
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error al suscribir a FachadaTranscripcion: " + e.getMessage());
+        }
+    }
+
+    /**
      * Obtiene todos los audios disponibles
      */
     public List<DTOAudioTranscripcion> obtenerAudios() {
@@ -105,6 +119,19 @@ public class ControladorTranscripcion {
             return servicioTranscripcion.transcribirAudio(audioId, transcripcion);
         } catch (Exception e) {
             LoggerCentral.error(TAG, "Error al transcribir: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Inicia la transcripción automática de un audio usando Vosk
+     */
+    public boolean iniciarTranscripcionAutomatica(String audioId) {
+        try {
+            LoggerCentral.info(TAG, "🎤 Iniciando transcripción automática para: " + audioId);
+            return servicioTranscripcion.iniciarTranscripcionAutomatica(audioId);
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error al iniciar transcripción automática: " + e.getMessage());
             return false;
         }
     }

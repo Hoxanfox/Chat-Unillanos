@@ -30,6 +30,18 @@ import java.util.Set;
  * Responsabilidad: Resolver conflictos cuando los IDs coinciden pero los hashes difieren.
  * Compara campo por campo y decide qué versión conservar basándose en timestamps.
  *
+ * ✅ ESTRATEGIA DE RESOLUCIÓN DE CONFLICTOS:
+ *
+ * - USUARIO: El más RECIENTE gana (permite actualizaciones de perfil)
+ * - CANAL: El más RECIENTE gana (permite cambios de nombre)
+ * - MENSAJE: El más RECIENTE gana (permite ediciones)
+ * - ARCHIVO: El más RECIENTE gana (usa fechaUltimaActualizacion)
+ * - CANAL_INVITACION: El más RECIENTE gana (refleja estado actual)
+ * - CANAL_MIEMBRO: Sin timestamp, acepta versión remota si difiere
+ *
+ * NOTA: La estrategia "más reciente gana" es apropiada para datos que se modifican.
+ * Si necesitas inmutabilidad (ej: logs de auditoría), cambiar a "más antiguo gana".
+ *
  * ✅ MEJORADO: Ahora con deduplicación de respuestas para evitar procesar múltiples
  * respuestas del mismo ID desde diferentes peers.
  */
@@ -375,6 +387,21 @@ public class Fase5ComparacionContenido {
                 LoggerCentral.warn(TAG, AMARILLO + "  Diferencia en TAMAÑO" + RESET);
                 LoggerCentral.warn(TAG, "    Local: " + local.getTamanio());
                 LoggerCentral.warn(TAG, "    Remoto: " + remoto.getTamanio());
+                hayDiferencias = true;
+            }
+
+            // Comparar fechas de creación y actualización
+            if (!local.getFechaCreacion().equals(remoto.getFechaCreacion())) {
+                LoggerCentral.warn(TAG, AMARILLO + "  Diferencia en FECHA_CREACION" + RESET);
+                LoggerCentral.warn(TAG, "    Local: " + local.getFechaCreacion());
+                LoggerCentral.warn(TAG, "    Remoto: " + remoto.getFechaCreacion());
+                hayDiferencias = true;
+            }
+
+            if (!local.getFechaUltimaActualizacion().equals(remoto.getFechaUltimaActualizacion())) {
+                LoggerCentral.warn(TAG, AMARILLO + "  Diferencia en FECHA_ULTIMA_ACTUALIZACION" + RESET);
+                LoggerCentral.warn(TAG, "    Local: " + local.getFechaUltimaActualizacion());
+                LoggerCentral.warn(TAG, "    Remoto: " + remoto.getFechaUltimaActualizacion());
                 hayDiferencias = true;
             }
 

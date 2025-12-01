@@ -167,4 +167,11 @@ public class FachadaP2P {
             return java.util.UUID.randomUUID();
         }
     }
+
+    /**
+     * ✅ NUEVO: Obtiene el ServicioInformacion para suscripción a eventos
+     */
+    public gestorP2P.servicios.ServicioInformacion getServicioInformacion() {
+        return obtenerServicio(gestorP2P.servicios.ServicioInformacion.class);
+    }
 }

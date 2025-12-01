@@ -4,6 +4,8 @@ import dominio.p2p.Peer;
 import dominio.p2p.Peer.Estado;
 import logger.LoggerCentral;
 import repositorio.comunicacion.MySQLManager;
+import observador.IObservador;
+import observador.ISujeto;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -17,18 +19,43 @@ import java.util.UUID;
 
 /**
  * Repositorio para persistir Peers en la tabla `peers`.
+ * ✅ ACTUALIZADO: Implementa ISujeto para notificar cambios a la interfaz
  */
-public class PeerRepositorio {
+public class PeerRepositorio implements ISujeto {
 
     private static final String TAG = "PeerRepositorio";
     private final MySQLManager mysql;
+    private final List<IObservador> observadores;
 
     public PeerRepositorio() {
         this.mysql = MySQLManager.getInstance();
+        this.observadores = new ArrayList<>();
+    }
+
+    // ✅ NUEVO: Implementación del patrón Observador
+    @Override
+    public void registrarObservador(IObservador observador) {
+        if (observador != null && !observadores.contains(observador)) {
+            observadores.add(observador);
+            LoggerCentral.info(TAG, "✓ Observador registrado");
+        }
+    }
+
+    @Override
+    public void removerObservador(IObservador observador) {
+        observadores.remove(observador);
+    }
+
+    @Override
+    public void notificarObservadores(String tipoDeDato, Object datos) {
+        for (IObservador observador : observadores) {
+            observador.actualizar(tipoDeDato, datos);
+        }
     }
 
     /**
      * Guarda o actualiza un peer en la base de datos.
+     * ✅ ACTUALIZADO: Ahora notifica eventos cuando se guarda o actualiza un peer
      * @param peer Objeto Peer (id, ip, estado, fechaCreacion)
      * @param socketInfo Información adicional sobre el socket (ej. "host:port"), puede ser null
      * @return true si la operación se completó correctamente
@@ -38,6 +65,9 @@ public class PeerRepositorio {
             LoggerCentral.warn(TAG, "Intento de guardar peer nulo o sin ID.");
             return false;
         }
+
+        // ✅ NUEVO: Verificar si es actualización o creación
+        boolean esNuevo = (obtenerPorId(peer.getId()) == null);
 
         String sql = "INSERT INTO peers (id, ip, socket_info, estado, fecha_creacion) VALUES (?, ?, ?, ?, ?) " +
                 "ON DUPLICATE KEY UPDATE ip = VALUES(ip), socket_info = VALUES(socket_info), estado = VALUES(estado), fecha_creacion = VALUES(fecha_creacion)";
@@ -54,6 +84,13 @@ public class PeerRepositorio {
 
             if (rows > 0) {
                 LoggerCentral.debug(TAG, "Peer guardado/actualizado: " + peer.getId() + " | " + socketInfo + " | Estado: " + peer.getEstado());
+
+                // ✅ NUEVO: Notificar a los observadores según el tipo de operación
+                if (esNuevo) {
+                    notificarObservadores("PEER_CREADO", peer);
+                } else {
+                    notificarObservadores("PEER_ACTUALIZADO", peer);
+                }
             } else {
                 LoggerCentral.warn(TAG, "No se afectaron filas al guardar peer: " + peer.getId());
             }

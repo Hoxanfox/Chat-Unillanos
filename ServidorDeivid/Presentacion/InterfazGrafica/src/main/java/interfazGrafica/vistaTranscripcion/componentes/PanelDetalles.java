@@ -14,10 +14,12 @@ public class PanelDetalles extends JPanel {
 
     private static final Color COLOR_PRIMARY = new Color(52, 152, 219);
     private static final Color COLOR_SUCCESS = new Color(46, 204, 113);
+    private static final Color COLOR_WARNING = new Color(241, 196, 15);
 
     private JTextArea areaTranscripcion;
     private JButton btnGuardar;
     private JButton btnReproducir;
+    private JButton btnTranscribirAuto; // ✅ NUEVO: Botón para transcripción automática
     private DTOAudioTranscripcion audioActual;
 
     public PanelDetalles() {
@@ -47,9 +49,15 @@ public class PanelDetalles extends JPanel {
         JScrollPane scrollTranscripcion = new JScrollPane(areaTranscripcion);
         add(scrollTranscripcion, BorderLayout.CENTER);
 
-        // Panel de botones
-        JPanel panelBotones = new JPanel(new GridLayout(2, 1, 5, 5));
+        // Panel de botones - ✅ MODIFICADO: Ahora 3 botones
+        JPanel panelBotones = new JPanel(new GridLayout(3, 1, 5, 5));
         panelBotones.setBackground(Color.WHITE);
+
+        // ✅ NUEVO: Botón para transcribir automáticamente
+        btnTranscribirAuto = new JButton("🎤 Transcribir Automáticamente");
+        btnTranscribirAuto.setEnabled(false);
+        estilizarBoton(btnTranscribirAuto, COLOR_WARNING);
+        panelBotones.add(btnTranscribirAuto);
 
         btnGuardar = new JButton("💾 Guardar Transcripción");
         btnGuardar.setEnabled(false);
@@ -81,8 +89,19 @@ public class PanelDetalles extends JPanel {
         if (audio != null) {
             String transcripcion = audio.getTranscripcion();
             areaTranscripcion.setText(transcripcion != null ? transcripcion : "");
-            areaTranscripcion.setEditable(!audio.isTranscrito());
-            btnGuardar.setEnabled(true);
+
+            // ✅ MEJORADO: Lógica de habilitación de botones
+            boolean yaTranscrito = audio.isTranscrito();
+
+            // El área de texto solo es editable si NO está transcrito
+            areaTranscripcion.setEditable(!yaTranscrito);
+
+            // El botón de transcripción automática solo si NO está transcrito
+            btnTranscribirAuto.setEnabled(!yaTranscrito);
+
+            // El botón guardar solo si está editando manualmente
+            btnGuardar.setEnabled(!yaTranscrito);
+
             btnReproducir.setEnabled(true);
         } else {
             limpiar();
@@ -97,6 +116,7 @@ public class PanelDetalles extends JPanel {
         areaTranscripcion.setEditable(false);
         btnGuardar.setEnabled(false);
         btnReproducir.setEnabled(false);
+        btnTranscribirAuto.setEnabled(false); // ✅ NUEVO
         audioActual = null;
     }
 
@@ -127,5 +147,11 @@ public class PanelDetalles extends JPanel {
     public void setListenerReproducir(ActionListener listener) {
         btnReproducir.addActionListener(listener);
     }
-}
 
+    /**
+     * ✅ NUEVO: Establece el listener para el botón de transcripción automática
+     */
+    public void setListenerTranscribirAuto(ActionListener listener) {
+        btnTranscribirAuto.addActionListener(listener);
+    }
+}
