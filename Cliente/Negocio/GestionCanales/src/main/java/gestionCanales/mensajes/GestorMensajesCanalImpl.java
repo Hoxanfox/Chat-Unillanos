@@ -89,29 +89,53 @@ public class GestorMensajesCanalImpl implements IGestorMensajesCanal, IObservado
     public void actualizar(String tipoDeDato, Object datos) {
         System.out.println("🔔 [GestorMensajesCanal]: Señal recibida del GestorSincronizacionGlobal - Tipo: " + tipoDeDato);
 
-        if ("ACTUALIZAR_MENSAJES_CANALES".equals(tipoDeDato)) {
-            System.out.println("📨 [GestorMensajesCanal]: Procesando ACTUALIZAR_MENSAJES_CANALES");
-            System.out.println("🔄 [GestorMensajesCanal]: Solicitando historial de TODOS los canales...");
+        if (tipoDeDato == null) return;
 
-            // ✅ Obtener todos los canales del repositorio
-            repositorioCanal.obtenerTodos()
-                .thenAccept(canales -> {
-                    System.out.println("📋 [GestorMensajesCanal]: " + canales.size() + " canales encontrados en caché");
-
-                    // Solicitar historial de cada canal
-                    for (dominio.Canal canal : canales) {
-                        String canalId = canal.getIdCanal().toString();
-                        System.out.println("   → Solicitando historial del canal: " + canal.getNombre() + " (ID: " + canalId + ")");
-                        solicitarHistorialCanal(canalId, 50);
-                    }
-
-                    System.out.println("✅ [GestorMensajesCanal]: Historial solicitado para todos los canales");
-                })
-                .exceptionally(ex -> {
-                    System.err.println("❌ [GestorMensajesCanal]: Error al obtener canales del repositorio: " + ex.getMessage());
-                    return null;
-                });
+        String tipo = tipoDeDato.toString().trim();
+        if (!"ACTUALIZAR_MENSAJES_CANALES".equalsIgnoreCase(tipo)) {
+            return;
         }
+
+        System.out.println("📨 [GestorMensajesCanal]: Procesando ACTUALIZAR_MENSAJES_CANALES");
+
+        // 1) Si la notificación trae un canal específico, solicitar sólo ese historial
+        String canalSolicitado = null;
+        if (datos instanceof Map) {
+            Map<?, ?> mapa = (Map<?, ?>) datos;
+            Object cid = mapa.get("canalId");
+            if (cid == null) cid = mapa.get("channelId");
+            if (cid != null) canalSolicitado = cid.toString();
+        }
+
+        if (canalSolicitado != null && !canalSolicitado.isEmpty()) {
+            System.out.println("🔎 [GestorMensajesCanal]: Solicitud específica para canal: " + canalSolicitado);
+            solicitarHistorialCanal(canalSolicitado, 50);
+            return;
+        }
+
+        // 2) Si hay un canal abierto en la UI, solicitar sólo su historial
+        if (this.canalActivoId != null && !this.canalActivoId.isEmpty()) {
+            System.out.println("📍 [GestorMensajesCanal]: Canal activo detectado, solicitando historial de: " + this.canalActivoId);
+            solicitarHistorialCanal(this.canalActivoId, 50);
+            return;
+        }
+
+        // 3) Si no hay canal específico, solicitar historial para todos los canales en caché
+        System.out.println("🔄 [GestorMensajesCanal]: Solicitando historial de TODOS los canales...");
+        repositorioCanal.obtenerTodos()
+            .thenAccept(canales -> {
+                System.out.println("📋 [GestorMensajesCanal]: " + canales.size() + " canales encontrados en caché");
+                for (dominio.Canal canal : canales) {
+                    String canalId = canal.getIdCanal().toString();
+                    System.out.println("   → Solicitando historial del canal: " + canal.getNombre() + " (ID: " + canalId + ")");
+                    solicitarHistorialCanal(canalId, 50);
+                }
+                System.out.println("✅ [GestorMensajesCanal]: Historial solicitado para todos los canales");
+            })
+            .exceptionally(ex -> {
+                System.err.println("❌ [GestorMensajesCanal]: Error al obtener canales del repositorio: " + ex.getMessage());
+                return null;
+            });
     }
 
     /**

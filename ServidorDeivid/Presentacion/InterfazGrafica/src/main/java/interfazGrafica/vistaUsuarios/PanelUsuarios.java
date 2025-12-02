@@ -343,6 +343,14 @@ public class PanelUsuarios extends JPanel implements IObservador {
                 });
                 break;
 
+            // ✅ NUEVO: Escuchar evento específico de sincronización de usuarios
+            case "SINCRONIZADO_USUARIO":
+                SwingUtilities.invokeLater(() -> {
+                    LoggerCentral.info(TAG, "🔄 ✅ Usuarios sincronizados. Refrescando tabla...");
+                    refrescarTabla();
+                });
+                break;
+
             // ✅ NUEVO: Escuchar eventos de sincronización P2P
             case "SINCRONIZACION_TERMINADA":
             case "SINCRONIZACION_P2P_TERMINADA":  // ✅ AGREGADO: También escuchar el evento P2P específico

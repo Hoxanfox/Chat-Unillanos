@@ -38,6 +38,7 @@ public class Archivo implements Serializable, IMerkleEntity {
         this.rutaRelativa = fileId; // Por defecto, la ruta es igual al fileId
         this.mimeType = mimeType;
         this.tamanio = tamanio;
+        this.fechaCreacion = Instant.now();
     }
 
     // Getters y Setters

@@ -192,6 +192,31 @@ public class ControladorP2P implements IObservador {
     }
 
     /**
+     * ✅ NUEVO: Obtiene acceso al PeerRepositorio a través del servicio
+     * Método simplificado que no requiere exponer ServicioInformacion
+     */
+    public void suscribirseAPeerRepositorio(observador.IObservador observador) {
+        LoggerCentral.info(TAG, "Suscribiendo observador a cambios de peers en BD...");
+        if (servicio instanceof ServicioP2P) {
+            ServicioP2P servicioP2P = (ServicioP2P) servicio;
+            // Suscribirse directamente a través de ServicioInformacion
+            try {
+                gestorP2P.servicios.ServicioInformacion servicioInfo = servicioP2P.getServicioInformacion();
+                if (servicioInfo != null) {
+                    servicioInfo.registrarObservador(observador);
+                    LoggerCentral.info(TAG, "✅ Observador suscrito a cambios de peers");
+                } else {
+                    LoggerCentral.error(TAG, "❌ ServicioInformacion no disponible");
+                }
+            } catch (Exception e) {
+                LoggerCentral.error(TAG, "❌ Error al suscribirse: " + e.getMessage());
+            }
+        } else {
+            LoggerCentral.error(TAG, "❌ Servicio no es instancia de ServicioP2P");
+        }
+    }
+
+    /**
      * Permite que la vista se suscriba para recibir actualizaciones de la lista de peers.
      */
     public void suscribirActualizacionLista(Consumer<List<DTOPeerDetails>> callback) {

@@ -108,15 +108,43 @@ public class GrafoP2P extends JPanel implements IObservador {
         // Suscribirse a eventos de conexión/desconexión
         controlador.suscribirseAEventosConexion();
 
+        // Suscribirse a eventos del repositorio de peers
+        controlador.suscribirseAPeerRepositorio(this);
+
+        // ✅ NUEVO: Suscribirse a eventos de topología para recibir LISTA_PEERS_ACTIVOS
+        controlador.suscribirseATopologia(this);
+
         // Registrarse como observador
         controlador.suscribirActualizacionLista(this::actualizarConListaPeers);
         controlador.suscribirConexionPeer(peer -> actualizarDesdeControlador());
         controlador.suscribirDesconexionPeer(peer -> actualizarDesdeControlador());
 
         LoggerCentral.info(TAG, "GrafoP2P suscrito a eventos de peers");
+        LoggerCentral.info(TAG, "✓ Suscrito a ServicioTopologiaRed para LISTA_PEERS_ACTIVOS");
 
-        // Cargar datos iniciales
-        actualizarDesdeControlador();
+        // Cargar datos iniciales desde la base de datos
+        cargarPeersDesdeBaseDatos();
+    }
+
+    /**
+     * ✅ NUEVO: Carga los peers desde la base de datos al iniciar
+     */
+    private void cargarPeersDesdeBaseDatos() {
+        try {
+            LoggerCentral.info(TAG, "📂 Cargando peers desde la base de datos...");
+
+            // Obtener todos los peers de la BD (incluye ONLINE y OFFLINE)
+            List<DTOPeerDetails> peersDB = controlador.obtenerListaPeers();
+
+            LoggerCentral.info(TAG, "✅ Peers cargados desde BD: " + peersDB.size());
+
+            // Actualizar el grafo con los datos de la BD
+            actualizarConListaPeers(peersDB);
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "❌ Error al cargar peers desde BD: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -350,13 +378,20 @@ public class GrafoP2P extends JPanel implements IObservador {
         switch (tipoDeDato) {
             case "PEER_CONECTADO":
             case "PEER_DESCONECTADO":
-            case "LISTA_PEERS":
-            case "CLIENTE_CONECTADO":
-            case "CLIENTE_DESCONECTADO":
-            case "TOPOLOGIA_ACTUALIZADA":
-                // Actualizar grafo cuando cambian los peers o la topología de red
-                LoggerCentral.info(TAG, "🔄 Actualizando grafo P2P por evento: " + tipoDeDato);
-                SwingUtilities.invokeLater(this::actualizarDesdeControlador);
+            case "LISTA_PEERS_ACTIVOS":  // ✅ NUEVO: Evento de ServicioTopologiaRed
+            case "PEER_CREADO":       // ✅ NUEVO: Evento del repositorio
+            case "PEER_ACTUALIZADO":  // ✅ NUEVO: Evento del repositorio
+                // ✅ MEJORADO: Si es LISTA_PEERS_ACTIVOS, convertir y actualizar directamente
+                if ("LISTA_PEERS_ACTIVOS".equals(tipoDeDato) && datos instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<DTOPeerDetails> peers = (List<DTOPeerDetails>) datos;
+                    LoggerCentral.info(TAG, "🔄 Actualizando grafo P2P con LISTA_PEERS_ACTIVOS: " + peers.size() + " peers");
+                    actualizarConListaPeers(peers);
+                } else {
+                    // Actualizar grafo cuando cambian los peers o la topología de red
+                    LoggerCentral.info(TAG, "🔄 Actualizando grafo P2P por evento: " + tipoDeDato);
+                    SwingUtilities.invokeLater(this::actualizarDesdeControlador);
+                }
                 break;
 
             default:
@@ -370,7 +405,7 @@ public class GrafoP2P extends JPanel implements IObservador {
         String ip;
         int puerto; // ✅ NUEVO: Incluir puerto
         boolean esLocal;
-        boolean esOnline;
+        boolean esOnline; // ✅ AGREGADO: Campo faltante
         int x, y;
 
         NodoP2P(String id, String ip, int puerto, boolean esLocal, boolean esOnline) {

@@ -151,7 +151,7 @@ public class ServicioTranscripcionNegocio {
     }
 
     /**
-     * Obtiene estadísticas de transcripción
+     * ✅ NUEVO: Obtiene estadísticas de transcripción
      */
     public FachadaTranscripcion.EstadisticasTranscripcion obtenerEstadisticas() {
         try {
@@ -163,18 +163,7 @@ public class ServicioTranscripcionNegocio {
     }
 
     /**
-     * Verifica si el servicio de transcripción está disponible
-     */
-    public boolean isTranscripcionDisponible() {
-        try {
-            return fachadaTranscripcion.isTranscripcionDisponible();
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
-     * Busca un audio específico por su ID
+     * ✅ NUEVO: Busca un audio por su ID
      */
     public DTOAudioTranscripcion buscarAudioPorId(String audioId) {
         try {
@@ -186,16 +175,22 @@ public class ServicioTranscripcionNegocio {
     }
 
     /**
+     * Verifica si el servicio de transcripción está disponible
+     */
+    public boolean isTranscripcionDisponible() {
+        return fachadaTranscripcion.isTranscripcionDisponible();
+    }
+
+    /**
      * Detiene el servicio de transcripción
      */
     public void detener() {
         try {
             LoggerCentral.info(TAG, "Deteniendo servicio de transcripción...");
             fachadaTranscripcion.detenerActualizacionAutomatica();
-            fachadaTranscripcion.detener();
+            LoggerCentral.info(TAG, "✓ Servicio detenido");
         } catch (Exception e) {
             LoggerCentral.error(TAG, "Error al detener servicio: " + e.getMessage());
         }
     }
 }
-

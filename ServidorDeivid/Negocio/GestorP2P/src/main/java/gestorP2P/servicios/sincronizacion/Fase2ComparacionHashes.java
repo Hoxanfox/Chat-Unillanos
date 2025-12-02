@@ -2,6 +2,7 @@ package gestorP2P.servicios.sincronizacion;
 
 import com.google.gson.JsonObject;
 import logger.LoggerCentral;
+import observador.ISujeto;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.List;
  *
  * Responsabilidad: Comparar hashes locales con hashes remotos para detectar diferencias.
  * Determina qué tipos de entidades requieren sincronización.
+ * ✅ NUEVO: Notifica cuando cada tipo se sincroniza correctamente.
  */
 public class Fase2ComparacionHashes {
 
@@ -21,9 +23,18 @@ public class Fase2ComparacionHashes {
     private static final String CYAN = "\u001B[36m";
 
     private final Fase1ConstruccionArboles fase1;
+    private ISujeto servicioPadre; // ✅ NUEVO: Para notificar eventos de sincronización
 
     public Fase2ComparacionHashes(Fase1ConstruccionArboles fase1) {
         this.fase1 = fase1;
+    }
+
+    /**
+     * ✅ NUEVO: Configura el servicio padre para notificar eventos.
+     */
+    public void setServicioPadre(ISujeto servicioPadre) {
+        this.servicioPadre = servicioPadre;
+        LoggerCentral.info(TAG, VERDE + "✓ Servicio padre configurado para notificaciones de sincronización" + RESET);
     }
 
     /**
@@ -68,10 +79,34 @@ public class Fase2ComparacionHashes {
                 String hCorto = hashLocal.substring(0, Math.min(8, hashLocal.length()));
                 LoggerCentral.debug(TAG, VERDE + String.format("✓ %s sincronizado (Hash: %s)", tipo, hCorto) + RESET);
                 tiposSincronizados.add(tipo);
+
+                // ✅ NUEVO: Notificar que este tipo específico está sincronizado
+                notificarTipoSincronizado(tipo);
             }
         }
 
         return new ResultadoComparacion(tiposConDiferencias, tiposSincronizados);
+    }
+
+    /**
+     * ✅ NUEVO: Notifica que un tipo específico se sincronizó correctamente.
+     * Esto permite que las vistas específicas se actualicen.
+     */
+    private void notificarTipoSincronizado(String tipo) {
+        if (servicioPadre == null) {
+            return;
+        }
+
+        try {
+            // Crear evento específico por tipo
+            String eventoEspecifico = "SINCRONIZADO_" + tipo;
+
+            LoggerCentral.info(TAG, VERDE + "📢 Notificando sincronización de " + tipo + RESET);
+            servicioPadre.notificarObservadores(eventoEspecifico, tipo);
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error notificando sincronización de " + tipo + ": " + e.getMessage());
+        }
     }
 
     /**
@@ -107,4 +142,3 @@ public class Fase2ComparacionHashes {
         }
     }
 }
-

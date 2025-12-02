@@ -6,10 +6,12 @@ port=8000
 # ==========================================
 # IP de la maquina donde corre Grafana/Prometheus/Loki/Tempo
 otel.collector.host=25.2.20.107
+otel.collector.host=25.2.20.107
 
 # Puerto del OpenTelemetry Collector (OTLP HTTP)
 otel.collector.port=4318
 
 # Nombre unico de este cliente (se genera automaticamente con hostname si no se especifica)
 otel.service.name=chat-cliente
+
 
