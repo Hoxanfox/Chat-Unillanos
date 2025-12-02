@@ -19,7 +19,7 @@ func NewAggregatorService() *AggregatorService {
 
 func (s *AggregatorService) AggregateData(path string) []models.PeerResponse {
 	// 1. Obtener la lista de peers
-	peers, err := s.getPeers()
+	peers, err := s.GetPeers()
 	if err != nil {
 		fmt.Printf("Error obteniendo peers: %v. Intentando solo con Seed Peer.\n", err)
 		peers = []models.Peer{}
@@ -74,7 +74,7 @@ func (s *AggregatorService) AggregateData(path string) []models.PeerResponse {
 	return allData
 }
 
-func (s *AggregatorService) getPeers() ([]models.Peer, error) {
+func (s *AggregatorService) GetPeers() ([]models.Peer, error) {
 	seedURL := os.Getenv("SEED_PEER_URL")
 	if seedURL == "" {
 		seedURL = "http://host.docker.internal:7000"

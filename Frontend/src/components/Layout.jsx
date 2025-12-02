@@ -49,7 +49,7 @@ const Layout = ({ children, activeTab, setActiveTab, peers, selectedPeer, setSel
                     >
                         <option value="">All Peers</option>
                         {peers.map((peer) => (
-                            <option key={peer.peer_id} value={peer.peer_id}>
+                            <option key={peer.peer_id} value={peer.peer_ip}>
                                 {peer.peer_ip} ({peer.peer_id.substring(0, 8)}...)
                             </option>
                         ))}

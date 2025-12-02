@@ -4,14 +4,27 @@ import clsx from 'clsx';
 
 const LogsView = ({ logs, loading, error, paused, setPaused, clearLogs, refresh }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedLevel, setSelectedLevel] = useState('ALL');
 
     const filteredLogs = useMemo(() => {
-        if (!searchTerm) return logs;
-        return logs.filter(log =>
-            log.contenido.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            log.contenido.source.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }, [logs, searchTerm]);
+        let result = logs;
+
+        // Filter by Level
+        if (selectedLevel !== 'ALL') {
+            result = result.filter(log =>
+                log.contenido.level?.toUpperCase() === selectedLevel
+            );
+        }
+
+        // Filter by Search Term
+        if (searchTerm) {
+            result = result.filter(log =>
+                log.contenido.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                log.contenido.source.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        }
+        return result;
+    }, [logs, searchTerm, selectedLevel]);
 
     const getLevelBadge = (level) => {
         switch (level?.toUpperCase()) {
@@ -22,6 +35,8 @@ const LogsView = ({ logs, loading, error, paused, setPaused, clearLogs, refresh 
                 return <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">WARN</span>;
             case 'INFO':
                 return <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">INFO</span>;
+            case 'DEBUG':
+                return <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">DEBUG</span>;
             default:
                 return <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-500/10 text-gray-400 border border-gray-500/20">{level}</span>;
         }
@@ -41,6 +56,21 @@ const LogsView = ({ logs, loading, error, paused, setPaused, clearLogs, refresh 
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full bg-gray-950 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
+                    </div>
+
+                    <div className="relative">
+                        <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                        <select
+                            value={selectedLevel}
+                            onChange={(e) => setSelectedLevel(e.target.value)}
+                            className="bg-gray-950 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer"
+                        >
+                            <option value="ALL">All Levels</option>
+                            <option value="DEBUG">Debug</option>
+                            <option value="INFO">Info</option>
+                            <option value="WARNING">Warning</option>
+                            <option value="ERROR">Error</option>
+                        </select>
                     </div>
                 </div>
 

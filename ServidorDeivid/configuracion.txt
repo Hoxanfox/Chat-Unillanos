@@ -4,7 +4,7 @@
 
 # IP pública o local de este nodo (donde otros peers lo buscarán)
 # Si es local usa 127.0.0.1, si es en red usa tu IP LAN (ej. 192.168.1.X)
-peer.host=192.168.1.109
+peer.host=25.2.20.107
 
 # Puerto donde este nodo escucha conexiones de otros PEERS (comunicación servidor-servidor)
 peer.puerto=9000
@@ -15,15 +15,15 @@ peer.puerto=9000
 # Si este es el PRIMER nodo de la red (Nodo Génesis), deja estas líneas COMENTADAS o vacías.
 # Si te quieres conectar a una red existente, pon aquí la IP y puerto de un nodo ya conectado.
 
-peer.inicial.host=192.168.1.109
-peer.inicial.puerto=9000
+#peer.inicial.host=192.168.1.109
+#peer.inicial.puerto=9000
 
 # ==========================================
-# CONFIGURACIÓN PARA CLIENTES (FRONTEND)
+# CONFIGURACIÓN PARA CLIENTE-SERVIDOR
 # ==========================================
 
 # IP donde escuchará peticiones de los clientes (App de Escritorio/Móvil)
-cliente.host=192.168.1.109
+cliente.host=25.2.20.107
 
 # Puerto para los clientes (socket del chat usuario-servidor)
 cliente.puerto=8000
@@ -33,12 +33,12 @@ cliente.puerto=8000
 # ==========================================
 
 db.host=localhost
-db.port=3306
+db.port=12000
 db.name=chat_unillanos
 
 # Credenciales de tu base de datos local
-db.user=root
-db.pass=rootpassword
+db.user=chatuser
+db.pass=chatpass
 
 # Rendimiento: Máximo de conexiones simultáneas a la BD
 db.max.pool=10
@@ -47,10 +47,10 @@ db.max.pool=10
 # OBSERVABILIDAD (OpenTelemetry)
 # ==========================================
 # IP de la maquina donde corre Grafana/Prometheus/Loki/Tempo
-otel.collector.host=localhost
+otel.collector.host=25.2.20.107
 
 # Puerto del OpenTelemetry Collector (OTLP HTTP)
 otel.collector.port=4318
 
 # Nombre unico de este servicio (cambiar si hay multiples peers)
-otel.service.name=chat-servidor-peer1
+otel.service.name=chat-servidor-peer2

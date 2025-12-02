@@ -16,13 +16,13 @@ cd /d "%~dp0"
 :: Modifica estas variables segun tu entorno
 
 :: IP de la maquina donde corre el stack de observabilidad (Docker)
-set OTEL_COLLECTOR_HOST=localhost
+set OTEL_COLLECTOR_HOST=25.2.20.107
 
 :: Puerto del collector (OTLP HTTP)
 set OTEL_COLLECTOR_PORT=4318
 
 :: Nombre unico para este servidor (cambiar si hay multiples peers)
-set SERVICE_NAME=chat-servidor-peer1
+set SERVICE_NAME=chat-servidor-peer2
 
 :: =============================================================================
 :: VERIFICAR AGENTE OPENTELEMETRY

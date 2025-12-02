@@ -28,14 +28,20 @@ func enableCORS(next http.HandlerFunc) http.HandlerFunc {
 func main() {
 	// Initialize Service
 	aggregatorService := service.NewAggregatorService()
+	logCollector := service.NewLogCollector()
+	
+	// Start Log Collector (SSE Aggregation)
+	logCollector.Start()
 
 	// Initialize Handler
-	gatewayHandler := handlers.NewGatewayHandler(aggregatorService)
+	gatewayHandler := handlers.NewGatewayHandler(aggregatorService, logCollector)
 
 	// Setup Routes
 	http.HandleFunc("/gateway/logs", enableCORS(gatewayHandler.GetLogs))
 	http.HandleFunc("/gateway/logs/stats", enableCORS(gatewayHandler.GetStats))
 	http.HandleFunc("/gateway/logs/health", enableCORS(gatewayHandler.GetHealth))
+	http.HandleFunc("/gateway/network", enableCORS(gatewayHandler.GetNetworkPeers))
+	http.HandleFunc("/gateway/logs/stream", enableCORS(gatewayHandler.StreamLogs))
 
 	// Start Server
 	port := os.Getenv("GATEWAY_PORT")

@@ -30,6 +30,8 @@ function App() {
             }
         };
         getPeers();
+        const interval = setInterval(getPeers, 5000); // Poll every 5 seconds
+        return () => clearInterval(interval);
     }, []);
 
     const { logs, loading: logsLoading, error: logsError, paused, setPaused, clearLogs, refresh } = useLogs(selectedPeer);

@@ -95,6 +95,7 @@ const StatsView = ({ stats, health, loading, error }) => {
                             <thead className="bg-gray-950 text-gray-400 uppercase text-xs font-semibold sticky top-0">
                                 <tr>
                                     <th className="px-4 py-3 border-b border-gray-800">Peer IP</th>
+                                    <th className="px-4 py-3 border-b border-gray-800">Port</th>
                                     <th className="px-4 py-3 border-b border-gray-800">Service</th>
                                     <th className="px-4 py-3 border-b border-gray-800">Logs in Memory</th>
                                     <th className="px-4 py-3 border-b border-gray-800">Status</th>
@@ -104,6 +105,7 @@ const StatsView = ({ stats, health, loading, error }) => {
                                 {health && health.map((peer, idx) => (
                                     <tr key={idx} className="hover:bg-gray-800/50 transition-colors">
                                         <td className="px-4 py-3 text-gray-300 font-mono">{peer.peer_ip}</td>
+                                        <td className="px-4 py-3 text-gray-400 font-mono">{peer.port || '-'}</td>
                                         <td className="px-4 py-3 text-gray-400">{peer.contenido.service}</td>
                                         <td className="px-4 py-3 text-gray-400">{peer.contenido.logsEnMemoria}</td>
                                         <td className="px-4 py-3">
@@ -118,7 +120,7 @@ const StatsView = ({ stats, health, loading, error }) => {
                                 ))}
                                 {(!health || health.length === 0) && (
                                     <tr>
-                                        <td colSpan="4" className="px-4 py-8 text-center text-gray-500">No health data available</td>
+                                        <td colSpan="5" className="px-4 py-8 text-center text-gray-500">No health data available</td>
                                     </tr>
                                 )}
                             </tbody>
