@@ -165,14 +165,79 @@ public class ServicioTopologiaRed implements IServicioP2P, ISujeto {
     }
 
     /**
+     * ✅ NUEVO: Obtiene la IP real del servidor local
+     * Prioridad: 1) Configuración, 2) IP de red detectada, 3) localhost
+     */
+    private String obtenerIPRealLocal() {
+        // 1. Primero intentar obtener de la configuración
+        String ipConfig = config.getPeerHost();
+        
+        // Si la IP configurada es válida y no es genérica, usarla
+        if (ipConfig != null && !ipConfig.isEmpty() && 
+            !ipConfig.equals("0.0.0.0") && 
+            !ipConfig.equals("127.0.0.1") &&
+            !ipConfig.equals("localhost")) {
+            LoggerCentral.debug(TAG, "Usando IP de configuración: " + ipConfig);
+            return ipConfig;
+        }
+        
+        // 2. Intentar detectar la IP de red real
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> interfaces = 
+                java.net.NetworkInterface.getNetworkInterfaces();
+            
+            while (interfaces.hasMoreElements()) {
+                java.net.NetworkInterface iface = interfaces.nextElement();
+                
+                // Saltar interfaces inactivas o loopback
+                if (!iface.isUp() || iface.isLoopback()) continue;
+                
+                java.util.Enumeration<java.net.InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    java.net.InetAddress addr = addresses.nextElement();
+                    
+                    // Solo IPv4, no loopback
+                    if (addr instanceof java.net.Inet4Address && !addr.isLoopbackAddress()) {
+                        String ip = addr.getHostAddress();
+                        
+                        // Priorizar IPs de Hamachi (25.x.x.x)
+                        if (ip.startsWith("25.")) {
+                            LoggerCentral.info(TAG, "✅ IP Hamachi detectada: " + ip);
+                            return ip;
+                        }
+                        
+                        // Guardar la primera IP válida como fallback
+                        if (ipConfig == null || ipConfig.equals("0.0.0.0")) {
+                            ipConfig = ip;
+                        }
+                    }
+                }
+            }
+            
+            // Si encontramos una IP válida, usarla
+            if (ipConfig != null && !ipConfig.equals("0.0.0.0")) {
+                LoggerCentral.info(TAG, "✅ IP de red detectada: " + ipConfig);
+                return ipConfig;
+            }
+            
+        } catch (Exception e) {
+            LoggerCentral.warn(TAG, "Error detectando IP de red: " + e.getMessage());
+        }
+        
+        // 3. Fallback a configuración o localhost
+        LoggerCentral.warn(TAG, "⚠️ No se pudo detectar IP real, usando: " + config.getPeerHost());
+        return config.getPeerHost();
+    }
+
+    /**
      * Construye la topología local actual
      */
     private DTOTopologiaRed construirTopologiaLocal() {
         DTOTopologiaRed topo = new DTOTopologiaRed();
         topo.setIdPeer(idLocal);
 
-        // ✅ CORREGIDO: Usar configuración real en lugar de localhost hardcodeado
-        String host = config.getPeerHost();
+        // ✅ MEJORADO: Obtener la IP real de la red
+        String host = obtenerIPRealLocal();
         int puerto = puertoLocal > 0 ? puertoLocal : config.getPeerPuerto();
 
         topo.setIpPeer(host);
@@ -347,11 +412,24 @@ public class ServicioTopologiaRed implements IServicioP2P, ISujeto {
                 return;
             }
 
+            // ✅ NUEVO: Validar y corregir la IP si es inválida
+            String ipReportada = topoRemota.getIpPeer();
+            if (esIPInvalida(ipReportada)) {
+                // Intentar obtener la IP real desde el gestor de conexiones
+                String ipReal = obtenerIPRealDePeer(idPeer);
+                if (ipReal != null && !ipReal.isEmpty()) {
+                    LoggerCentral.info(TAG, "🔧 Corrigiendo IP de " + idPeer + ": " + 
+                        ipReportada + " -> " + ipReal);
+                    topoRemota.setIpPeer(ipReal);
+                }
+            }
+
             // Guardar/actualizar topología del peer remoto
             topologiasRemotas.put(idPeer, topoRemota);
 
             LoggerCentral.info(TAG, "📥 Topología actualizada de " + idPeer +
-                ": " + topoRemota.getNumeroClientes() + " clientes");
+                " [IP: " + topoRemota.getIpPeer() + ":" + topoRemota.getPuertoPeer() + 
+                "] | " + topoRemota.getNumeroClientes() + " clientes");
 
             // Notificar a observadores
             notificarObservadores("TOPOLOGIA_REMOTA_RECIBIDA", obtenerTopologiaCompleta());
@@ -359,6 +437,42 @@ public class ServicioTopologiaRed implements IServicioP2P, ISujeto {
         } catch (Exception e) {
             LoggerCentral.error(TAG, "Error procesando topología de " + idPeer + ": " + e.getMessage());
         }
+    }
+
+    /**
+     * ✅ NUEVO: Verifica si una IP es inválida o genérica
+     */
+    private boolean esIPInvalida(String ip) {
+        if (ip == null || ip.isEmpty()) return true;
+        if (ip.equals("0.0.0.0")) return true;
+        if (ip.equals("127.0.0.1")) return true;
+        if (ip.equals("localhost")) return true;
+        return false;
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene la IP real de un peer desde el gestor de conexiones
+     */
+    private String obtenerIPRealDePeer(String idPeer) {
+        if (gestorConexiones == null) return null;
+        
+        try {
+            List<DTOPeerDetails> peers = gestorConexiones.obtenerDetallesPeers();
+            for (DTOPeerDetails peer : peers) {
+                if (peer.getId().equals(idPeer)) {
+                    String ip = peer.getIp();
+                    // Limpiar prefijo "/" si existe
+                    if (ip != null && ip.startsWith("/")) {
+                        ip = ip.substring(1);
+                    }
+                    return ip;
+                }
+            }
+        } catch (Exception e) {
+            LoggerCentral.warn(TAG, "Error obteniendo IP real de peer: " + e.getMessage());
+        }
+        
+        return null;
     }
 
     /**

@@ -4,6 +4,7 @@ import controlador.clienteServidor.ControladorClienteServidor;
 import dto.cliente.DTOSesionCliente;
 import logger.LoggerCentral;
 import observador.IObservador;
+import configuracion.Configuracion;
 
 import javax.swing.*;
 import java.awt.*;
@@ -97,9 +98,9 @@ public class GrafoClienteServidor extends JPanel implements IObservador {
         List<DTOSesionCliente> sesiones = controlador.getSesionesActivas();
 
         if (!sesiones.isEmpty()) {
-            // Agregar el servidor como peer único (arquitectura Cliente-Servidor)
+            // ✅ MEJORADO: Usar IP real del servidor
             String idServidor = "SERVER-LOCAL";
-            String ipServidor = "localhost:8000";
+            String ipServidor = obtenerIPRealServidor();
             agregarPeer(idServidor, ipServidor);
 
             // Agregar cada cliente conectado
@@ -142,6 +143,69 @@ public class GrafoClienteServidor extends JPanel implements IObservador {
 
         // ✅ NUEVO: Agregar listener para clics en usuarios (desconectar)
         agregarListenerClics();
+    }
+
+    /**
+     * ✅ NUEVO: Obtiene la IP real del servidor para mostrar en el grafo
+     */
+    private String obtenerIPRealServidor() {
+        try {
+            Configuracion config = Configuracion.getInstance();
+            String ip = config.getServidorHost();
+            int puerto = config.getServidorPuerto();
+            
+            // Si la IP es genérica, detectar la real
+            if (ip == null || ip.equals("0.0.0.0") || ip.equals("127.0.0.1") || ip.equals("localhost")) {
+                ip = detectarIPReal();
+                if (ip == null) ip = "localhost";
+            }
+            
+            return ip + ":" + puerto;
+            
+        } catch (Exception e) {
+            LoggerCentral.warn(TAG, "Error obteniendo IP del servidor: " + e.getMessage());
+            return "localhost:8000";
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Detecta la IP real de red (prioriza Hamachi)
+     */
+    private String detectarIPReal() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> interfaces = 
+                java.net.NetworkInterface.getNetworkInterfaces();
+            
+            String ipFallback = null;
+            
+            while (interfaces.hasMoreElements()) {
+                java.net.NetworkInterface iface = interfaces.nextElement();
+                if (!iface.isUp() || iface.isLoopback()) continue;
+                
+                java.util.Enumeration<java.net.InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    java.net.InetAddress addr = addresses.nextElement();
+                    
+                    if (addr instanceof java.net.Inet4Address && !addr.isLoopbackAddress()) {
+                        String ipAddr = addr.getHostAddress();
+                        
+                        // Priorizar IPs de Hamachi (25.x.x.x)
+                        if (ipAddr.startsWith("25.")) {
+                            return ipAddr;
+                        }
+                        
+                        if (ipFallback == null) {
+                            ipFallback = ipAddr;
+                        }
+                    }
+                }
+            }
+            
+            return ipFallback;
+            
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**

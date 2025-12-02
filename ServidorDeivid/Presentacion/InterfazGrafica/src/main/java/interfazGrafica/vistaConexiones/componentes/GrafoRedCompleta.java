@@ -5,6 +5,7 @@ import dto.topologia.DTOTopologiaRed;
 import dto.cliente.DTOSesionCliente;
 import logger.LoggerCentral;
 import observador.IObservador;
+import configuracion.Configuracion;
 
 import javax.swing.*;
 import java.awt.*;
@@ -25,6 +26,11 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
     private final List<ConexionP2P> conexionesP2P;
     private ControladorP2P controlador;
 
+    // ✅ NUEVO: Información del peer local para identificarlo correctamente
+    private String idPeerLocal;
+    private String ipLocal;
+    private int puertoLocal;
+
     // Colores
     private static final Color COLOR_PEER_LOCAL = new Color(52, 152, 219);   // Azul
     private static final Color COLOR_PEER_ONLINE = new Color(46, 204, 113);  // Verde
@@ -39,6 +45,7 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
         this.peers = new LinkedHashMap<>();
         this.usuarios = new ArrayList<>();
         this.conexionesP2P = new ArrayList<>();
+        cargarConfiguracionLocal();
         configurarPanel();
     }
 
@@ -50,7 +57,93 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
         this.controlador = controlador;
         if (controlador != null) {
             suscribirseAEventos();
+            // Obtener ID del peer local desde el controlador
+            obtenerIdPeerLocalDesdeControlador();
         }
+    }
+
+    /**
+     * ✅ NUEVO: Cargar la configuración del peer local
+     */
+    private void cargarConfiguracionLocal() {
+        try {
+            Configuracion config = Configuracion.getInstance();
+            this.ipLocal = config.getPeerHost();
+            this.puertoLocal = config.getPeerPuerto();
+            LoggerCentral.info(TAG, "Configuración local cargada: " + ipLocal + ":" + puertoLocal);
+        } catch (Exception e) {
+            this.ipLocal = "127.0.0.1";
+            this.puertoLocal = 8000;
+            LoggerCentral.warn(TAG, "Error cargando configuración, usando valores por defecto");
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Obtener el ID del peer local desde el controlador
+     */
+    private void obtenerIdPeerLocalDesdeControlador() {
+        if (controlador != null) {
+            try {
+                var servicioP2P = controlador.getServicioP2PInterno();
+                if (servicioP2P != null) {
+                    var idLocal = servicioP2P.obtenerIdPeerLocal();
+                    if (idLocal != null) {
+                        this.idPeerLocal = idLocal.toString();
+                        LoggerCentral.info(TAG, "ID del peer local obtenido: " + this.idPeerLocal);
+                    }
+                }
+            } catch (Exception e) {
+                LoggerCentral.warn(TAG, "No se pudo obtener ID del peer local: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Determina si un peer es el local basándose en múltiples criterios
+     */
+    private boolean esPeerLocal(String idPeer, String ip) {
+        // Criterio 1: Comparar por ID del peer
+        if (idPeerLocal != null && idPeerLocal.equals(idPeer)) {
+            return true;
+        }
+        
+        // Criterio 2: Comparar por ID "LOCAL" (convención)
+        if ("LOCAL".equalsIgnoreCase(idPeer)) {
+            return true;
+        }
+        
+        // Criterio 3: Comparar por IP local
+        String ipNormalizada = normalizarIP(ip);
+        String ipLocalNormalizada = normalizarIP(ipLocal);
+        if (ipNormalizada.equals(ipLocalNormalizada)) {
+            return true;
+        }
+        
+        // Criterio 4: IPs típicas de localhost
+        if (ipNormalizada.equals("127.0.0.1") || ipNormalizada.equals("localhost")) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * ✅ NUEVO: Normaliza direcciones IP
+     */
+    private String normalizarIP(String ip) {
+        if (ip == null || ip.isEmpty()) return "127.0.0.1";
+        
+        // Remover prefijo "/" si existe
+        if (ip.startsWith("/")) {
+            ip = ip.substring(1);
+        }
+        
+        // Normalizar localhost y 0.0.0.0
+        if (ip.equals("localhost") || ip.equals("0.0.0.0")) {
+            return "127.0.0.1";
+        }
+        
+        return ip;
     }
 
     /**
@@ -92,13 +185,20 @@ public class GrafoRedCompleta extends JPanel implements IObservador {
                 DTOTopologiaRed topo = entry.getValue();
 
                 String idPeer = topo.getIdPeer();
-                boolean esLocal = "LOCAL".equalsIgnoreCase(idPeer);
+                String ipPeer = topo.getIpPeer();
+                int puertoPeer = topo.getPuertoPeer();
+                
+                // ✅ CORREGIDO: Usar método mejorado para detectar peer local
+                boolean esLocal = esPeerLocal(idPeer, ipPeer);
                 boolean esOnline = "ONLINE".equalsIgnoreCase(topo.getEstadoPeer());
 
-                LoggerCentral.debug(TAG, "📍 Procesando peer - KeyMap: '" + entry.getKey() +
-                    "' | IdPeer usado: '" + idPeer + "' | IP: " + topo.getIpPeer());
+                // ✅ NUEVO: Mostrar IP con puerto para mejor identificación
+                String ipDisplay = (puertoPeer > 0) ? ipPeer + ":" + puertoPeer : ipPeer;
 
-                agregarPeer(idPeer, topo.getIpPeer(), esLocal, esOnline);
+                LoggerCentral.debug(TAG, "📍 Procesando peer - KeyMap: '" + entry.getKey() +
+                    "' | IdPeer: '" + idPeer + "' | IP: " + ipDisplay + " | Local: " + esLocal);
+
+                agregarPeer(idPeer, ipDisplay, esLocal, esOnline);
 
                 // Agregar clientes de este peer colgando del mismo idPeer
                 for (DTOSesionCliente cliente : topo.getClientesConectados()) {

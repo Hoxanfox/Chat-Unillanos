@@ -27,6 +27,7 @@ public class GrafoP2P extends JPanel implements IObservador {
     private ControladorP2P controlador;
 
     // ✅ NUEVO: Información del peer local para identificarlo
+    private String idPeerLocal;
     private String ipLocal;
     private int puertoLocal;
 
@@ -56,44 +57,129 @@ public class GrafoP2P extends JPanel implements IObservador {
     }
 
     /**
-     * ✅ NUEVO: Cargar la configuración del peer local para identificarlo
+     * ✅ MEJORADO: Cargar la configuración del peer local para identificarlo
      */
     private void cargarConfiguracionLocal() {
         Configuracion config = Configuracion.getInstance();
         this.ipLocal = config.getPeerHost();
         this.puertoLocal = config.getPeerPuerto();
+        
+        // ✅ NUEVO: Si la IP configurada es genérica, intentar detectar la IP real
+        if (ipLocal == null || ipLocal.equals("0.0.0.0") || ipLocal.equals("127.0.0.1")) {
+            String ipDetectada = detectarIPReal();
+            if (ipDetectada != null) {
+                LoggerCentral.info(TAG, "IP detectada automáticamente: " + ipDetectada);
+                this.ipLocal = ipDetectada;
+            }
+        }
+        
         LoggerCentral.info(TAG, "Configuración local cargada: " + ipLocal + ":" + puertoLocal);
     }
 
     /**
-     * ✅ NUEVO: Determina si un peer es el local
+     * ✅ NUEVO: Detecta la IP real de red (prioriza Hamachi)
      */
-    private boolean esPeerLocal(String ip, int puerto) {
-        // Normalizar IPs locales
-        String ipNormalizada = normalizarIP(ip);
-        String ipLocalNormalizada = normalizarIP(ipLocal);
-
-        boolean esLocal = ipNormalizada.equals(ipLocalNormalizada) && puerto == puertoLocal;
-
-        if (esLocal) {
-            LoggerCentral.debug(TAG, "Peer LOCAL identificado: " + ip + ":" + puerto);
+    private String detectarIPReal() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> interfaces = 
+                java.net.NetworkInterface.getNetworkInterfaces();
+            
+            String ipFallback = null;
+            
+            while (interfaces.hasMoreElements()) {
+                java.net.NetworkInterface iface = interfaces.nextElement();
+                
+                // Saltar interfaces inactivas o loopback
+                if (!iface.isUp() || iface.isLoopback()) continue;
+                
+                java.util.Enumeration<java.net.InetAddress> addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    java.net.InetAddress addr = addresses.nextElement();
+                    
+                    // Solo IPv4, no loopback
+                    if (addr instanceof java.net.Inet4Address && !addr.isLoopbackAddress()) {
+                        String ip = addr.getHostAddress();
+                        
+                        // Priorizar IPs de Hamachi (25.x.x.x)
+                        if (ip.startsWith("25.")) {
+                            LoggerCentral.info(TAG, "✅ IP Hamachi detectada: " + ip);
+                            return ip;
+                        }
+                        
+                        // Guardar como fallback
+                        if (ipFallback == null) {
+                            ipFallback = ip;
+                        }
+                    }
+                }
+            }
+            
+            return ipFallback;
+            
+        } catch (Exception e) {
+            LoggerCentral.warn(TAG, "Error detectando IP de red: " + e.getMessage());
+            return null;
         }
-
-        return esLocal;
     }
 
     /**
-     * ✅ NUEVO: Normaliza direcciones IP locales
+     * ✅ MEJORADO: Determina si un peer es el local usando múltiples criterios
+     */
+    private boolean esPeerLocal(String idPeer, String ip, int puerto) {
+        // Criterio 1: Comparar por ID del peer (más confiable)
+        if (idPeerLocal != null && idPeerLocal.equals(idPeer)) {
+            LoggerCentral.debug(TAG, "Peer LOCAL identificado por ID: " + idPeer);
+            return true;
+        }
+        
+        // Criterio 2: ID "LOCAL" (convención)
+        if ("LOCAL".equalsIgnoreCase(idPeer)) {
+            LoggerCentral.debug(TAG, "Peer LOCAL identificado por convención");
+            return true;
+        }
+        
+        // Criterio 3: Comparar por IP y puerto
+        String ipNormalizada = normalizarIP(ip);
+        String ipLocalNormalizada = normalizarIP(ipLocal);
+
+        if (ipNormalizada.equals(ipLocalNormalizada) && puerto == puertoLocal) {
+            LoggerCentral.debug(TAG, "Peer LOCAL identificado por IP:puerto: " + ip + ":" + puerto);
+            return true;
+        }
+        
+        // Criterio 4: Si la IP es localhost
+        if ((ipNormalizada.equals("127.0.0.1") || ipNormalizada.equals("localhost")) && puerto == puertoLocal) {
+            LoggerCentral.debug(TAG, "Peer LOCAL identificado por localhost");
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * ✅ Método de compatibilidad para llamadas con solo IP y puerto
+     */
+    private boolean esPeerLocal(String ip, int puerto) {
+        return esPeerLocal(null, ip, puerto);
+    }
+
+    /**
+     * ✅ MEJORADO: Normaliza direcciones IP
      */
     private String normalizarIP(String ip) {
-        if (ip == null) return "127.0.0.1";
+        if (ip == null || ip.isEmpty()) return "127.0.0.1";
 
         // Remover prefijo "/" si existe
         if (ip.startsWith("/")) {
             ip = ip.substring(1);
         }
+        
+        // Remover puerto si está incluido
+        if (ip.contains(":")) {
+            ip = ip.split(":")[0];
+        }
 
-        // Normalizar localhost
+        // Normalizar localhost y 0.0.0.0
         if (ip.equals("localhost") || ip.equals("0.0.0.0")) {
             return "127.0.0.1";
         }
@@ -105,6 +191,9 @@ public class GrafoP2P extends JPanel implements IObservador {
      * ✅ NUEVO: Suscribirse a cambios en los peers P2P
      */
     private void suscribirseAEventos() {
+        // ✅ NUEVO: Obtener ID del peer local desde el controlador
+        obtenerIdPeerLocalDesdeControlador();
+        
         // Suscribirse a eventos de conexión/desconexión
         controlador.suscribirseAEventosConexion();
 
@@ -121,9 +210,30 @@ public class GrafoP2P extends JPanel implements IObservador {
 
         LoggerCentral.info(TAG, "GrafoP2P suscrito a eventos de peers");
         LoggerCentral.info(TAG, "✓ Suscrito a ServicioTopologiaRed para LISTA_PEERS_ACTIVOS");
+        LoggerCentral.info(TAG, "✓ ID del peer local: " + idPeerLocal);
 
         // Cargar datos iniciales desde la base de datos
         cargarPeersDesdeBaseDatos();
+    }
+
+    /**
+     * ✅ NUEVO: Obtener el ID del peer local desde el controlador
+     */
+    private void obtenerIdPeerLocalDesdeControlador() {
+        if (controlador != null) {
+            try {
+                var servicioP2P = controlador.getServicioP2PInterno();
+                if (servicioP2P != null) {
+                    var idLocal = servicioP2P.obtenerIdPeerLocal();
+                    if (idLocal != null) {
+                        this.idPeerLocal = idLocal.toString();
+                        LoggerCentral.info(TAG, "ID del peer local obtenido: " + this.idPeerLocal);
+                    }
+                }
+            } catch (Exception e) {
+                LoggerCentral.warn(TAG, "No se pudo obtener ID del peer local: " + e.getMessage());
+            }
+        }
     }
 
     /**
@@ -158,18 +268,20 @@ public class GrafoP2P extends JPanel implements IObservador {
 
             // ✅ SOLO agregar PEERS (identificarlos correctamente)
             for (DTOPeerDetails peer : peers) {
+                String idPeer = peer.getId();
                 String ip = peer.getIp();
                 int puerto = peer.getPuertoServidor() > 0 ? peer.getPuertoServidor() : peer.getPuerto();
 
-                boolean esLocal = esPeerLocal(ip, puerto);
+                // ✅ MEJORADO: Usar el nuevo método con ID
+                boolean esLocal = esPeerLocal(idPeer, ip, puerto);
                 boolean esOnline = "ONLINE".equalsIgnoreCase(peer.getEstado());
 
-                LoggerCentral.debug(TAG, "📍 Peer: " + peer.getId() + " | " + ip + ":" + puerto +
+                LoggerCentral.debug(TAG, "📍 Peer: " + idPeer + " | " + ip + ":" + puerto +
                                    " | Local: " + esLocal + " | Online: " + esOnline);
 
                 // Solo agregar si no existe (evitar duplicados)
-                if (!nodos.containsKey(peer.getId())) {
-                    agregarPeer(peer.getId(), ip, puerto, esLocal, esOnline);
+                if (!nodos.containsKey(idPeer)) {
+                    agregarPeer(idPeer, ip, puerto, esLocal, esOnline);
                 }
             }
 
