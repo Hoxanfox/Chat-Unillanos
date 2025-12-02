@@ -4,7 +4,7 @@
 
 # IP pública o local de este nodo (donde otros peers lo buscarán)
 # Si es local usa 127.0.0.1, si es en red usa tu IP LAN (ej. 192.168.1.X)
-peer.host=192.168.1.9
+peer.host=25.2.20.107
 
 # Puerto donde este nodo escucha conexiones de otros PEERS (comunicación servidor-servidor)
 peer.puerto=9000
@@ -23,7 +23,7 @@ peer.puerto=9000
 # ==========================================
 
 # IP donde escuchará peticiones de los clientes (App de Escritorio/Móvil)
-cliente.host=192.168.1.9
+cliente.host=25.2.20.107
 
 # Puerto para los clientes (socket del chat usuario-servidor)
 cliente.puerto=8000
@@ -47,7 +47,7 @@ db.max.pool=10
 # OBSERVABILIDAD (OpenTelemetry)
 # ==========================================
 # IP de la maquina donde corre Grafana/Prometheus/Loki/Tempo
-otel.collector.host=25.2.20.107
+otel.collector.host=25.53.184.71
 
 # Puerto del OpenTelemetry Collector (OTLP HTTP)
 otel.collector.port=4318

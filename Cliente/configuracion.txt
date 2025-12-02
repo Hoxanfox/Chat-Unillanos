@@ -5,8 +5,7 @@ port=8000
 # OBSERVABILIDAD (OpenTelemetry)
 # ==========================================
 # IP de la maquina donde corre Grafana/Prometheus/Loki/Tempo
-otel.collector.host=25.2.20.107
-otel.collector.host=25.2.20.107
+otel.collector.host=25.53.184.71
 
 # Puerto del OpenTelemetry Collector (OTLP HTTP)
 otel.collector.port=4318

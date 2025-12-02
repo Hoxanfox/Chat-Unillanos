@@ -95,7 +95,7 @@ public class CoordinadorSincronizacion {
      * Configura los servicios de notificación.
      */
     public void configurarNotificaciones(ServicioNotificacionCambios notificador,
-                                         IObservador servicioNotificacionCliente) {
+            IObservador servicioNotificacionCliente) {
         this.notificador = notificador;
         this.servicioNotificacionCliente = servicioNotificacionCliente;
         LoggerCentral.info(TAG, VERDE + "✓ Servicios de notificación configurados" + RESET);
@@ -129,7 +129,7 @@ public class CoordinadorSincronizacion {
         long tiempoTranscurrido = tiempoActual - ultimaSincronizacion;
         if (tiempoTranscurrido < INTERVALO_MIN_MS) {
             LoggerCentral.warn(TAG, AMARILLO + "⚠ Esperando intervalo mínimo: " +
-                (INTERVALO_MIN_MS - tiempoTranscurrido) + "ms" + RESET);
+                    (INTERVALO_MIN_MS - tiempoTranscurrido) + "ms" + RESET);
             return;
         }
 
@@ -154,7 +154,7 @@ public class CoordinadorSincronizacion {
 
         LoggerCentral.info(TAG, AZUL + "=== INICIANDO SINCRONIZACIÓN ===" + RESET);
         LoggerCentral.info(TAG, String.format("Peers online: %d | Intento: %d/%d",
-            peersOnline.size(), contadorReintentos, MAX_REINTENTOS));
+                peersOnline.size(), contadorReintentos, MAX_REINTENTOS));
 
         new Thread(this::ejecutarSincronizacion).start();
     }
@@ -164,7 +164,7 @@ public class CoordinadorSincronizacion {
      */
     private void ejecutarSincronizacion() {
         try {
-            Thread.sleep(500); // Pequeña espera antes de empezar
+            // Thread.sleep(500); // REMOVED: Artificial delay removed for performance
 
             // Fase 1: Reconstruir árboles
             LoggerCentral.info(TAG, CYAN + "▶ FASE 1: Construyendo árboles Merkle" + RESET);
@@ -177,8 +177,8 @@ public class CoordinadorSincronizacion {
             LoggerCentral.info(TAG, VERDE + "📤 Enviando sync_check_all" + RESET);
             gestor.broadcast(jsonReq);
 
-            // Liberar lock después de un tiempo
-            liberarLockConRetraso(3000);
+            // Liberar lock rápidamente
+            liberarLockConRetraso(100);
 
         } catch (Exception e) {
             LoggerCentral.error(TAG, ROJO + "Error en sincronización: " + e.getMessage() + RESET);
@@ -216,7 +216,7 @@ public class CoordinadorSincronizacion {
 
         if (resultado.hayFaltantes()) {
             LoggerCentral.info(TAG, AMARILLO + String.format("⬇ Solicitadas %d entidades faltantes",
-                resultado.getCantidadFaltantes()) + RESET);
+                    resultado.getCantidadFaltantes()) + RESET);
             // ✅ NUEVO: Marcar que hubo cambios porque hay entidades faltantes
             huboCambiosEnEsteCiclo = true;
             // Las entidades se solicitaron en fase4, esperamos que lleguen
@@ -293,9 +293,8 @@ public class CoordinadorSincronizacion {
         if (notificador != null) {
             LoggerCentral.info(TAG, AZUL + "📢 Notificando cambios a clientes CS..." + RESET);
             notificador.notificarCambio(
-                ServicioNotificacionCambios.TipoEvento.ACTUALIZACION_ESTADO,
-                null
-            );
+                    ServicioNotificacionCambios.TipoEvento.ACTUALIZACION_ESTADO,
+                    null);
         }
     }
 
@@ -374,10 +373,27 @@ public class CoordinadorSincronizacion {
     }
 
     // Getters para las fases (útil para testing o acceso directo)
-    public Fase1ConstruccionArboles getFase1() { return fase1; }
-    public Fase2ComparacionHashes getFase2() { return fase2; }
-    public Fase3SolicitudIDs getFase3() { return fase3; }
-    public Fase4DeteccionFaltantes getFase4() { return fase4; }
-    public Fase5ComparacionContenido getFase5() { return fase5; }
-    public Fase6TransferenciaArchivos getFase6() { return fase6; }
+    public Fase1ConstruccionArboles getFase1() {
+        return fase1;
+    }
+
+    public Fase2ComparacionHashes getFase2() {
+        return fase2;
+    }
+
+    public Fase3SolicitudIDs getFase3() {
+        return fase3;
+    }
+
+    public Fase4DeteccionFaltantes getFase4() {
+        return fase4;
+    }
+
+    public Fase5ComparacionContenido getFase5() {
+        return fase5;
+    }
+
+    public Fase6TransferenciaArchivos getFase6() {
+        return fase6;
+    }
 }

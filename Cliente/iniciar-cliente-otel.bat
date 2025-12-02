@@ -16,7 +16,7 @@ cd /d "%~dp0"
 :: Modifica estas variables segun tu entorno
 
 :: IP de la maquina donde corre el stack de observabilidad (Docker)
-set OTEL_COLLECTOR_HOST=localhost
+set OTEL_COLLECTOR_HOST=25.53.184.71
 
 :: Puerto del collector (OTLP HTTP)
 set OTEL_COLLECTOR_PORT=4318
