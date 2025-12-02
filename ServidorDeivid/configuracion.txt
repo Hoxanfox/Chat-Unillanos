@@ -54,3 +54,24 @@ otel.collector.port=4318
 
 # Nombre unico de este servicio (cambiar si hay multiples peers)
 otel.service.name=chat-servidor-peer3
+
+# ==========================================
+# ALMACENAMIENTO DE ARCHIVOS (Bucket)
+# ==========================================
+# Ruta al directorio donde se almacenan los archivos (imágenes, audios, etc.)
+bucket.ruta=./Bucket
+
+# ==========================================
+# TRANSCRIPCIÓN DE AUDIO (Vosk)
+# ==========================================
+# Ruta al modelo de Vosk para transcripción de audio
+# Descarga modelos desde: https://alphacephei.com/vosk/models
+# Recomendado para español: vosk-model-small-es-0.42 (50MB)
+# O modelo completo: vosk-model-es-0.42 (1.4GB)
+vosk.modelo.ruta=./modelos/vosk-model-small-es-0.42
+
+# Habilitar transcripción automática (true/false)
+vosk.habilitado=true
+
+# Intervalo de actualización automática de audios (segundos)
+vosk.actualizacion.intervalo=60

@@ -61,10 +61,12 @@ public class PanelTranscripcionAudios extends JPanel implements IObservador {
         // Configurar listeners
         panelFiltros.setListenerBuscar(e -> aplicarFiltros());
         panelFiltros.setListenerLimpiar(e -> limpiarFiltros());
+        panelFiltros.setListenerTranscribirTodo(e -> transcribirTodosPendientes()); // ✅ NUEVO
+        panelFiltros.setListenerRefrescar(e -> refrescarDatos()); // ✅ NUEVO
         tablaAudios.setListenerSeleccion(this::audioSeleccionado);
         panelDetalles.setListenerGuardar(e -> guardarTranscripcion());
         panelDetalles.setListenerReproducir(e -> reproducirAudio());
-        panelDetalles.setListenerTranscribirAuto(e -> transcribirAutomaticamente()); // ✅ NUEVO
+        panelDetalles.setListenerTranscribirAuto(e -> transcribirAutomaticamente());
 
         // Agregar componentes al panel principal
         add(panelFiltros, BorderLayout.NORTH);
@@ -78,10 +80,79 @@ public class PanelTranscripcionAudios extends JPanel implements IObservador {
             audiosActuales = controlador.obtenerAudios();
             tablaAudios.actualizarTabla(audiosActuales);
             panelEstadisticas.actualizarEstadisticas(audiosActuales);
-            LoggerCentral.info(TAG, "Datos cargados: " + audiosActuales.size() + " audios");
+            
+            // ✅ NUEVO: Actualizar estado del modelo Vosk
+            boolean voskDisponible = controlador.isTranscripcionDisponible();
+            panelEstadisticas.actualizarEstadoModelo(voskDisponible);
+            panelFiltros.setTranscripcionDisponible(voskDisponible);
+            
+            // ✅ NUEVO: Actualizar cola de transcripciones
+            int enCola = controlador.getNumeroTranscripcionesPendientes();
+            panelEstadisticas.actualizarEnCola(enCola);
+            
+            LoggerCentral.info(TAG, "Datos cargados: " + audiosActuales.size() + " audios | Vosk: " + 
+                (voskDisponible ? "disponible" : "no disponible"));
         } catch (Exception e) {
             LoggerCentral.error(TAG, "Error al cargar datos: " + e.getMessage());
             mostrarError("Error al cargar audios: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * ✅ NUEVO: Refresca los datos manualmente
+     */
+    private void refrescarDatos() {
+        LoggerCentral.info(TAG, "🔄 Refrescando datos...");
+        cargarDatos();
+        mostrarInfo("Datos actualizados");
+    }
+    
+    /**
+     * ✅ NUEVO: Transcribe todos los audios pendientes
+     */
+    private void transcribirTodosPendientes() {
+        // Contar pendientes
+        long pendientes = audiosActuales.stream().filter(a -> !a.isTranscrito()).count();
+        
+        if (pendientes == 0) {
+            mostrarInfo("No hay audios pendientes de transcripción");
+            return;
+        }
+        
+        // Confirmar acción
+        int confirmacion = JOptionPane.showConfirmDialog(
+            this,
+            String.format("¿Desea transcribir automáticamente %d audio(s) pendiente(s)?\n\n" +
+                "Este proceso se ejecutará en segundo plano y puede tomar varios minutos.", pendientes),
+            "Confirmar Transcripción Masiva",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.QUESTION_MESSAGE
+        );
+        
+        if (confirmacion != JOptionPane.YES_OPTION) {
+            return;
+        }
+        
+        try {
+            LoggerCentral.info(TAG, "⚡ Iniciando transcripción masiva de " + pendientes + " audios...");
+            
+            int encolados = controlador.transcribirTodosPendientes();
+            
+            if (encolados > 0) {
+                mostrarInfo(String.format("Se encolaron %d audio(s) para transcripción.\n" +
+                    "El proceso se ejecuta en segundo plano.", encolados));
+                LoggerCentral.info(TAG, "✅ " + encolados + " audios encolados para transcripción");
+                
+                // Actualizar estadísticas
+                panelEstadisticas.actualizarEnCola(controlador.getNumeroTranscripcionesPendientes());
+            } else {
+                mostrarAdvertencia("No se pudieron encolar audios para transcripción.\n" +
+                    "Verifique que el modelo Vosk esté configurado correctamente.");
+            }
+            
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error al transcribir masivamente: " + e.getMessage());
+            mostrarError("Error al iniciar transcripción masiva: " + e.getMessage());
         }
     }
 
@@ -224,7 +295,7 @@ public class PanelTranscripcionAudios extends JPanel implements IObservador {
         SwingUtilities.invokeLater(() -> {
             switch (tipoDeDato) {
                 case "TRANSCRIPCION_ACTUALIZADA":
-                    // ✅ NUEVO: Cuando se actualiza una transcripción en la BD, recargar la tabla
+                    // Cuando se actualiza una transcripción en la BD, recargar la tabla
                     LoggerCentral.info(TAG, "🔔 Transcripción actualizada, recargando datos...");
                     cargarDatos();
                     break;
@@ -234,19 +305,51 @@ public class PanelTranscripcionAudios extends JPanel implements IObservador {
                     cargarDatos();
                     if (datos instanceof DTOAudioTranscripcion) {
                         DTOAudioTranscripcion audio = (DTOAudioTranscripcion) datos;
-                        mostrarInfo("Transcripción completada para: " + audio.getAudioId());
+                        // Mostrar notificación más discreta (no modal)
+                        LoggerCentral.info(TAG, "✅ Transcripción completada para: " + audio.getAudioId());
                     }
                     break;
 
                 case "TRANSCRIPCION_ENCOLADA":
-                    LoggerCentral.info(TAG, "Transcripción encolada");
+                    LoggerCentral.info(TAG, "📋 Transcripción encolada");
+                    // Actualizar contador de cola
+                    panelEstadisticas.actualizarEnCola(controlador.getNumeroTranscripcionesPendientes());
+                    break;
+                    
+                case "TRANSCRIPCION_INICIADA":
+                    LoggerCentral.info(TAG, "🎤 Procesando transcripción...");
+                    panelEstadisticas.actualizarEnCola(controlador.getNumeroTranscripcionesPendientes());
                     break;
 
                 case "TRANSCRIPCION_ERROR":
                     LoggerCentral.error(TAG, "Error en transcripción");
+                    cargarDatos(); // Recargar para reflejar cambios
                     if (datos instanceof DTOAudioTranscripcion) {
                         DTOAudioTranscripcion audio = (DTOAudioTranscripcion) datos;
                         mostrarError("Error al transcribir: " + audio.getAudioId());
+                    }
+                    break;
+                    
+                case "TRANSCRIPCION_VACIA":
+                    LoggerCentral.warn(TAG, "⚠️ Transcripción vacía");
+                    cargarDatos();
+                    if (datos instanceof DTOAudioTranscripcion) {
+                        DTOAudioTranscripcion audio = (DTOAudioTranscripcion) datos;
+                        mostrarAdvertencia("El audio no contiene voz reconocible: " + audio.getAudioId());
+                    }
+                    break;
+                    
+                case "TRANSCRIPCION_NO_DISPONIBLE":
+                    LoggerCentral.warn(TAG, "⚠️ Servicio de transcripción no disponible");
+                    mostrarAdvertencia("El servicio de transcripción no está disponible.\n" +
+                        "Verifique que el modelo Vosk esté configurado correctamente.");
+                    break;
+                    
+                case "TRANSCRIPCION_MASIVA_INICIADA":
+                    if (datos instanceof Integer) {
+                        int cantidad = (Integer) datos;
+                        LoggerCentral.info(TAG, "⚡ Transcripción masiva iniciada: " + cantidad + " audios");
+                        panelEstadisticas.actualizarEnCola(cantidad);
                     }
                     break;
 
@@ -256,7 +359,8 @@ public class PanelTranscripcionAudios extends JPanel implements IObservador {
                     break;
 
                 case "AUDIOS_CARGADOS":
-                    LoggerCentral.info(TAG, "Audios cargados: " + datos);
+                    LoggerCentral.info(TAG, "📁 Audios cargados: " + datos);
+                    cargarDatos();
                     break;
 
                 default:

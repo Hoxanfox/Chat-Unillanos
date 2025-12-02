@@ -1,9 +1,11 @@
 package servicio.transcripcion;
 
+import configuracion.Configuracion;
 import dto.transcripcion.DTOAudioTranscripcion;
 import gestorTranscripcion.FachadaTranscripcion;
 import logger.LoggerCentral;
 
+import java.io.File;
 import java.util.List;
 
 /**
@@ -36,11 +38,45 @@ public class ServicioTranscripcionNegocio {
         try {
             LoggerCentral.info(TAG, "🚀 Inicializando sistema de transcripción...");
 
-            // 1. Cargar audios existentes desde la BD
+            // Obtener configuración
+            Configuracion config = Configuracion.getInstance();
+            
+            // 1. Verificar si Vosk está habilitado
+            if (config.isVoskHabilitado()) {
+                String rutaModelo = config.getVoskModeloRuta();
+                LoggerCentral.info(TAG, "📂 Ruta del modelo Vosk configurada: " + rutaModelo);
+                
+                // Verificar si el modelo existe
+                File modeloDir = new File(rutaModelo);
+                if (modeloDir.exists() && modeloDir.isDirectory()) {
+                    LoggerCentral.info(TAG, "✓ Directorio del modelo encontrado");
+                    
+                    // Inicializar el modelo de Vosk
+                    boolean modeloCargado = fachadaTranscripcion.inicializarModeloTranscripcion(rutaModelo);
+                    
+                    if (modeloCargado) {
+                        LoggerCentral.info(TAG, "✅ Modelo Vosk cargado exitosamente");
+                    } else {
+                        LoggerCentral.warn(TAG, "⚠️ No se pudo cargar el modelo Vosk");
+                        LoggerCentral.warn(TAG, "   La transcripción automática no estará disponible");
+                    }
+                } else {
+                    LoggerCentral.warn(TAG, "⚠️ Modelo Vosk no encontrado en: " + rutaModelo);
+                    LoggerCentral.warn(TAG, "   Descarga el modelo desde: https://alphacephei.com/vosk/models");
+                    LoggerCentral.warn(TAG, "   Recomendado: vosk-model-small-es-0.42 (50MB)");
+                    LoggerCentral.warn(TAG, "   La transcripción automática no estará disponible");
+                }
+            } else {
+                LoggerCentral.info(TAG, "ℹ️ Transcripción Vosk deshabilitada en configuración");
+            }
+
+            // 2. Cargar audios existentes desde la BD
             fachadaTranscripcion.cargarAudiosDesdeBaseDatos();
 
-            // 2. Iniciar actualización automática cada 60 segundos
-            fachadaTranscripcion.iniciarActualizacionAutomatica(60);
+            // 3. Iniciar actualización automática
+            int intervalo = config.getVoskActualizacionIntervalo();
+            fachadaTranscripcion.iniciarActualizacionAutomatica(intervalo);
+            LoggerCentral.info(TAG, "✓ Actualización automática iniciada (cada " + intervalo + " segundos)");
 
             LoggerCentral.info(TAG, "✓ Sistema de transcripción inicializado correctamente");
         } catch (Exception e) {
@@ -179,6 +215,26 @@ public class ServicioTranscripcionNegocio {
      */
     public boolean isTranscripcionDisponible() {
         return fachadaTranscripcion.isTranscripcionDisponible();
+    }
+    
+    /**
+     * ✅ NUEVO: Obtiene el número de transcripciones en cola
+     */
+    public int getNumeroTranscripcionesPendientes() {
+        return fachadaTranscripcion.getNumeroTranscripcionesPendientes();
+    }
+    
+    /**
+     * ✅ NUEVO: Transcribe todos los audios pendientes
+     */
+    public int transcribirTodosPendientes() {
+        try {
+            LoggerCentral.info(TAG, "⚡ Iniciando transcripción masiva de audios pendientes...");
+            return fachadaTranscripcion.transcribirTodosPendientes();
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error en transcripción masiva: " + e.getMessage());
+            return 0;
+        }
     }
 
     /**

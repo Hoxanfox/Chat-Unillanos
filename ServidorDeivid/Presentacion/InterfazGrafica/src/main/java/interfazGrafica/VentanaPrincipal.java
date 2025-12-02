@@ -159,11 +159,8 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         controladorP2P = new ControladorP2P();
         controladorCS = new ControladorClienteServidor();
 
-        // Controlador de transcripción
+        // Controlador de transcripción (la inicialización del modelo Vosk se hace automáticamente)
         controladorTranscripcion = new ControladorTranscripcion();
-
-        // ✅ NUEVO: Inicializar modelo Vosk para transcripción automática
-        inicializarModeloVosk();
 
         // Construir arquitectura de capas para Usuarios
         construirArquitecturaUsuarios();
@@ -620,44 +617,6 @@ public class VentanaPrincipal extends JFrame implements IObservador {
 
             default:
                 LoggerCentral.debug(TAG, "Evento no manejado: " + tipoDeDato);
-        }
-    }
-
-    /**
-     * ✅ NUEVO: Inicializa el modelo Vosk para transcripción automática de audios
-     */
-    private void inicializarModeloVosk() {
-        try {
-            LoggerCentral.info(TAG, "🎤 Inicializando modelo Vosk para transcripción...");
-
-            // Ruta al modelo Vosk (en la raíz del proyecto)
-            String rutaModelo = "./modelos/vosk-model-es-0.42";
-
-            // Intentar con modelo español completo
-            gestorTranscripcion.FachadaTranscripcion fachada = gestorTranscripcion.FachadaTranscripcion.getInstance();
-            boolean modeloCargado = fachada.inicializarModeloTranscripcion(rutaModelo);
-
-            if (modeloCargado) {
-                LoggerCentral.info(TAG, "✅ Modelo Vosk cargado correctamente: " + rutaModelo);
-                LoggerCentral.info(TAG, "   → Transcripción automática DISPONIBLE");
-            } else {
-                // Intentar con modelo ligero
-                rutaModelo = "./modelos/vosk-model-small-es-0.42";
-                modeloCargado = fachada.inicializarModeloTranscripcion(rutaModelo);
-
-                if (modeloCargado) {
-                    LoggerCentral.info(TAG, "✅ Modelo Vosk ligero cargado: " + rutaModelo);
-                } else {
-                    LoggerCentral.warn(TAG, "⚠️ Modelo Vosk NO disponible");
-                    LoggerCentral.warn(TAG, "   → Descarga el modelo desde: https://alphacephei.com/vosk/models");
-                    LoggerCentral.warn(TAG, "   → Extrae en: ./modelos/vosk-model-es-0.42/");
-                    LoggerCentral.warn(TAG, "   → La transcripción automática NO estará disponible");
-                }
-            }
-
-        } catch (Exception e) {
-            LoggerCentral.error(TAG, "Error inicializando modelo Vosk: " + e.getMessage());
-            LoggerCentral.warn(TAG, "La transcripción automática NO estará disponible");
         }
     }
 

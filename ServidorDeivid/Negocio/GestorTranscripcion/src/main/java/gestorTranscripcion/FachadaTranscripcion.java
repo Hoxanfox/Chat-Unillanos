@@ -1,5 +1,6 @@
 package gestorTranscripcion;
 
+import configuracion.Configuracion;
 import dominio.clienteServidor.Archivo;
 import dominio.clienteServidor.Mensaje;
 import dominio.clienteServidor.Transcripcion;
@@ -13,6 +14,8 @@ import repositorio.clienteServidor.ArchivoRepositorio;
 import repositorio.clienteServidor.MensajeRepositorio;
 import repositorio.clienteServidor.TranscripcionRepositorio;
 
+import java.io.File;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -157,10 +160,85 @@ public class FachadaTranscripcion implements ISujeto, IObservador {
         // Propagar eventos a los observadores de la fachada
         notificarObservadores(tipo, datos);
 
-        // Actualizar estado interno si es necesario
+        // Actualizar estado interno y guardar en BD si es necesario
         if ("TRANSCRIPCION_COMPLETADA".equals(tipo) && datos instanceof DTOAudioTranscripcion) {
             DTOAudioTranscripcion audioActualizado = (DTOAudioTranscripcion) datos;
             actualizarAudioEnLista(audioActualizado);
+            
+            // ✅ NUEVO: Guardar la transcripción en la base de datos
+            guardarTranscripcionEnBD(audioActualizado);
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Guarda la transcripción completada en la base de datos
+     */
+    private void guardarTranscripcionEnBD(DTOAudioTranscripcion audio) {
+        try {
+            LoggerCentral.info(TAG, "💾 Guardando transcripción en BD para: " + audio.getAudioId());
+            
+            // Buscar el archivo correspondiente
+            Archivo archivo = archivoRepo.buscarPorFileId(audio.getAudioId());
+            if (archivo == null) {
+                LoggerCentral.error(TAG, "No se encontró el archivo para: " + audio.getAudioId());
+                return;
+            }
+            
+            UUID archivoId;
+            try {
+                archivoId = UUID.fromString(archivo.getId());
+            } catch (IllegalArgumentException e) {
+                LoggerCentral.error(TAG, "ID de archivo inválido: " + archivo.getId());
+                return;
+            }
+            
+            // Buscar si ya existe una transcripción para este archivo
+            Transcripcion existente = transcripcionRepo.buscarPorArchivoId(archivoId);
+            
+            if (existente != null) {
+                // Actualizar transcripción existente
+                existente.setTranscripcion(audio.getTranscripcion());
+                existente.setEstado(Transcripcion.EstadoTranscripcion.COMPLETADA);
+                existente.setFechaProcesamiento(Instant.now());
+                existente.setFechaActualizacion(Instant.now());
+                existente.setIdioma("es"); // Por defecto español
+                
+                boolean actualizado = transcripcionRepo.actualizar(existente);
+                if (actualizado) {
+                    LoggerCentral.info(TAG, "✅ Transcripción actualizada en BD: " + audio.getAudioId());
+                } else {
+                    LoggerCentral.error(TAG, "❌ Error al actualizar transcripción en BD");
+                }
+            } else {
+                // Crear nueva transcripción
+                Transcripcion nueva = new Transcripcion();
+                nueva.setId(UUID.randomUUID());
+                nueva.setArchivoId(archivoId);
+                nueva.setTranscripcion(audio.getTranscripcion());
+                nueva.setEstado(Transcripcion.EstadoTranscripcion.COMPLETADA);
+                nueva.setFechaCreacion(Instant.now());
+                nueva.setFechaProcesamiento(Instant.now());
+                nueva.setFechaActualizacion(Instant.now());
+                nueva.setIdioma("es");
+                
+                // Agregar mensaje_id si está disponible
+                if (audio.getMensajeId() != null) {
+                    try {
+                        nueva.setMensajeId(UUID.fromString(audio.getMensajeId()));
+                    } catch (IllegalArgumentException e) {
+                        LoggerCentral.debug(TAG, "Mensaje ID inválido, ignorando: " + audio.getMensajeId());
+                    }
+                }
+                
+                boolean guardado = transcripcionRepo.guardar(nueva);
+                if (guardado) {
+                    LoggerCentral.info(TAG, "✅ Transcripción guardada en BD: " + audio.getAudioId());
+                } else {
+                    LoggerCentral.error(TAG, "❌ Error al guardar transcripción en BD");
+                }
+            }
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error al guardar transcripción en BD: " + e.getMessage());
         }
     }
 
@@ -406,6 +484,9 @@ public class FachadaTranscripcion implements ISujeto, IObservador {
             LoggerCentral.info(TAG, "🔄 Cargando audios desde la base de datos...");
             audios.clear();
 
+            // Obtener la ruta del bucket desde configuración
+            String bucketPath = Configuracion.getInstance().getBucketRuta();
+            
             // 1. Obtener todos los mensajes de tipo AUDIO
             List<Mensaje> mensajesAudio = mensajeRepo.obtenerTodosParaSync().stream()
                     .filter(m -> m.getTipo() == Mensaje.Tipo.AUDIO)
@@ -435,11 +516,14 @@ public class FachadaTranscripcion implements ISujeto, IObservador {
                         LoggerCentral.debug(TAG, "Error buscando transcripción: " + e.getMessage());
                     }
 
+                    // Construir la ruta correcta al archivo
+                    String rutaArchivo = construirRutaArchivo(bucketPath, archivo);
+
                     // Crear DTO
                     DTOAudioTranscripcion dto = new DTOAudioTranscripcion();
                     dto.setAudioId(archivo.getFileId());
                     dto.setMensajeId(mensaje.getId() != null ? mensaje.getId().toString() : null);
-                    dto.setRutaArchivo("./Bucket/" + archivo.getFileId());
+                    dto.setRutaArchivo(rutaArchivo);
 
                     // Convertir Instant a LocalDateTime
                     if (mensaje.getFechaEnvio() != null) {
@@ -513,6 +597,46 @@ public class FachadaTranscripcion implements ISujeto, IObservador {
     public void limpiar() {
         audios.clear();
         LoggerCentral.info(TAG, "Audios limpiados");
+    }
+
+    /**
+     * Construye la ruta completa al archivo de audio, verificando que exista.
+     * Maneja diferentes formatos de fileId (con o sin carpeta).
+     */
+    private String construirRutaArchivo(String bucketPath, Archivo archivo) {
+        // El fileId puede ser "audio/nombre.wav" o solo "nombre.wav"
+        String fileId = archivo.getFileId();
+        String rutaRelativa = archivo.getRutaRelativa();
+        
+        // Intentar con la ruta relativa primero
+        if (rutaRelativa != null && !rutaRelativa.isEmpty()) {
+            File archivoConRutaRelativa = new File(bucketPath, rutaRelativa);
+            if (archivoConRutaRelativa.exists()) {
+                LoggerCentral.debug(TAG, "Archivo encontrado con ruta relativa: " + archivoConRutaRelativa.getPath());
+                return archivoConRutaRelativa.getAbsolutePath();
+            }
+        }
+        
+        // Intentar con fileId directamente
+        File archivoConFileId = new File(bucketPath, fileId);
+        if (archivoConFileId.exists()) {
+            LoggerCentral.debug(TAG, "Archivo encontrado con fileId: " + archivoConFileId.getPath());
+            return archivoConFileId.getAbsolutePath();
+        }
+        
+        // Si fileId no incluye "audio/", intentar agregarlo
+        if (!fileId.startsWith("audio/")) {
+            File archivoEnAudio = new File(bucketPath + "/audio", fileId);
+            if (archivoEnAudio.exists()) {
+                LoggerCentral.debug(TAG, "Archivo encontrado en carpeta audio: " + archivoEnAudio.getPath());
+                return archivoEnAudio.getAbsolutePath();
+            }
+        }
+        
+        // Última opción: usar ruta por defecto
+        String rutaDefault = new File(bucketPath, fileId).getAbsolutePath();
+        LoggerCentral.warn(TAG, "Archivo no encontrado, usando ruta por defecto: " + rutaDefault);
+        return rutaDefault;
     }
 
     /**

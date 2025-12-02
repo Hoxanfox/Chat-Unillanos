@@ -111,4 +111,40 @@ public class Configuracion {
     public int getDbMaxPool() {
         return Integer.parseInt(props.getProperty("db.max.pool", "10"));
     }
+
+    // --- Configuración para Almacenamiento (Bucket) ---
+
+    /**
+     * Obtiene la ruta al directorio Bucket donde se almacenan los archivos.
+     * @return Ruta al directorio Bucket (por defecto: ./Bucket)
+     */
+    public String getBucketRuta() {
+        return props.getProperty("bucket.ruta", "./Bucket");
+    }
+
+    // --- Configuración para Transcripción de Audio (Vosk) ---
+
+    /**
+     * Obtiene la ruta al modelo de Vosk para transcripción.
+     * @return Ruta al directorio del modelo (por defecto: ./modelos/vosk-model-small-es-0.42)
+     */
+    public String getVoskModeloRuta() {
+        return props.getProperty("vosk.modelo.ruta", "./modelos/vosk-model-small-es-0.42");
+    }
+
+    /**
+     * Verifica si la transcripción con Vosk está habilitada.
+     * @return true si está habilitada (por defecto: true)
+     */
+    public boolean isVoskHabilitado() {
+        return Boolean.parseBoolean(props.getProperty("vosk.habilitado", "true"));
+    }
+
+    /**
+     * Obtiene el intervalo de actualización automática de audios.
+     * @return Intervalo en segundos (por defecto: 60)
+     */
+    public int getVoskActualizacionIntervalo() {
+        return Integer.parseInt(props.getProperty("vosk.actualizacion.intervalo", "60"));
+    }
 }

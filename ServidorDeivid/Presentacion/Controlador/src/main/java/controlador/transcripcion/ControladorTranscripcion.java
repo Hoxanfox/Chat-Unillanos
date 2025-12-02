@@ -166,6 +166,43 @@ public class ControladorTranscripcion {
     public FachadaTranscripcion.EstadisticasTranscripcion obtenerEstadisticas() {
         return servicioTranscripcion.obtenerEstadisticas();
     }
+    
+    /**
+     * ✅ NUEVO: Verifica si el servicio de transcripción está disponible (modelo Vosk cargado)
+     */
+    public boolean isTranscripcionDisponible() {
+        try {
+            return servicioTranscripcion.isTranscripcionDisponible();
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error al verificar disponibilidad: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * ✅ NUEVO: Obtiene el número de transcripciones en cola
+     */
+    public int getNumeroTranscripcionesPendientes() {
+        try {
+            return servicioTranscripcion.getNumeroTranscripcionesPendientes();
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error al obtener pendientes: " + e.getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * ✅ NUEVO: Transcribe todos los audios pendientes
+     */
+    public int transcribirTodosPendientes() {
+        try {
+            LoggerCentral.info(TAG, "⚡ Iniciando transcripción de todos los audios pendientes...");
+            return servicioTranscripcion.transcribirTodosPendientes();
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error en transcripción masiva: " + e.getMessage());
+            return 0;
+        }
+    }
 
     /**
      * Obtiene un audio por su ID

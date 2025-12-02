@@ -18,6 +18,14 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
     <dependencies>
+        <!-- Configuracion dependency -->
+        <dependency>
+            <groupId>org.example</groupId>
+            <artifactId>Configuracion</artifactId>
+            <version>1.0-SNAPSHOT</version>
+            <scope>compile</scope>
+        </dependency>
+
         <!-- Observador dependency (single entry) -->
         <dependency>
             <groupId>org.example</groupId>

@@ -1,5 +1,6 @@
 package gestorTranscripcion.servicios;
 
+import configuracion.Configuracion;
 import dominio.clienteServidor.Archivo;
 import dominio.clienteServidor.Transcripcion;
 import dominio.clienteServidor.Transcripcion.EstadoTranscripcion;
@@ -36,10 +37,11 @@ public class ServicioActualizacionAudios {
         this.transcripcionRepo = new TranscripcionRepositorio();
         this.scheduler = Executors.newScheduledThreadPool(1);
 
-        // Ruta al Bucket (ajustar según configuración)
-        this.rutaBucket = System.getProperty("bucket.path", "./Bucket");
+        // Ruta al Bucket desde configuración
+        this.rutaBucket = Configuracion.getInstance().getBucketRuta();
 
         LoggerCentral.info(TAG, "Servicio de actualización de audios inicializado");
+        LoggerCentral.info(TAG, "Ruta del Bucket: " + this.rutaBucket);
     }
 
     public static synchronized ServicioActualizacionAudios getInstance() {
