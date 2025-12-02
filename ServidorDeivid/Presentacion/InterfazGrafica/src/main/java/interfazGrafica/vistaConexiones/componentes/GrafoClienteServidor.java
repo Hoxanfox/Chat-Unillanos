@@ -151,8 +151,8 @@ public class GrafoClienteServidor extends JPanel implements IObservador {
     private String obtenerIPRealServidor() {
         try {
             Configuracion config = Configuracion.getInstance();
-            String ip = config.getServidorHost();
-            int puerto = config.getServidorPuerto();
+            String ip = config.getClienteHost();  // Cliente-Servidor usa estos métodos
+            int puerto = config.getClientePuerto();
             
             // Si la IP es genérica, detectar la real
             if (ip == null || ip.equals("0.0.0.0") || ip.equals("127.0.0.1") || ip.equals("localhost")) {

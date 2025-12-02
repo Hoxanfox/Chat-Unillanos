@@ -224,7 +224,7 @@ public class GrafoP2P extends JPanel implements IObservador {
             try {
                 var servicioP2P = controlador.getServicioP2PInterno();
                 if (servicioP2P != null) {
-                    var idLocal = servicioP2P.obtenerIdPeerLocal();
+                    var idLocal = servicioP2P.getIdPeerLocal();
                     if (idLocal != null) {
                         this.idPeerLocal = idLocal.toString();
                         LoggerCentral.info(TAG, "ID del peer local obtenido: " + this.idPeerLocal);
