@@ -3,16 +3,20 @@ package interfazGrafica;
 import controlador.p2p.ControladorP2P;
 import controlador.clienteServidor.ControladorClienteServidor;
 import controlador.usuarios.ControladorUsuarios;
+import controlador.canales.ControladorCanales;
 import controlador.logs.ControladorLogs;
 import controlador.logs.ControladorLogsApi;
 import controlador.transcripcion.ControladorTranscripcion;
 import gestorUsuarios.GestorUsuarios;
+import gestorCanales.GestorCanales;
 import gestorLogs.GestorLogs;
 import gestorP2P.servicios.ServicioSincronizacionDatos;
 import gestorLogs.api.LogsApiConfig;
 import servicio.usuario.ServicioGestionUsuarios;
+import servicio.canales.ServicioGestionCanales;
 import servicio.logs.ServicioLogs;
 import interfazGrafica.vistaUsuarios.PanelUsuarios;
+import interfazGrafica.vistaCanales.PanelCanales;
 import interfazGrafica.vistaConexiones.PanelConexiones;
 import interfazGrafica.vistaLogs.PanelLogs;
 import interfazGrafica.vistaTranscripcion.PanelTranscripcionAudios;
@@ -39,6 +43,7 @@ public class VentanaPrincipal extends JFrame implements IObservador {
     private JTabbedPane tabbedPane;
     private PanelPrincipal panelPrincipal;
     private PanelUsuarios panelUsuarios;
+    private PanelCanales panelCanales;
     private PanelConexiones panelConexiones;
     private PanelLogs panelLogs;
     private PanelTranscripcionAudios panelTranscripcion;
@@ -46,6 +51,7 @@ public class VentanaPrincipal extends JFrame implements IObservador {
     private ControladorP2P controladorP2P;
     private ControladorClienteServidor controladorCS;
     private ControladorUsuarios controladorUsuarios;
+    private ControladorCanales controladorCanales;
     private ControladorLogs controladorLogs;
     private ControladorLogsApi controladorLogsApi;
     private ControladorTranscripcion controladorTranscripcion;
@@ -162,6 +168,9 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         // Construir arquitectura de capas para Usuarios
         construirArquitecturaUsuarios();
 
+        // Construir arquitectura de capas para Canales
+        construirArquitecturaCanales();
+
         // Construir arquitectura de capas para Logs
         construirArquitecturaLogs();
 
@@ -276,12 +285,34 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                 "  Con sincronización P2P integrada (usando el ServicioSincronizacionDatos de la red P2P)");
     }
 
+    /**
+     * Construye la arquitectura de capas para la gestión de canales:
+     * Controlador → Servicio → Gestor → Repositorio
+     */
+    private void construirArquitecturaCanales() {
+        LoggerCentral.info(TAG, "🔧 Construyendo arquitectura de gestión de canales...");
+
+        // 1. Capa de Negocio: GestorCanales
+        GestorCanales gestorCanales = new GestorCanales();
+
+        // 2. Capa de Servicio: ServicioGestionCanales
+        ServicioGestionCanales servicioCanales = new ServicioGestionCanales(gestorCanales);
+
+        // 3. Capa de Presentación: ControladorCanales
+        controladorCanales = new ControladorCanales(servicioCanales);
+
+        LoggerCentral.info(TAG, "✓ Arquitectura de canales construida:");
+        LoggerCentral.info(TAG,
+                "  Interfaz → ControladorCanales → ServicioGestionCanales → GestorCanales → Repositorio");
+    }
+
     private void inicializarComponentes() {
         tabbedPane = new JTabbedPane();
         tabbedPane.setFont(new Font("Arial", Font.PLAIN, 12));
 
         panelPrincipal = new PanelPrincipal();
         panelUsuarios = new PanelUsuarios(controladorUsuarios);
+        panelCanales = new PanelCanales(controladorCanales);
         panelConexiones = new PanelConexiones(controladorP2P, controladorCS);
         panelLogs = new PanelLogs();
         panelTranscripcion = new PanelTranscripcionAudios(controladorTranscripcion);
@@ -294,7 +325,7 @@ public class VentanaPrincipal extends JFrame implements IObservador {
 
         tabbedPane.addTab("Dashboard", panelPrincipal);
         tabbedPane.addTab("Users", panelUsuarios);
-        tabbedPane.addTab("Channels", crearPanelTemporal("CHANNELS"));
+        tabbedPane.addTab("Channels", panelCanales);
         tabbedPane.addTab("Connections", panelConexiones);
         tabbedPane.addTab("Logs", panelLogs);
         tabbedPane.addTab("Transcription", panelTranscripcion);
@@ -329,8 +360,12 @@ public class VentanaPrincipal extends JFrame implements IObservador {
                 LoggerCentral.info(TAG, "✅ PanelUsuarios suscrito a eventos de ServicioSincronizacionDatos P2P");
                 LoggerCentral.info(TAG,
                         "   → El panel se actualizará automáticamente cuando termine la sincronización P2P");
+
+                // ✅ NUEVO: 3. Suscribir PanelCanales al ServicioSincronizacionDatos
+                servicioSincronizacion.registrarObservador(panelCanales);
+                LoggerCentral.info(TAG, "✅ PanelCanales suscrito a eventos de ServicioSincronizacionDatos P2P");
             } else {
-                LoggerCentral.warn(TAG, "⚠️ ServicioSincronizacionDatos no disponible para suscribir PanelUsuarios");
+                LoggerCentral.warn(TAG, "⚠️ ServicioSincronizacionDatos no disponible para suscribir paneles");
             }
 
         } catch (Exception e) {
