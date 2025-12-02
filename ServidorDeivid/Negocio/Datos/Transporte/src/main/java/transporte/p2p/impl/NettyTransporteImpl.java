@@ -30,6 +30,7 @@ public class NettyTransporteImpl implements ITransporteTcp {
     private IMensajeListener listener;
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
+    private EventLoopGroup clientGroup; // Grupo compartido para conexiones cliente
     private final Map<String, Channel> canalesActivos = new ConcurrentHashMap<>();
 
     public NettyTransporteImpl(IMensajeListener listener) {
@@ -93,9 +94,13 @@ public class NettyTransporteImpl implements ITransporteTcp {
         String key = host + ":" + puerto;
         if (canalesActivos.containsKey(key) && canalesActivos.get(key).isActive()) return;
 
-        EventLoopGroup group = new NioEventLoopGroup();
+        // Usar grupo compartido para evitar crear un EventLoopGroup por cada conexión
+        if (clientGroup == null || clientGroup.isShutdown()) {
+            clientGroup = new NioEventLoopGroup();
+        }
+
         Bootstrap b = new Bootstrap();
-        b.group(group)
+        b.group(clientGroup)
                 .channel(NioSocketChannel.class)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
@@ -109,7 +114,7 @@ public class NettyTransporteImpl implements ITransporteTcp {
                 System.out.println(TAG + "Conectado a " + key);
                 canalesActivos.put(key, f.channel());
             } else {
-                group.shutdownGracefully();
+                System.err.println(TAG + ROJO + "Error conectando a " + key + ": " + f.cause().getMessage() + RESET);
             }
         });
     }
@@ -146,9 +151,23 @@ public class NettyTransporteImpl implements ITransporteTcp {
 
     @Override
     public void detener() {
-        if (workerGroup != null) workerGroup.shutdownGracefully();
-        if (bossGroup != null) bossGroup.shutdownGracefully();
+        System.out.println(TAG + "Deteniendo transporte Netty...");
+        
+        // Cerrar todos los canales activos primero
         canalesActivos.values().forEach(Channel::close);
         canalesActivos.clear();
+        
+        // Cerrar grupos de eventos
+        if (workerGroup != null && !workerGroup.isShutdown()) {
+            workerGroup.shutdownGracefully();
+        }
+        if (bossGroup != null && !bossGroup.isShutdown()) {
+            bossGroup.shutdownGracefully();
+        }
+        if (clientGroup != null && !clientGroup.isShutdown()) {
+            clientGroup.shutdownGracefully();
+        }
+        
+        System.out.println(TAG + "Transporte Netty detenido");
     }
 }

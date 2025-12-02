@@ -72,7 +72,7 @@ if not exist "otel\opentelemetry-javaagent.jar" (
 :: =============================================================================
 :: VERIFICAR/COMPILAR JAR
 :: =============================================================================
-set JAR_PATH=target\Cliente-1.0-SNAPSHOT-jar-with-dependencies.jar
+set JAR_PATH=Presentacion\Main\target\Main-1.0-SNAPSHOT-jar-with-dependencies.jar
 
 if not exist "%JAR_PATH%" (
     echo [1/2] JAR no encontrado. Compilando el cliente...
@@ -131,6 +131,6 @@ java -javaagent:..\..\otel\opentelemetry-javaagent.jar ^
      -Dotel.resource.attributes=service.namespace=chat-unillanos,deployment.environment=development ^
      -Dotel.instrumentation.jdbc.enabled=true ^
      -Dotel.instrumentation.java-util-logging.enabled=true ^
-     -jar ..\..\target\Cliente-1.0-SNAPSHOT-jar-with-dependencies.jar
+     -jar target\Main-1.0-SNAPSHOT-jar-with-dependencies.jar
 
 pause

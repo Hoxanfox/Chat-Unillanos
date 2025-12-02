@@ -22,6 +22,8 @@ import observador.IObservador;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 /**
  * Ventana principal - SOLO conoce controladores
@@ -67,9 +69,17 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         this.setTitle("CHAT SERVER ADMINISTRATION");
         this.setSize(900, 600);
         this.setMinimumSize(new Dimension(800, 500));
-        this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        this.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         this.setLocationRelativeTo(null);
         this.setLayout(new BorderLayout());
+
+        // Manejar cierre de ventana para liberar recursos correctamente
+        this.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                cerrarRecursosYSalir();
+            }
+        });
 
         // Barra superior con estado de sincronización
         JPanel topBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -81,6 +91,59 @@ public class VentanaPrincipal extends JFrame implements IObservador {
         topBar.add(lblEstadoSyncP2P);
 
         this.add(topBar, BorderLayout.NORTH);
+    }
+
+    /**
+     * Cierra todos los recursos (conexiones, hilos, pools) antes de cerrar la aplicación.
+     * Esto previene memory leaks y threads huérfanos.
+     */
+    private void cerrarRecursosYSalir() {
+        LoggerCentral.info(TAG, "═══════════════════════════════════════════");
+        LoggerCentral.info(TAG, "    CERRANDO RECURSOS DEL SERVIDOR...");
+        LoggerCentral.info(TAG, "═══════════════════════════════════════════");
+
+        try {
+            // 1. Detener API REST de Logs
+            if (controladorLogsApi != null) {
+                LoggerCentral.info(TAG, "Deteniendo API REST de Logs...");
+                controladorLogsApi.detenerApiRest();
+            }
+
+            // 2. Detener servicio de transcripción
+            if (controladorTranscripcion != null) {
+                LoggerCentral.info(TAG, "Deteniendo servicio de transcripción...");
+                controladorTranscripcion.detenerServicio();
+            }
+
+            // 3. Detener servidor Cliente-Servidor
+            if (controladorCS != null) {
+                LoggerCentral.info(TAG, "Deteniendo servidor Cliente-Servidor...");
+                controladorCS.detenerServidor();
+            }
+
+            // 4. Detener red P2P
+            if (controladorP2P != null) {
+                LoggerCentral.info(TAG, "Deteniendo red P2P...");
+                controladorP2P.detenerRed();
+            }
+
+            // 5. Cerrar pool de conexiones MySQL
+            LoggerCentral.info(TAG, "Cerrando pool de conexiones MySQL...");
+            repositorio.comunicacion.MySQLManager.getInstance().close();
+
+            LoggerCentral.info(TAG, "✓ Todos los recursos cerrados correctamente");
+
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error cerrando recursos: " + e.getMessage());
+        }
+
+        LoggerCentral.info(TAG, "═══════════════════════════════════════════");
+        LoggerCentral.info(TAG, "    SERVIDOR DETENIDO - SALIENDO...");
+        LoggerCentral.info(TAG, "═══════════════════════════════════════════");
+
+        // Cerrar la aplicación
+        this.dispose();
+        System.exit(0);
     }
 
     private void inicializarControladores() {

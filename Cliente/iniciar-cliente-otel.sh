@@ -72,7 +72,7 @@ fi
 # =============================================================================
 # VERIFICAR/COMPILAR JAR
 # =============================================================================
-JAR_PATH="target/Cliente-1.0-SNAPSHOT-jar-with-dependencies.jar"
+JAR_PATH="Presentacion/Main/target/Main-1.0-SNAPSHOT-jar-with-dependencies.jar"
 
 if [ ! -f "$JAR_PATH" ]; then
     echo "[1/2] JAR no encontrado. Compilando el cliente..."
@@ -127,5 +127,5 @@ java -javaagent:../../otel/opentelemetry-javaagent.jar \
      -Dotel.resource.attributes=service.namespace=chat-unillanos,deployment.environment=development \
      -Dotel.instrumentation.jdbc.enabled=true \
      -Dotel.instrumentation.java-util-logging.enabled=true \
-     -jar ../../target/Cliente-1.0-SNAPSHOT-jar-with-dependencies.jar
+     -jar target/Main-1.0-SNAPSHOT-jar-with-dependencies.jar
 

@@ -179,4 +179,17 @@ public class ControladorTranscripcion {
             return null;
         }
     }
+
+    /**
+     * Detiene el servicio de transcripción y libera recursos.
+     */
+    public void detenerServicio() {
+        try {
+            LoggerCentral.info(TAG, "Deteniendo servicio de transcripción...");
+            servicioTranscripcion.detener();
+            LoggerCentral.info(TAG, "✓ Servicio de transcripción detenido");
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error al detener servicio: " + e.getMessage());
+        }
+    }
 }
