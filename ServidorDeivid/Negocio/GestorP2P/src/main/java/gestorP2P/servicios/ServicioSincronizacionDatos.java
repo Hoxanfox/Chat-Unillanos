@@ -10,7 +10,6 @@ import dominio.merkletree.IMerkleEntity;
 import dto.comunicacion.DTOResponse;
 import gestorP2P.interfaces.IServicioP2P;
 import gestorP2P.servicios.sincronizacion.CoordinadorSincronizacion;
-import gestorP2P.servicios.sincronizacion.Fase1ConstruccionArboles;
 import gestorP2P.utils.GsonUtil;
 import logger.LoggerCentral;
 import observador.IObservador;
@@ -111,8 +110,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
         // Crear coordinador
         this.coordinador = new CoordinadorSincronizacion(gestor, gson);
 
-        // ✅ NUEVO: Configurar este servicio como padre para que el coordinador pueda
-        // notificar a TODOS los observadores
+        // ✅ NUEVO: Configurar este servicio como padre para que el coordinador pueda notificar a TODOS los observadores
         coordinador.setServicioPadre(this);
 
         // Configurar servicios si ya están disponibles
@@ -307,8 +305,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
             return;
         }
         LoggerCentral.warn(TAG, "Forzando sincronización manual...");
-        // ✅ Usar siempre el flujo con notificación para que la UI reciba
-        // SINCRONIZACION_P2P_INICIADA
+        // ✅ Usar siempre el flujo con notificación para que la UI reciba SINCRONIZACION_P2P_INICIADA
         iniciarSincronizacionConNotificacion();
     }
 
@@ -339,64 +336,53 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
 
     @Override
     public void actualizar(String tipo, Object datos) {
-        // ✅ EVENTO 1: Nuevo peer conectado → Iniciar sincronización (Cold Sync)
+        // ✅ EVENTO 1: Nuevo peer conectado → Iniciar sincronización completa (Cold Sync)
         if ("PEER_CONECTADO".equals(tipo)) {
             LoggerCentral.info(TAG, VERDE + "=== Peer conectado: " + datos + " ===" + RESET);
             if (coordinador != null) {
-                // ✅ OPTIMIZADO: Usar árboles en memoria, no reconstruir
+                // ✅ Usar flujo con notificación para que la UI vea el inicio
                 iniciarSincronizacionConNotificacion();
             }
             return;
         }
 
-        // ✅ EVENTO 2: Usuario creado/actualizado → Reconstruir SOLO usuarios
-        if ("USUARIO_CREADO".equals(tipo) || "USUARIO_ACTUALIZADO".equals(tipo)) {
-            LoggerCentral.info(TAG, AZUL + "👤 Usuario modificado. Activando sincronización..." + RESET);
+        // ✅ EVENTO 2: Usuario creado → Reconstruir árboles y sincronizar (Hot Sync)
+        if ("USUARIO_CREADO".equals(tipo)) {
+            LoggerCentral.info(TAG, AZUL + "👤 Usuario creado. Activando sincronización..." + RESET);
             if (coordinador != null) {
                 coordinador.marcarCambios();
-                // ✅ OPTIMIZADO: Solo reconstruir árbol de usuarios
-                coordinador.reconstruirArbol(Fase1ConstruccionArboles.TIPO_USUARIO);
+                coordinador.reconstruirArboles();
                 iniciarSincronizacionConNotificacion();
             }
             return;
         }
 
-        // ✅ EVENTO 3: Nuevo mensaje → Reconstruir SOLO mensajes
-        if ("NUEVO_MENSAJE".equals(tipo)) {
-            LoggerCentral.info(TAG, CYAN + "📨 Nuevo mensaje. Sincronizando..." + RESET);
+        // ✅ EVENTO 3: Usuario actualizado → Reconstruir árboles y sincronizar (Hot Sync)
+        if ("USUARIO_ACTUALIZADO".equals(tipo)) {
+            LoggerCentral.info(TAG, AZUL + "👤 Usuario actualizado. Activando sincronización..." + RESET);
             if (coordinador != null) {
                 coordinador.marcarCambios();
-                coordinador.reconstruirArbol(Fase1ConstruccionArboles.TIPO_MENSAJE);
+                coordinador.reconstruirArboles();
                 iniciarSincronizacionConNotificacion();
             }
             return;
         }
 
-        // ✅ EVENTO 4: Nuevo canal → Reconstruir SOLO canales
-        if ("NUEVO_CANAL".equals(tipo)) {
-            LoggerCentral.info(TAG, CYAN + "📢 Nuevo canal. Sincronizando..." + RESET);
+        // ✅ EVENTO 4: Cambio en base de datos genérico → Reconstruir árboles
+        if ("BD_CAMBIO".equals(tipo) || "NUEVO_MENSAJE".equals(tipo) || "NUEVO_CANAL".equals(tipo)) {
+            LoggerCentral.info(TAG, CYAN + "💾 Cambio detectado: " + tipo + ". Reconstruyendo árboles..." + RESET);
             if (coordinador != null) {
                 coordinador.marcarCambios();
-                coordinador.reconstruirArbol(Fase1ConstruccionArboles.TIPO_CANAL);
+                coordinador.reconstruirArboles();
+                // Opcional: si quieres que estos cambios también disparen sync inmediata con indicador:
                 iniciarSincronizacionConNotificacion();
             }
             return;
         }
 
-        // ✅ EVENTO 5: Cambio en invitación → Reconstruir SOLO invitaciones
+        // ✅ EVENTO 5: Cambio en invitación de canal
         if ("CAMBIO_INVITACION_CANAL".equals(tipo)) {
-            LoggerCentral.info(TAG, AZUL + "✉️ Cambio en invitación. Sincronizando..." + RESET);
-            if (coordinador != null) {
-                coordinador.marcarCambios();
-                coordinador.reconstruirArbol(Fase1ConstruccionArboles.TIPO_CANAL_INVITACION);
-                iniciarSincronizacionConNotificacion();
-            }
-            return;
-        }
-
-        // ✅ EVENTO 6: Cambio genérico de BD → Reconstrucción completa (Fallback)
-        if ("BD_CAMBIO".equals(tipo)) {
-            LoggerCentral.info(TAG, CYAN + "💾 Cambio genérico en BD. Reconstruyendo todo..." + RESET);
+            LoggerCentral.info(TAG, AZUL + "✉️ Cambio en invitación de canal. Activando sincronización..." + RESET);
             if (coordinador != null) {
                 coordinador.marcarCambios();
                 coordinador.reconstruirArboles();
@@ -445,8 +431,7 @@ public class ServicioSincronizacionDatos implements IServicioP2P, IObservador, I
     }
 
     /**
-     * ✅ NUEVO: Expone el ServicioNotificacionCambios para inyección en servicios
-     * CS.
+     * ✅ NUEVO: Expone el ServicioNotificacionCambios para inyección en servicios CS.
      * Esto permite que servicios como ServicioInvitarMiembro activen sincronización
      * automática después de persistir datos.
      */
