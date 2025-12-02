@@ -119,7 +119,10 @@ public class PeerRepositorio implements ISujeto {
                     String socketInfo = rs.getString("socket_info");
                     String estadoStr = rs.getString("estado");
                     Estado estado = Estado.OFFLINE;
-                    try { if (estadoStr != null) estado = Estado.valueOf(estadoStr); } catch (Exception ignored) {}
+                    if (estadoStr != null) {
+                        try { estado = Estado.valueOf(estadoStr); } 
+                        catch (IllegalArgumentException e) { LoggerCentral.debug(TAG, "Estado invalido: " + estadoStr); }
+                    }
                     Timestamp ts = rs.getTimestamp("fecha_creacion");
                     Instant fecha = ts != null ? ts.toInstant() : Instant.now();
 
@@ -130,7 +133,6 @@ public class PeerRepositorio implements ISujeto {
             }
         } catch (SQLException e) {
             LoggerCentral.error(TAG, "Error obtenerPorId: " + e.getMessage());
-            e.printStackTrace();
         }
 
         LoggerCentral.debug(TAG, "Peer no encontrado por ID: " + id);
@@ -153,11 +155,18 @@ public class PeerRepositorio implements ISujeto {
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     UUID id = null;
-                    try { id = UUID.fromString(rs.getString("id")); } catch (Exception ignored) {}
+                    String idStr = rs.getString("id");
+                    if (idStr != null) {
+                        try { id = UUID.fromString(idStr); } 
+                        catch (IllegalArgumentException e) { LoggerCentral.debug(TAG, "ID de peer invalido: " + idStr); }
+                    }
                     String ip = rs.getString("ip");
                     String estadoStr = rs.getString("estado");
                     Estado estado = Estado.OFFLINE;
-                    try { if (estadoStr != null) estado = Estado.valueOf(estadoStr); } catch (Exception ignored) {}
+                    if (estadoStr != null) {
+                        try { estado = Estado.valueOf(estadoStr); } 
+                        catch (IllegalArgumentException e) { LoggerCentral.debug(TAG, "Estado invalido: " + estadoStr); }
+                    }
                     Timestamp ts = rs.getTimestamp("fecha_creacion");
                     Instant fecha = ts != null ? ts.toInstant() : Instant.now();
 
@@ -220,7 +229,11 @@ public class PeerRepositorio implements ISujeto {
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 UUID id = null;
-                try { id = UUID.fromString(rs.getString("id")); } catch (Exception ignored) {}
+                String idStr = rs.getString("id");
+                if (idStr != null) {
+                    try { id = UUID.fromString(idStr); } 
+                    catch (IllegalArgumentException e) { /* ID invalido, se ignora */ }
+                }
                 String ip = rs.getString("ip");
                 String socketInfo = rs.getString("socket_info");
                 int puerto = -1;
@@ -228,11 +241,14 @@ public class PeerRepositorio implements ISujeto {
                     try {
                         String[] parts = socketInfo.split(":");
                         puerto = Integer.parseInt(parts[1]);
-                    } catch (Exception ignored) {}
+                    } catch (NumberFormatException e) { /* Puerto invalido, se usa -1 */ }
                 }
                 String estadoStr = rs.getString("estado");
                 Estado estado = Estado.OFFLINE;
-                try { if (estadoStr != null) estado = Estado.valueOf(estadoStr); } catch (Exception ignored) {}
+                if (estadoStr != null) {
+                    try { estado = Estado.valueOf(estadoStr); } 
+                    catch (IllegalArgumentException e) { /* Estado invalido, se usa OFFLINE */ }
+                }
                 Timestamp ts = rs.getTimestamp("fecha_creacion");
                 Instant fecha = ts != null ? ts.toInstant() : Instant.now();
                 lista.add(new PeerInfo(id, ip, puerto, estado, fecha));
@@ -255,7 +271,11 @@ public class PeerRepositorio implements ISujeto {
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 UUID id = null;
-                try { id = UUID.fromString(rs.getString("id")); } catch (Exception ignored) {}
+                String idStr = rs.getString("id");
+                if (idStr != null) {
+                    try { id = UUID.fromString(idStr); } 
+                    catch (IllegalArgumentException e) { /* ID invalido, se ignora */ }
+                }
                 String ip = rs.getString("ip");
                 String socketInfo = rs.getString("socket_info");
                 int puerto = -1;
@@ -263,7 +283,7 @@ public class PeerRepositorio implements ISujeto {
                     try {
                         String[] parts = socketInfo.split(":");
                         puerto = Integer.parseInt(parts[1]);
-                    } catch (Exception ignored) {}
+                    } catch (NumberFormatException e) { /* Puerto invalido, se usa -1 */ }
                 }
                 String estadoStr = rs.getString("estado");
                 Estado estado = Estado.ONLINE; // Ya sabemos que es ONLINE por el WHERE

@@ -23,7 +23,9 @@ public class CanalMiembroRepositorio {
                         UUID.fromString(rs.getString("usuario_id"))
                 ));
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { 
+            System.err.println("[RepoMiembro] Error obteniendo miembros para sync: " + e.getMessage()); 
+        }
         return lista;
     }
 

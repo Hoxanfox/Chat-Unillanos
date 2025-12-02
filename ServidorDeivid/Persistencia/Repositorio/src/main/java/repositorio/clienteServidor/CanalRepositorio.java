@@ -32,13 +32,21 @@ public class CanalRepositorio {
                 creador.setId(UUID.fromString(rs.getString("creador_id")));
                 c.setCreador(creador);
 
-                try { c.setTipo(Canal.Tipo.valueOf(rs.getString("tipo"))); } catch (Exception e) {}
+                String tipoStr = rs.getString("tipo");
+                if (tipoStr != null) {
+                    try { c.setTipo(Canal.Tipo.valueOf(tipoStr)); } 
+                    catch (IllegalArgumentException e) { 
+                        System.err.println("[RepoCanal] Tipo de canal invalido: " + tipoStr); 
+                    }
+                }
                 // Validar timestamp para evitar NullPointerException
                 Timestamp fechaCreacion = rs.getTimestamp("fecha_creacion");
                 c.setFechaCreacion(fechaCreacion != null ? fechaCreacion.toInstant() : Instant.now());
                 lista.add(c);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { 
+            System.err.println("[RepoCanal] Error obteniendo canales para sync: " + e.getMessage()); 
+        }
         return lista;
     }
 
@@ -105,7 +113,13 @@ public class CanalRepositorio {
                     creador.setId(UUID.fromString(rs.getString("creador_id")));
                     c.setCreador(creador);
 
-                    try { c.setTipo(Canal.Tipo.valueOf(rs.getString("tipo"))); } catch (Exception e) {}
+                    String tipoStr = rs.getString("tipo");
+                    if (tipoStr != null) {
+                        try { c.setTipo(Canal.Tipo.valueOf(tipoStr)); } 
+                        catch (IllegalArgumentException e) { 
+                            System.err.println("[RepoCanal] Tipo de canal invalido: " + tipoStr); 
+                        }
+                    }
                     // Validar timestamp para evitar NullPointerException
                     Timestamp ts = rs.getTimestamp("fecha_creacion");
                     c.setFechaCreacion(ts != null ? ts.toInstant() : Instant.now());
@@ -114,7 +128,6 @@ public class CanalRepositorio {
             }
         } catch (SQLException e) {
             System.err.println("[RepoCanal] Error al obtener canal por ID: " + e.getMessage());
-            e.printStackTrace();
         }
         return null;
     }

@@ -113,7 +113,9 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
                     Peer p = new Peer(); p.setIp(ip); p.setEstado(Peer.Estado.ONLINE);
                     repositorio.guardarOActualizarPeer(p, ip + ":" + puerto);
                 }
-            } catch (Exception e) {}
+            } catch (Exception e) {
+                LoggerCentral.debug(TAG, "Error parseando datos de peer: " + e.getMessage());
+            }
 
             // Preparar Lista
             List<PeerRepositorio.PeerInfo> peersDb = repositorio.listarPeersInfo();
@@ -123,7 +125,7 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
 
             // AUTODESTRUCCIÓN (Servidor cierra socket tras responder)
             new Thread(() -> {
-                try { Thread.sleep(500); } catch (Exception e) {}
+                try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                 LoggerCentral.warn(TAG, "Cerrando socket efímero cliente: " + origenId);
                 gestorConexiones.obtenerDetallesPeers().stream()
                         .filter(p -> p.getId().equals(origenId))
@@ -148,7 +150,7 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
 
                 // FASE 2: Iniciar Mantenimiento (Ping-Pong)
                 new Thread(() -> {
-                    try { Thread.sleep(2000); } catch (Exception e) {}
+                    try { Thread.sleep(2000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                     LoggerCentral.info(TAG, "Iniciando Fase 2: Verificación de estado...");
                     verificarEstadoPeers();
                 }).start();
@@ -256,7 +258,9 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
                 // Asumimos offline hasta verificar con Ping
                 peer.setEstado(Peer.Estado.OFFLINE);
                 if(repositorio.guardarOActualizarPeer(peer, ip + ":" + puerto)) nuevos++;
-            } catch (Exception e) {}
+            } catch (Exception e) {
+                LoggerCentral.debug(TAG, "Error guardando peer en BD: " + e.getMessage());
+            }
         }
         if(nuevos > 0) notificarObservadores("PEERS_NUEVOS", nuevos);
     }
@@ -493,9 +497,15 @@ public class ServicioGestionRed implements IServicioP2P, ISujeto {
                     gestorConexiones.obtenerDetallesPeers().stream()
                             .filter(p -> p.getId().equals(seedId))
                             .findFirst().ifPresent(p -> gestorConexiones.enviarMensaje(p, gson.toJson(req)));
-                } catch (Exception e) {}
+                } catch (InterruptedException e) { 
+                    Thread.currentThread().interrupt(); 
+                } catch (Exception e) {
+                    LoggerCentral.debug(TAG, "Error enviando mensaje a seed: " + e.getMessage());
+                }
             }).start();
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            LoggerCentral.error(TAG, "Error anunciando a seed: " + e.getMessage());
+        }
     }
 
     @Override

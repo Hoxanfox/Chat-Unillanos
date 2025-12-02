@@ -27,7 +27,9 @@ public class UsuarioRepositorio {
             while (rs.next()) {
                 lista.add(mapear(rs));
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { 
+            System.err.println("[RepoUsuario] Error obteniendo usuarios para sync: " + e.getMessage()); 
+        }
         return lista;
     }
 
@@ -149,7 +151,13 @@ public class UsuarioRepositorio {
         if (pid != null) u.setPeerPadre(UUID.fromString(pid));
         u.setContrasena(rs.getString("contrasena"));
         u.setIp(rs.getString("ip"));
-        try { u.setEstado(Usuario.Estado.valueOf(rs.getString("estado"))); } catch (Exception e) {}
+        String estadoStr = rs.getString("estado");
+        if (estadoStr != null) {
+            try { u.setEstado(Usuario.Estado.valueOf(estadoStr)); } 
+            catch (IllegalArgumentException e) { 
+                System.err.println("[RepoUsuario] Estado de usuario invalido: " + estadoStr); 
+            }
+        }
         
         // Validar timestamp para evitar NullPointerException
         Timestamp fechaCreacion = rs.getTimestamp("fecha_creacion");

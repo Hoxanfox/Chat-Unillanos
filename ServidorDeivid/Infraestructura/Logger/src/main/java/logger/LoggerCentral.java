@@ -38,7 +38,8 @@ public final class LoggerCentral {
         if (lvl == null) lvl = System.getenv("LOGGER_LEVEL");
         Level parsed = Level.DEBUG; // Default a DEBUG para ver todo en desarrollo
         if (lvl != null) {
-            try { parsed = Level.valueOf(lvl.trim().toUpperCase()); } catch (Exception ignored) {}
+            try { parsed = Level.valueOf(lvl.trim().toUpperCase()); } 
+            catch (IllegalArgumentException e) { /* Nivel invalido, usa DEBUG por defecto */ }
         }
         LEVEL = parsed;
 
