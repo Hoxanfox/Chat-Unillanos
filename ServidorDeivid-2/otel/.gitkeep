@@ -1,4 +1,0 @@
-# Directorio para el agente OpenTelemetry
-# Descarga el JAR desde: https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases
-# y colocalo aqui como: opentelemetry-javaagent.jar
-
