@@ -33,7 +33,9 @@ public class CanalRepositorio {
                 c.setCreador(creador);
 
                 try { c.setTipo(Canal.Tipo.valueOf(rs.getString("tipo"))); } catch (Exception e) {}
-                c.setFechaCreacion(rs.getTimestamp("fecha_creacion").toInstant());
+                // Validar timestamp para evitar NullPointerException
+                Timestamp fechaCreacion = rs.getTimestamp("fecha_creacion");
+                c.setFechaCreacion(fechaCreacion != null ? fechaCreacion.toInstant() : Instant.now());
                 lista.add(c);
             }
         } catch (SQLException e) { e.printStackTrace(); }
@@ -104,7 +106,9 @@ public class CanalRepositorio {
                     c.setCreador(creador);
 
                     try { c.setTipo(Canal.Tipo.valueOf(rs.getString("tipo"))); } catch (Exception e) {}
-                    c.setFechaCreacion(rs.getTimestamp("fecha_creacion").toInstant());
+                    // Validar timestamp para evitar NullPointerException
+                    Timestamp ts = rs.getTimestamp("fecha_creacion");
+                    c.setFechaCreacion(ts != null ? ts.toInstant() : Instant.now());
                     return c;
                 }
             }

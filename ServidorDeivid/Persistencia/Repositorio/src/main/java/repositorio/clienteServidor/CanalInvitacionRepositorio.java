@@ -30,12 +30,16 @@ public class CanalInvitacionRepositorio {
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
+                // Validar timestamp para evitar NullPointerException
+                Timestamp ts = rs.getTimestamp("fecha_creacion");
+                Instant fechaCreacion = ts != null ? ts.toInstant() : Instant.now();
+                
                 CanalInvitacion invitacion = new CanalInvitacion(
                     UUID.fromString(rs.getString("id")),
                     UUID.fromString(rs.getString("canal_id")),
                     UUID.fromString(rs.getString("invitador_id")),
                     UUID.fromString(rs.getString("invitado_id")),
-                    rs.getTimestamp("fecha_creacion").toInstant(),
+                    fechaCreacion,
                     rs.getString("estado")
                 );
                 lista.add(invitacion);
@@ -119,12 +123,16 @@ public class CanalInvitacionRepositorio {
             ps.setString(1, id.toString());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
+                    // Validar timestamp para evitar NullPointerException
+                    Timestamp ts = rs.getTimestamp("fecha_creacion");
+                    Instant fechaCreacion = ts != null ? ts.toInstant() : Instant.now();
+                    
                     return new CanalInvitacion(
                         UUID.fromString(rs.getString("id")),
                         UUID.fromString(rs.getString("canal_id")),
                         UUID.fromString(rs.getString("invitador_id")),
                         UUID.fromString(rs.getString("invitado_id")),
-                        rs.getTimestamp("fecha_creacion").toInstant(),
+                        fechaCreacion,
                         rs.getString("estado")
                     );
                 }
@@ -149,12 +157,16 @@ public class CanalInvitacionRepositorio {
             ps.setString(1, usuarioId.toString());
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    // Validar timestamp para evitar NullPointerException
+                    Timestamp ts = rs.getTimestamp("fecha_creacion");
+                    Instant fechaCreacion = ts != null ? ts.toInstant() : Instant.now();
+                    
                     CanalInvitacion invitacion = new CanalInvitacion(
                         UUID.fromString(rs.getString("id")),
                         UUID.fromString(rs.getString("canal_id")),
                         UUID.fromString(rs.getString("invitador_id")),
                         UUID.fromString(rs.getString("invitado_id")),
-                        rs.getTimestamp("fecha_creacion").toInstant(),
+                        fechaCreacion,
                         rs.getString("estado")
                     );
                     lista.add(invitacion);
@@ -202,12 +214,16 @@ public class CanalInvitacionRepositorio {
             ps.setString(2, usuarioInvitadoId.toString());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
+                    // Validar timestamp para evitar NullPointerException
+                    Timestamp ts = rs.getTimestamp("fecha_creacion");
+                    Instant fechaCreacion = ts != null ? ts.toInstant() : Instant.now();
+                    
                     return new CanalInvitacion(
                         UUID.fromString(rs.getString("id")),
                         UUID.fromString(rs.getString("canal_id")),
                         UUID.fromString(rs.getString("invitador_id")),
                         UUID.fromString(rs.getString("invitado_id")),
-                        rs.getTimestamp("fecha_creacion").toInstant(),
+                        fechaCreacion,
                         rs.getString("estado")
                     );
                 }

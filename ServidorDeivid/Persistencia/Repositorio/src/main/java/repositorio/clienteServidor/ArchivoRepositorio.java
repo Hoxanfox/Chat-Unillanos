@@ -313,8 +313,13 @@ public class ArchivoRepositorio implements ISujeto {
         a.setMimeType(rs.getString("mime_type"));
         a.setTamanio(rs.getLong("tamanio"));
         a.setHashSHA256(rs.getString("hash_sha256"));
-        a.setFechaCreacion(rs.getTimestamp("fecha_creacion").toInstant());
-        a.setFechaUltimaActualizacion(rs.getTimestamp("fecha_actualizacion").toInstant());
+        
+        // Validar timestamps para evitar NullPointerException
+        java.sql.Timestamp fechaCreacion = rs.getTimestamp("fecha_creacion");
+        a.setFechaCreacion(fechaCreacion != null ? fechaCreacion.toInstant() : java.time.Instant.now());
+        
+        java.sql.Timestamp fechaActualizacion = rs.getTimestamp("fecha_actualizacion");
+        a.setFechaUltimaActualizacion(fechaActualizacion != null ? fechaActualizacion.toInstant() : java.time.Instant.now());
         return a;
     }
 }

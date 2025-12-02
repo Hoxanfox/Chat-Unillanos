@@ -387,14 +387,18 @@ public class TranscripcionRepositorio implements ISujeto {
         t.setDuracionSegundos(rs.getBigDecimal("duracion_segundos"));
         t.setIdioma(rs.getString("idioma"));
         t.setConfianza(rs.getBigDecimal("confianza"));
-        t.setFechaCreacion(rs.getTimestamp("fecha_creacion").toInstant());
+        
+        // Validar timestamps para evitar NullPointerException
+        Timestamp fechaCreacion = rs.getTimestamp("fecha_creacion");
+        t.setFechaCreacion(fechaCreacion != null ? fechaCreacion.toInstant() : java.time.Instant.now());
 
         Timestamp fechaProcesamiento = rs.getTimestamp("fecha_procesamiento");
         if (fechaProcesamiento != null) {
             t.setFechaProcesamiento(fechaProcesamiento.toInstant());
         }
 
-        t.setFechaActualizacion(rs.getTimestamp("fecha_actualizacion").toInstant());
+        Timestamp fechaActualizacion = rs.getTimestamp("fecha_actualizacion");
+        t.setFechaActualizacion(fechaActualizacion != null ? fechaActualizacion.toInstant() : java.time.Instant.now());
 
         return t;
     }

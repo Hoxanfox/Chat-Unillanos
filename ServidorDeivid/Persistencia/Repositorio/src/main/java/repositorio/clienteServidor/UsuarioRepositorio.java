@@ -150,7 +150,14 @@ public class UsuarioRepositorio {
         u.setContrasena(rs.getString("contrasena"));
         u.setIp(rs.getString("ip"));
         try { u.setEstado(Usuario.Estado.valueOf(rs.getString("estado"))); } catch (Exception e) {}
-        u.setFechaCreacion(rs.getTimestamp("fecha_creacion").toInstant());
+        
+        // Validar timestamp para evitar NullPointerException
+        Timestamp fechaCreacion = rs.getTimestamp("fecha_creacion");
+        if (fechaCreacion != null) {
+            u.setFechaCreacion(fechaCreacion.toInstant());
+        } else {
+            u.setFechaCreacion(Instant.now()); // Valor por defecto si es NULL
+        }
         return u;
     }
 }
