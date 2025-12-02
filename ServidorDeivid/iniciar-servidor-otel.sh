@@ -9,29 +9,56 @@ echo ""
 cd "$(dirname "$0")"
 
 # =============================================================================
-# CONFIGURACION DE OPENTELEMETRY
+# LEER CONFIGURACIÓN DESDE configuracion.txt
 # =============================================================================
-# Modifica estas variables segun tu entorno
+CONFIG_FILE="configuracion.txt"
 
-# IP de la maquina donde corre el stack de observabilidad (Docker)
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "[ERROR] No se encontró el archivo de configuración: $CONFIG_FILE"
+    exit 1
+fi
+
+# Leer variables del archivo de configuración
+while IFS='=' read -r key value; do
+    # Ignorar líneas vacías y comentarios
+    [[ -z "$key" || "$key" =~ ^# ]] && continue
+    # Limpiar espacios
+    key=$(echo "$key" | xargs)
+    value=$(echo "$value" | xargs)
+    
+    case "$key" in
+        "peer.host") PEER_HOST="$value" ;;
+        "peer.puerto") PEER_PORT="$value" ;;
+        "cliente.host") CLIENTE_HOST="$value" ;;
+        "cliente.puerto") CLIENTE_PORT="$value" ;;
+        "otel.collector.host") OTEL_COLLECTOR_HOST="$value" ;;
+        "otel.collector.port") OTEL_COLLECTOR_PORT="$value" ;;
+        "otel.service.name") SERVICE_NAME="$value" ;;
+    esac
+done < "$CONFIG_FILE"
+
+# Valores por defecto si no se encontraron
 OTEL_COLLECTOR_HOST="${OTEL_COLLECTOR_HOST:-localhost}"
-
-# Puerto del collector (OTLP HTTP)
 OTEL_COLLECTOR_PORT="${OTEL_COLLECTOR_PORT:-4318}"
+SERVICE_NAME="${SERVICE_NAME:-chat-servidor-$(hostname)}"
 
-# Nombre unico para este servidor (cambiar si hay multiples peers)
-SERVICE_NAME="${SERVICE_NAME:-chat-servidor-peer1}"
+echo "Configuración cargada desde $CONFIG_FILE:"
+echo "  - Peer P2P:         $PEER_HOST:$PEER_PORT"
+echo "  - Cliente-Servidor: $CLIENTE_HOST:$CLIENTE_PORT"
+echo "  - OTel Collector:   http://$OTEL_COLLECTOR_HOST:$OTEL_COLLECTOR_PORT"
+echo "  - Service Name:     $SERVICE_NAME"
+echo ""
 
 # =============================================================================
 # VERIFICAR AGENTE OPENTELEMETRY
 # =============================================================================
 if [ ! -f "otel/opentelemetry-javaagent.jar" ]; then
-    echo "[ERROR] No se encontro el agente OpenTelemetry."
+    echo "[ERROR] No se encontró el agente OpenTelemetry."
     echo ""
-    echo "Descargalo desde:"
+    echo "Descárgalo desde:"
     echo "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases"
     echo ""
-    echo "Y colocalo en: $(pwd)/otel/opentelemetry-javaagent.jar"
+    echo "Y colócalo en: $(pwd)/otel/opentelemetry-javaagent.jar"
     echo ""
     exit 1
 fi
@@ -48,7 +75,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "[OK] Compilacion exitosa"
+echo "[OK] Compilación exitosa"
 echo ""
 
 # =============================================================================
@@ -57,14 +84,14 @@ echo ""
 JAR_PATH="Presentacion/Main/target/Main-1.0-SNAPSHOT.jar"
 
 if [ ! -f "$JAR_PATH" ]; then
-    echo "[ERROR] No se encontro el JAR: $JAR_PATH"
+    echo "[ERROR] No se encontró el JAR: $JAR_PATH"
     echo ""
     echo "Intentando buscar JAR alternativo..."
     
-    JAR_PATH=$(find Presentacion/Main/target -name "*.jar" ! -name "*sources*" ! -name "*javadoc*" | head -1)
+    JAR_PATH=$(find Presentacion/Main/target -name "*.jar" ! -name "*sources*" ! -name "*javadoc*" 2>/dev/null | head -1)
     
     if [ -z "$JAR_PATH" ]; then
-        echo "No se encontro ningun JAR ejecutable."
+        echo "No se encontró ningún JAR ejecutable."
         exit 1
     fi
     
@@ -79,26 +106,22 @@ echo ""
 # =============================================================================
 echo "[3/3] Iniciando servidor con OpenTelemetry Agent..."
 echo ""
-echo "Configuracion:"
-echo "  - Collector: http://${OTEL_COLLECTOR_HOST}:${OTEL_COLLECTOR_PORT}"
-echo "  - Servicio:  ${SERVICE_NAME}"
-echo ""
 echo "========================================"
 echo "  SERVIDOR INICIADO"
-echo "  Logs enviandose a Grafana/Loki"
-echo "  Metricas enviandose a Prometheus"
-echo "  Trazas enviandose a Tempo"
+echo "  P2P escuchando en:     $PEER_HOST:$PEER_PORT"
+echo "  Clientes escuchando:   $CLIENTE_HOST:$CLIENTE_PORT"
+echo "  Telemetría enviada a:  http://$OTEL_COLLECTOR_HOST:$OTEL_COLLECTOR_PORT"
 echo "========================================"
 echo ""
 
 java -javaagent:otel/opentelemetry-javaagent.jar \
-     -Dotel.service.name="${SERVICE_NAME}" \
-     -Dotel.exporter.otlp.endpoint="http://${OTEL_COLLECTOR_HOST}:${OTEL_COLLECTOR_PORT}" \
+     -Dotel.service.name="$SERVICE_NAME" \
+     -Dotel.exporter.otlp.endpoint="http://$OTEL_COLLECTOR_HOST:$OTEL_COLLECTOR_PORT" \
      -Dotel.exporter.otlp.protocol=http/protobuf \
      -Dotel.metrics.exporter=otlp \
      -Dotel.logs.exporter=otlp \
      -Dotel.traces.exporter=otlp \
-     -Dotel.resource.attributes="service.namespace=chat-unillanos,deployment.environment=development" \
+     -Dotel.resource.attributes=service.namespace=chat-unillanos,deployment.environment=development \
      -Dotel.instrumentation.jdbc.enabled=true \
      -Dotel.instrumentation.java-util-logging.enabled=true \
      -jar "$JAR_PATH"

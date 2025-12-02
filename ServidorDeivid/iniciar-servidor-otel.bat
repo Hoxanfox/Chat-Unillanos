@@ -11,18 +11,42 @@ echo.
 cd /d "%~dp0"
 
 :: =============================================================================
-:: CONFIGURACION DE OPENTELEMETRY
+:: LEER CONFIGURACIÓN DESDE configuracion.txt
 :: =============================================================================
-:: Modifica estas variables segun tu entorno
+set CONFIG_FILE=configuracion.txt
 
-:: IP de la maquina donde corre el stack de observabilidad (Docker)
-set OTEL_COLLECTOR_HOST=25.53.184.71
+if not exist "%CONFIG_FILE%" (
+    echo [ERROR] No se encontro el archivo de configuracion: %CONFIG_FILE%
+    pause
+    exit /b 1
+)
 
-:: Puerto del collector (OTLP HTTP)
-set OTEL_COLLECTOR_PORT=4318
+:: Leer variables del archivo de configuración
+for /f "usebackq tokens=1,* delims==" %%a in ("%CONFIG_FILE%") do (
+    set "line=%%a"
+    :: Ignorar líneas que empiezan con # (comentarios)
+    if not "!line:~0,1!"=="#" (
+        if "%%a"=="peer.host" set "PEER_HOST=%%b"
+        if "%%a"=="peer.puerto" set "PEER_PORT=%%b"
+        if "%%a"=="cliente.host" set "CLIENTE_HOST=%%b"
+        if "%%a"=="cliente.puerto" set "CLIENTE_PORT=%%b"
+        if "%%a"=="otel.collector.host" set "OTEL_COLLECTOR_HOST=%%b"
+        if "%%a"=="otel.collector.port" set "OTEL_COLLECTOR_PORT=%%b"
+        if "%%a"=="otel.service.name" set "SERVICE_NAME=%%b"
+    )
+)
 
-:: Nombre unico para este servidor (cambiar si hay multiples peers)
-set SERVICE_NAME=chat-servidor-peer2
+:: Valores por defecto si no se encontraron
+if not defined OTEL_COLLECTOR_HOST set OTEL_COLLECTOR_HOST=localhost
+if not defined OTEL_COLLECTOR_PORT set OTEL_COLLECTOR_PORT=4318
+if not defined SERVICE_NAME set SERVICE_NAME=chat-servidor-%COMPUTERNAME%
+
+echo Configuracion cargada desde %CONFIG_FILE%:
+echo   - Peer P2P:         %PEER_HOST%:%PEER_PORT%
+echo   - Cliente-Servidor: %CLIENTE_HOST%:%CLIENTE_PORT%
+echo   - OTel Collector:   http://%OTEL_COLLECTOR_HOST%:%OTEL_COLLECTOR_PORT%
+echo   - Service Name:     %SERVICE_NAME%
+echo.
 
 :: =============================================================================
 :: VERIFICAR AGENTE OPENTELEMETRY
@@ -85,15 +109,11 @@ echo.
 :: =============================================================================
 echo [3/3] Iniciando servidor con OpenTelemetry Agent...
 echo.
-echo Configuracion:
-echo   - Collector: http://%OTEL_COLLECTOR_HOST%:%OTEL_COLLECTOR_PORT%
-echo   - Servicio:  %SERVICE_NAME%
-echo.
 echo ========================================
 echo   SERVIDOR INICIADO
-echo   Logs enviandose a Grafana/Loki
-echo   Metricas enviandose a Prometheus
-echo   Trazas enviandose a Tempo
+echo   P2P escuchando en:     %PEER_HOST%:%PEER_PORT%
+echo   Clientes escuchando:   %CLIENTE_HOST%:%CLIENTE_PORT%
+echo   Telemetria enviada a:  http://%OTEL_COLLECTOR_HOST%:%OTEL_COLLECTOR_PORT%
 echo ========================================
 echo.
 
@@ -110,4 +130,3 @@ java -javaagent:otel\opentelemetry-javaagent.jar ^
      -jar %JAR_PATH%
 
 pause
-
