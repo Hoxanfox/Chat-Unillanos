@@ -14,11 +14,11 @@ services:
       - "host.docker.internal:host-gateway"
 
   frontend:
-    build: ../Frontend
+    build: ../App_Web
     ports:
       - "3001:3000"
     volumes:
-      - ../Frontend:/app
+      - ../App_Web:/app
       - /app/node_modules
     environment:
       - VITE_API_URL=http://localhost:8081/gateway/logs
